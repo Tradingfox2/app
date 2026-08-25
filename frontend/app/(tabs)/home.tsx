@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -8,6 +9,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
@@ -145,6 +148,13 @@ export default function Home() {
           </View>
         </View>
 
+        <View style={styles.quickRow}>
+          <QuickAction icon="sparkles" label="AI COACH" testID="quick-program" onPress={() => router.push("/program")} />
+          <QuickAction icon="flask" label="LABS" testID="quick-labs" onPress={() => router.push("/labs")} />
+          <QuickAction icon="watch" label="SOURCES" testID="quick-sources" onPress={() => router.push("/sources")} />
+          <QuickAction icon="qr-code" label="CHECK-IN" testID="quick-checkin" onPress={() => router.push("/checkin")} />
+        </View>
+
         <View style={styles.metricRow}>
           <MetricCard label="HRV" value={hrv ? `${Math.round(hrv)}` : "—"} unit="ms" />
           <MetricCard
@@ -167,6 +177,25 @@ export default function Home() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function QuickAction({
+  icon,
+  label,
+  onPress,
+  testID,
+}: {
+  icon: any;
+  label: string;
+  onPress: () => void;
+  testID: string;
+}) {
+  return (
+    <Pressable testID={testID} onPress={onPress} style={styles.quickBtn}>
+      <Ionicons name={icon} size={20} color={colors.brand} />
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -236,6 +265,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   metricRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.md },
+  quickRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  quickBtn: {
+    flex: 1,
+    minHeight: 64,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  quickLabel: { color: colors.textMuted, fontSize: 8.5, fontWeight: "800", letterSpacing: 0.8 },
   metricCard: {
     flex: 1,
     backgroundColor: colors.surface2,

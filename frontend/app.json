@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.workoutstack.amt12d"
+      "bundleIdentifier": "com.emergent.workoutstack.amt12d",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan gym QR codes to log your visits",
+        "NSPhotoLibraryUsageDescription": "Upload photos of your blood panels"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +22,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.workoutstack.amt12d"
+      "package": "com.emergent.workoutstack.amt12d",
+      "permissions": ["android.permission.CAMERA", "android.permission.READ_MEDIA_IMAGES"]
     },
     "web": {
       "bundler": "metro",

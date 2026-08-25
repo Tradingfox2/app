@@ -330,7 +330,7 @@ async def list_workouts(user: dict = Depends(current_user), owner_id: Optional[s
     ]
 
 
-@api.post("/workouts")
+@api.post("/workouts", status_code=201)
 async def create_workout(body: WorkoutIn, user: dict = Depends(current_user)):
     doc = {
         "id": new_id(),
@@ -375,7 +375,7 @@ async def list_sets(workout_id: str, user: dict = Depends(current_user)):
     ]
 
 
-@api.post("/workouts/{workout_id}/sets")
+@api.post("/workouts/{workout_id}/sets", status_code=201)
 async def add_set(workout_id: str, body: SetIn, user: dict = Depends(current_user)):
     w = await db.workouts.find_one({"id": workout_id})
     if not w:
@@ -668,13 +668,13 @@ def _epley_1rm(weight: float, reps: int) -> float:
 @api.get("/progression/{exercise_id}")
 async def progression(exercise_id: str, user: dict = Depends(current_user)):
     """Per-exercise series: best e1RM and tonnage per workout, plus current PR."""
-    # find all workouts by user
-    workout_ids = [w["id"] async for w in db.workouts.find({"user_id": user["id"]}, {"_id": 0, "id": 1})]
+    # single pass: map of the user's workouts
+    workouts_map = {
+        w["id"]: w async for w in db.workouts.find({"user_id": user["id"]}, {"_id": 0})
+    }
+    workout_ids = list(workouts_map.keys())
     if not workout_ids:
         return {"series": [], "pr": None}
-    workouts_map = {}
-    async for w in db.workouts.find({"id": {"$in": workout_ids}}, {"_id": 0}):
-        workouts_map[w["id"]] = w
     series: list[dict] = []
     pr = {"e1rm": 0.0, "weight_kg": 0.0, "reps": 0, "date": None}
     # gather sets for this exercise
@@ -729,8 +729,13 @@ async def muscle_heatmap(user: dict = Depends(current_user)):
             ex_cache[ex_id] = ex or {}
         ex = ex_cache[ex_id]
         weight = s.get("weight_kg") or 0
-        reps = s.get("reps") or 1
-        vol = max(weight * reps, 1)  # even bodyweight counts as 1 unit / set
+        reps = s.get("reps") or 0
+        if weight and reps:
+            vol = weight * reps
+        elif reps:
+            vol = float(reps)  # bodyweight: contribute proportional to reps
+        else:
+            vol = 1.0  # duration-only set: minimal contribution
         primary = ex.get("primary_muscle_slug")
         if primary:
             volumes[primary] = volumes.get(primary, 0) + vol
@@ -740,6 +745,15 @@ async def muscle_heatmap(user: dict = Depends(current_user)):
 
 
 # --------------------------------------------------------------------------- #
+# Feature routers (import late: they import shared helpers from this module)  #
+from routers.labs import router as labs_router  # noqa: E402
+from routers.program import router as program_router  # noqa: E402
+from routers.wearables import router as wearables_router  # noqa: E402
+
+api.include_router(program_router)
+api.include_router(labs_router)
+api.include_router(wearables_router)
+
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,

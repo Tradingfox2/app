@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { storage } from "./utils/storage";
 
 const RAW_BASE = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
@@ -112,4 +113,58 @@ export const api = {
   progression: (exerciseId: string) =>
     request<{ series: any[]; pr: any }>(`/progression/${exerciseId}`),
   heatmap: () => request<{ volumes: Record<string, number>; max: number }>("/muscle-heatmap"),
+
+  // Adaptive programming engine
+  generateProgram: (payload: {
+    goal: string;
+    level: string;
+    days_per_week: number;
+    equipment: string[];
+    weeks_count: number;
+  }) => request<any>("/coach/generate", { method: "POST", body: JSON.stringify(payload) }),
+  adjustProgram: (program_id: string, week_index?: number, day_index?: number) =>
+    request<any>("/coach/adjust", {
+      method: "POST",
+      body: JSON.stringify({ program_id, week_index, day_index }),
+    }),
+  programs: () => request<any[]>("/programs"),
+
+  // Lab reports pipeline
+  labReports: () => request<any[]>("/labs/reports"),
+  labReport: (id: string) => request<any>(`/labs/reports/${id}`),
+  biomarkersGrouped: () => request<any[]>("/biomarkers/grouped"),
+  uploadLab: async (file: { uri: string; name: string; mimeType: string }) => {
+    const token = await auth.getToken();
+    const form = new FormData();
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(file.uri)).blob();
+      form.append("file", blob, file.name);
+    } else {
+      form.append("file", { uri: file.uri, name: file.name, type: file.mimeType } as any);
+    }
+    const res = await fetch(`${BASE}/api/labs/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.detail || `Upload failed: ${res.status}`);
+    return body;
+  },
+
+  // Wearable sources + gym check-ins
+  wearableSources: () => request<any[]>("/wearables/sources"),
+  connectSource: (provider: string) =>
+    request<any>(`/wearables/sources/${provider}/connect`, { method: "POST" }),
+  disconnectSource: (provider: string) =>
+    request<any>(`/wearables/sources/${provider}/disconnect`, { method: "POST" }),
+  syncSource: (provider: string) =>
+    request<any>(`/wearables/sources/${provider}/sync`, { method: "POST" }),
+  gyms: () => request<any[]>("/gyms"),
+  gymCheckin: (qr_payload: string, workout_id?: string) =>
+    request<any>("/gyms/checkin", {
+      method: "POST",
+      body: JSON.stringify({ qr_payload, workout_id }),
+    }),
+  gymVisits: () => request<any[]>("/gyms/visits"),
 };
