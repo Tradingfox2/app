@@ -1,0 +1,41 @@
+{
+  "summary": "Backend-only test pass for IronFlow. All 12 pytest cases green (100%): auth (login demo user + /auth/me + 401 on missing token), workout creation & set logging (POST/GET /api/workouts/{id}/sets with persistence + order verification), RLS access control (foreign user gets 403/404 on both read and write for another user's workout sets), progression endpoint (Epley e1RM formula validated for 3 reps @ 140kg -> 154.0, PR detection working, empty-exercise returns {series:[], pr:null}), muscle-heatmap (JSON shape correct, 401 without auth, secondary muscles contribute at exactly 0.5x of primary volume). No _id leakage observed in any endpoint response.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/workouts", "issue": "Returns 200 instead of 201 on resource creation (not blocking; consistent across create endpoints except /auth/register)."},
+      {"endpoint": "GET /api/progression/{exercise_id}", "issue": "Fetches all user workouts then re-queries them via {'id': {'$in': workout_ids}} in a second round trip; the initial cursor already has the ids, so the second find is redundant and O(2N)."},
+      {"endpoint": "GET /api/muscle-heatmap", "issue": "vol = max(weight*reps, 1) inflates bodyweight sets: a Plank/Run set with weight=null,reps=null becomes 1 unit but reps default of 1 means an unreported bodyweight set still contributes minimally. Confirm this is intended vs. requiring explicit reps/duration."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: return HTTP 201 from POST /api/workouts and POST /api/workouts/{id}/sets to align with REST semantics.",
+    "Optional: collapse the two-step workout lookup in /api/progression/{exercise_id} into a single find call.",
+    "Optional: revisit muscle-heatmap fallback (weight * reps or 1) so bodyweight-only lifts contribute proportional to actual reps rather than a floor of 1."
+  ],
+  "critical_code_review_comments": [
+    "server.py current_user: raises re-raised HTTPException inside except block after catching InvalidTokenError; consider `raise ... from None` to avoid nested tracebacks (cosmetic).",
+    "Missing pagination on /api/exercises and /api/muscles (fine for seed size ~50 but flag for scale).",
+    "server.py at 743 lines is right at the recommended split threshold — consider splitting auth / workouts / progression into routers before more endpoints land."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)",
+    "/app/memory/test_credentials.md (added demo credentials)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Ephemeral: created TEST-prefixed athlete users (RLS negative-path) and several TEST workouts + sets under the demo user via the API. All rows are visible via list endpoints and can be pruned by removing users whose email starts with TEST_rls_ and workouts whose title starts with 'TEST '.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/backend_test.py and read EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. They run under pytest-xdist (loadscope), so any additional heatmap assertions should be worker-safe: assert secondary-to-primary ratio, not absolute volumes. Demo login: demo@ironflow.app / demo1234.",
+  "rca_of_issue": "Initial heatmap secondary-muscle test asserted absolute deltas (tri=250) which failed because the parallel worker (gw0) concurrently logged additional bench-press sets against the same demo user, inflating tri_delta to 500. Fix: assert tri_delta == 0.5 * chest_delta (ratio), which validates the 0.5x secondary rule regardless of concurrent additions and confirmed the backend logic is correct."
+}

@@ -1,0 +1,159 @@
+{
+  "app_name": "IronFlow",
+  "personality": "7 Dark-First Utility",
+  "personality_one_liner": "A high-performance command center built for athletes, favoring dense data, stark contrast, and operational clarity over decorative softness.",
+  "color": {
+    "surface": "#121212",
+    "onSurface": "#FFFFFF",
+    "surfaceSecondary": "#1C1C1E",
+    "onSurfaceSecondary": "#A0A0A5",
+    "surfaceTertiary": "#2C2C2E",
+    "onSurfaceTertiary": "#C4C4C6",
+    "surfaceInverse": "#FFFFFF",
+    "onSurfaceInverse": "#121212",
+    "brand": "#D4FF00",
+    "brandPrimary": "#D4FF00",
+    "onBrandPrimary": "#000000",
+    "brandSecondary": "#39FF14",
+    "onBrandSecondary": "#000000",
+    "brandTertiary": "#293300",
+    "onBrandTertiary": "#D4FF00",
+    "success": "#34C759",
+    "onSuccess": "#000000",
+    "warning": "#FF9F0A",
+    "onWarning": "#000000",
+    "error": "#FF453A",
+    "onError": "#FFFFFF",
+    "info": "#0A84FF",
+    "onInfo": "#FFFFFF",
+    "border": "#2C2C2E",
+    "borderStrong": "#48484A",
+    "divider": "#2C2C2E"
+  },
+  "typography": {
+    "displayFontFamily": "Barlow Condensed",
+    "textFontFamily": "Satoshi",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Maintain tight data density but obvious hierarchy. Use 'sm' (8) and 'md' (12) for inner-card grouping, and 'lg' (16) for outer screen margins.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 0,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use heavy glassmorphism for bottom tab bar and sticky headers over scrolling content.",
+      "Use blur on sticky 'Record Workout' CTA backgrounds.",
+      "Ensure text on glass is fully readable by adding a subtle translucent tinted base layer underneath."
+    ],
+    "dont's": [
+      "Do not use glass for data cards, lists, or form fields."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Onboarding / Auth",
+      "purpose": "High-impact entry with dark moody visuals framing email/password fields.",
+      "states": {
+        "loading": "Spinner centered on dark overlay",
+        "empty": "N/A",
+        "error": "Red banner on top"
+      },
+      "layout": "Full-bleed background image with vertical gradient scrim (transparent to surface). Form inputs sit in the bottom half. Use Pill CTA buttons in brandPrimary."
+    },
+    {
+      "name": "Home Dashboard",
+      "purpose": "A daily command center summarizing workouts, biomarkers, and wearable recovery metrics at a glance.",
+      "states": {
+        "loading": "Skeleton rings and card outlines",
+        "empty": "Illustration of tracking rings at 0% with 'Connect Apple Watch' CTA",
+        "error": "Unable to fetch data with a retry tap target"
+      },
+      "layout": "Whoop-style modular tiles. Top section: Three main rings/dials (e.g., Strain, Recovery, Sleep) rendered as dense data-viz. Below: Horizontal scroll of wearable metrics (HRV, Steps) and a vertical feed of today's streak/summary cards."
+    },
+    {
+      "name": "Workouts",
+      "purpose": "Library and history of sessions, focusing on tracking live performance and exploring new exercises.",
+      "states": {
+        "loading": "List row skeletons",
+        "empty": "Iconography indicating no recent workouts, CTA to 'Start First Workout'",
+        "error": "Network error with retry button"
+      },
+      "layout": "Strava-style layout: segmented control (History / Library) pinned top. A list of recent activities below. A sticky, floating 'Record Session' primary CTA at the bottom center over a glass overlay, spanning above the bottom tab bar."
+    },
+    {
+      "name": "Biomarkers",
+      "purpose": "Deep dive into health analytics, blood markers, and long-term wearable metric trends.",
+      "states": {
+        "loading": "Skeleton charts",
+        "empty": "Prompt to 'Upload Blood Analysis'",
+        "error": "Error loading charts"
+      },
+      "layout": "Intense data-viz screen. Line charts and sparklines for metric timelines. Use brandPrimary and warning/error colors to indicate zone thresholds (e.g., green for good HRV, orange for high stress)."
+    },
+    {
+      "name": "Community & Coaching",
+      "purpose": "Social feed of workouts, group sessions, and coach discovery.",
+      "states": {
+        "loading": "Feed skeleton",
+        "empty": "Message to 'Follow athletes or find a coach'",
+        "error": "Feed unavailable"
+      },
+      "layout": "Tabbed view (Feed / Coaches). Feed uses card-based layout with kudos/comments under workout maps/metrics. Coaches view uses 2-col grid for coach profiles. Heavy use of initial avatars or fetched real-logos for clubs."
+    }
+  ],
+  "images": {
+    "onboarding_hero": {
+      "url": "https://images.pexels.com/photos/8455978/pexels-photo-8455978.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Runner in crouched starting position on track, ready to sprint"
+    },
+    "premium_backdrop": {
+      "url": "https://images.unsplash.com/photo-1711025372958-db48a4fe0ba1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMG5lb24lMjBncmVlbiUyMGRhcmslMjB0ZXh0dXJlfGVufDB8fHx8MTc4NzY2NTcyOHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract neon green wavy texture on black"
+    },
+    "coach_placeholder": {
+      "url": "https://images.pexels.com/photos/17201699/pexels-photo-17201699.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Focused male athlete in dark gym setting"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Design constraint: Use '7 Dark-First Utility' personality. STRICTLY adhere to the electric lime (#D4FF00) and deep charcoal (#121212) palette. NO blues, NO purples.",
+    "Typography: Use Barlow Condensed for all display/metric headers to ensure a technical, performance-oriented aesthetic. Use Satoshi for standard UI readability.",
+    "Layout constraint: Enforce strict modular card layouts with zero-shadow (shadow_tier 0). Use borders (#2C2C2E) to separate data cards.",
+    "Visuals: Implement data-viz (rings, sparklines) for the Whoop-style Home dashboard. Ensure text overlaid on background images (e.g. Onboarding) uses the 3-stop vertical gradient scrim for contrast.",
+    "Interactions: On Workouts screen, the 'Record' CTA must be a sticky floating block at the bottom using glassmorphism above the bottom nav."
+  ]
+}
