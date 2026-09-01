@@ -562,10 +562,14 @@ async def list_posts(community_id: Optional[str] = None, user: dict = Depends(cu
     else:
         q["community_id"] = None
     posts = [p async for p in db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(50)]
-    # attach author
+    # Bolt optimization: batch fetch authors in 1 query instead of N sequential find_one calls (avoids N+1 query overhead)
+    author_ids = list({p["author_id"] for p in posts if "author_id" in p})
+    authors: dict[str, dict] = {}
+    if author_ids:
+        async for u in db.users.find({"id": {"$in": author_ids}}, {"_id": 0, "password_hash": 0}):
+            authors[u["id"]] = clean(u)
     for p in posts:
-        author = await db.users.find_one({"id": p["author_id"]}, {"_id": 0, "password_hash": 0})
-        p["author"] = clean(author)
+        p["author"] = authors.get(p.get("author_id"))
     return [clean(p) for p in posts]
 
 
