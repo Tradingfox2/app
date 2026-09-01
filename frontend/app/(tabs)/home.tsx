@@ -173,7 +173,11 @@ export default function Home() {
 
         <View style={styles.heatCard} testID="home-heatmap-card">
           <Text style={styles.cardTitle}>MUSCLE LOAD · 7 DAYS</Text>
-          <MuscleHeatmap volumes={heatmap.volumes} max={heatmap.max} />
+          <MuscleHeatmap
+            volumes={heatmap.volumes}
+            max={heatmap.max}
+            onPress={() => router.push("/muscles")}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

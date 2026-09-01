@@ -1,11 +1,13 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
-import Svg, { Path, Ellipse, Circle, Rect } from "react-native-svg";
-import { colors, radius, spacing } from "@/src/theme";
+import { View, Text, StyleSheet, Pressable } from "react-native";
+import Svg, { Ellipse, Circle, Rect } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, spacing } from "@/src/theme";
 
 type Props = {
   volumes: Record<string, number>;
   max: number;
+  onPress?: () => void;
 };
 
 /**
@@ -19,10 +21,6 @@ function shade(vol: number, max: number): string {
   if (t < 0.35) return "#6a7c1a";
   if (t < 0.65) return "#a5c800";
   return colors.brand;
-}
-
-function useShade(slug: string, volumes: Record<string, number>, max: number) {
-  return shade(volumes[slug] || 0, max);
 }
 
 /**
@@ -100,9 +98,9 @@ function BodyBack({ volumes, max }: Props) {
   );
 }
 
-export function MuscleHeatmap({ volumes, max }: Props) {
-  return (
-    <View style={styles.wrap} testID="muscle-heatmap">
+export function MuscleHeatmap({ volumes, max, onPress }: Props) {
+  const content = (
+    <>
       <View style={styles.bodies}>
         <View style={styles.bodyBlock}>
           <BodyFront volumes={volumes} max={max} />
@@ -121,6 +119,33 @@ export function MuscleHeatmap({ volumes, max }: Props) {
         <View style={[styles.legendChip, { backgroundColor: colors.brand }]} />
         <Text style={styles.legendTxt}>HIGH</Text>
       </View>
+      {onPress && (
+        <View style={styles.explorePrompt}>
+          <Text style={styles.exploreText}>Explore muscles</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+        </View>
+      )}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        style={styles.wrap}
+        testID="muscle-heatmap"
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="Open muscle explorer"
+        accessibilityHint="View detailed muscle training status and exercises"
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.wrap} testID="muscle-heatmap">
+      {content}
     </View>
   );
 }
@@ -144,4 +169,15 @@ const styles = StyleSheet.create({
   },
   legendTxt: { color: colors.textMuted, fontSize: 10, letterSpacing: 1 },
   legendChip: { width: 14, height: 10, borderRadius: 2 },
+  explorePrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: spacing.md,
+    gap: spacing.xs,
+  },
+  exploreText: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: "600",
+  },
 });
