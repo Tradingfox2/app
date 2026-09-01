@@ -79,7 +79,13 @@ export default function CheckinScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="checkin-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable
+          testID="back-btn"
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>GYM CHECK-IN</Text>
@@ -102,6 +108,8 @@ export default function CheckinScreen() {
               testID="cancel-scan-btn"
               onPress={() => setScanning(false)}
               style={styles.cancelBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel scan"
             >
               <Text style={styles.cancelTxt}>CANCEL</Text>
             </Pressable>
@@ -110,15 +118,17 @@ export default function CheckinScreen() {
           <>
             <View style={styles.explainCard}>
               <Ionicons name="qr-code" size={30} color={colors.brand} />
-              <Text style={styles.explainTitle}>Scan your gym's QR code</Text>
+              <Text style={styles.explainTitle}>Scan your gym&apos;s QR code</Text>
               <Text style={styles.explainTxt}>
-                Log your visit, link it to today's session and unlock partner rewards every 10
+                Log your visit, link it to today&apos;s session and unlock partner rewards every 10
                 check-ins.
               </Text>
               <Pressable
                 testID="scan-btn"
                 onPress={startScan}
                 style={styles.cta}
+                accessibilityRole="button"
+                accessibilityLabel="Scan QR code"
               >
                 <Ionicons name="camera" size={16} color={colors.brandOn} />
                 <Text style={styles.ctaTxt}>SCAN QR CODE</Text>
@@ -128,7 +138,7 @@ export default function CheckinScreen() {
             {error === "denied" && (
               <View style={styles.errBanner}>
                 <Text style={styles.errTxt}>
-                  Camera access is needed to scan the gym QR code. Tap "Scan" again to allow it.
+                  Camera access is needed to scan the gym QR code. Tap &quot;Scan&quot; again to allow it.
                 </Text>
               </View>
             )}
@@ -142,6 +152,8 @@ export default function CheckinScreen() {
                   testID="open-settings-btn"
                   onPress={() => Linking.openSettings()}
                   style={styles.settingsBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open settings"
                 >
                   <Text style={styles.settingsTxt}>OPEN SETTINGS</Text>
                 </Pressable>
@@ -188,6 +200,8 @@ export default function CheckinScreen() {
                     onPress={() => checkin(g.qr_payload)}
                     disabled={busy}
                     style={styles.gymBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Check in to ${g.name}`}
                   >
                     {busy ? (
                       <ActivityIndicator size="small" color={colors.brand} />
