@@ -109,12 +109,12 @@ async def muscle_recommendations(
 ):
     if muscle_slug not in SUPPORTED_MUSCLES:
         raise HTTPException(status_code=404, detail="Unknown muscle")
-    
+
     catalog = [
         exercise
         async for exercise in db.exercises.find({}, {"_id": 0})
     ]
-    
+
     return build_recommendations(
         catalog=catalog,
         muscle_slug=muscle_slug,
