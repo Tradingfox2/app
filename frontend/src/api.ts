@@ -1,5 +1,12 @@
 import { Platform } from "react-native";
 import { storage } from "./utils/storage";
+import type {
+  MuscleHeatmapData,
+  MuscleRecommendations,
+  MuscleSlug,
+  AiCircuit,
+  AiCircuitRequest,
+} from "./components/anatomy/muscle-types";
 
 const RAW_BASE = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
 const BASE = RAW_BASE.replace(/\/$/, "");
@@ -112,7 +119,27 @@ export const api = {
 
   progression: (exerciseId: string) =>
     request<{ series: any[]; pr: any }>(`/progression/${exerciseId}`),
-  heatmap: () => request<{ volumes: Record<string, number>; max: number }>("/muscle-heatmap"),
+  heatmap: () => request<MuscleHeatmapData>("/muscle-heatmap"),
+
+  muscleRecommendations: (
+    muscle: MuscleSlug,
+    equipment: string[] = [],
+    level?: string,
+  ) => {
+    const query = new URLSearchParams();
+    equipment.forEach((item) => query.append("equipment", item));
+    if (level) query.set("level", level);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<MuscleRecommendations>(
+      `/muscles/${muscle}/recommendations${suffix}`,
+    );
+  },
+
+  regenerateMuscleCircuit: (payload: AiCircuitRequest) =>
+    request<AiCircuit>("/coach/muscle-circuit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   // Adaptive programming engine
   generateProgram: (payload: {
