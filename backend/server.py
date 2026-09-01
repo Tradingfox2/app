@@ -706,53 +706,17 @@ async def progression(exercise_id: str, user: dict = Depends(current_user)):
     return {"series": series, "pr": pr if pr["e1rm"] > 0 else None}
 
 
-@api.get("/muscle-heatmap")
-async def muscle_heatmap(user: dict = Depends(current_user)):
-    """Volume (sets × weight) per muscle over the last 7 days."""
-    week_ago = now() - timedelta(days=7)
-    recent_workouts = [
-        w["id"]
-        async for w in db.workouts.find(
-            {"user_id": user["id"], "started_at": {"$gte": week_ago}}, {"_id": 0, "id": 1}
-        )
-    ]
-    if not recent_workouts:
-        return {"volumes": {}, "max": 0}
-    ex_cache: dict[str, dict] = {}
-    volumes: dict[str, float] = {}
-    async for s in db.workout_sets.find(
-        {"workout_id": {"$in": recent_workouts}}, {"_id": 0}
-    ):
-        ex_id = s["exercise_id"]
-        if ex_id not in ex_cache:
-            ex = await db.exercises.find_one({"id": ex_id}, {"_id": 0})
-            ex_cache[ex_id] = ex or {}
-        ex = ex_cache[ex_id]
-        weight = s.get("weight_kg") or 0
-        reps = s.get("reps") or 0
-        if weight and reps:
-            vol = weight * reps
-        elif reps:
-            vol = float(reps)  # bodyweight: contribute proportional to reps
-        else:
-            vol = 1.0  # duration-only set: minimal contribution
-        primary = ex.get("primary_muscle_slug")
-        if primary:
-            volumes[primary] = volumes.get(primary, 0) + vol
-        for sec in ex.get("secondary_muscle_slugs", []) or []:
-            volumes[sec] = volumes.get(sec, 0) + vol * 0.5
-    return {"volumes": volumes, "max": max(volumes.values()) if volumes else 0}
-
-
 # --------------------------------------------------------------------------- #
 # Feature routers (import late: they import shared helpers from this module)  #
 from routers.labs import router as labs_router  # noqa: E402
+from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 
 api.include_router(program_router)
 api.include_router(labs_router)
 api.include_router(wearables_router)
+api.include_router(muscles_router)
 
 app.include_router(api)
 app.add_middleware(

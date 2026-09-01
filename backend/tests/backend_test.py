@@ -457,3 +457,58 @@ class TestGyms:
         visits = r.json()
         assert len(visits) >= 1
         assert visits[0]["gym_name"]
+
+
+# --------------------------------------------------------------------------- #
+# Muscle Explorer                                                             #
+# --------------------------------------------------------------------------- #
+class TestMuscleExplorer:
+    def test_heatmap_keeps_legacy_fields_and_adds_muscle_details(
+        self, api_client, demo_headers
+    ):
+        r = api_client.get(f"{API}/muscle-heatmap", headers=demo_headers)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert isinstance(data["volumes"], dict)
+        assert isinstance(data["max"], (int, float))
+        assert isinstance(data["muscles"], dict)
+        for slug, details in data["muscles"].items():
+            assert slug != "cardio"
+            assert {
+                "sets_7d", "load_percent", "last_trained_at", "recovery_state"
+            }.issubset(details)
+            assert 0 <= details["load_percent"] <= 100
+            assert details["recovery_state"] in {
+                "ready", "recovering", "high_load", "untrained"
+            }
+
+    def test_recommendations_return_only_known_exercises(
+        self, api_client, demo_headers
+    ):
+        catalog = api_client.get(f"{API}/exercises").json()
+        allowed = {exercise["slug"] for exercise in catalog}
+        r = api_client.get(
+            f"{API}/muscles/chest/recommendations"
+            "?equipment=barbell&equipment=bodyweight&level=intermediate",
+            headers=demo_headers,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        returned = {
+            exercise["slug"]
+            for key in ("primary", "secondary", "combinations")
+            for exercise in data[key]
+        }
+        returned |= {
+            item["exercise_slug"]
+            for circuit in data["circuits"]
+            for item in circuit["items"]
+        }
+        assert returned <= allowed
+
+    def test_unknown_muscle_returns_404(self, api_client, demo_headers):
+        r = api_client.get(
+            f"{API}/muscles/not-a-muscle/recommendations",
+            headers=demo_headers,
+        )
+        assert r.status_code == 404
