@@ -67,3 +67,59 @@ def test_recommendations_filter_equipment_and_preserve_catalog_slugs():
         for circuit in result["circuits"]
         for item in circuit["items"]
     )
+
+
+import pytest
+from pydantic import ValidationError
+
+from muscle_recommendations import validate_ai_circuit
+
+
+def test_ai_circuit_rejects_unknown_exercise_slug():
+    data = {
+        "name": "Chest Density",
+        "rationale": "Alternates pressing patterns.",
+        "items": [
+            {
+                "exercise_slug": "invented-press",
+                "sets": 3,
+                "reps_min": 8,
+                "reps_max": 12,
+                "rest_sec": 60,
+            },
+            {
+                "exercise_slug": "push-up",
+                "sets": 3,
+                "reps_min": 8,
+                "reps_max": 12,
+                "rest_sec": 60,
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="unknown exercise"):
+        validate_ai_circuit(data, {"push-up"})
+
+
+def test_ai_circuit_rejects_reversed_rep_range():
+    data = {
+        "name": "Chest Density",
+        "rationale": "Uses known movements.",
+        "items": [
+            {
+                "exercise_slug": "push-up",
+                "sets": 3,
+                "reps_min": 15,
+                "reps_max": 8,
+                "rest_sec": 60,
+            },
+            {
+                "exercise_slug": "dumbbell-fly",
+                "sets": 3,
+                "reps_min": 8,
+                "reps_max": 12,
+                "rest_sec": 60,
+            }
+        ],
+    }
+    with pytest.raises(ValidationError):
+        validate_ai_circuit(data, {"push-up", "dumbbell-fly"})

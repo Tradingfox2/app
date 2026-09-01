@@ -512,3 +512,28 @@ class TestMuscleExplorer:
             headers=demo_headers,
         )
         assert r.status_code == 404
+
+    def test_ai_circuit_requires_auth(self, api_client):
+        r = api_client.post(
+            f"{API}/coach/muscle-circuit",
+            json={
+                "muscle_slug": "chest",
+                "goal": "hypertrophy",
+                "level": "intermediate",
+                "equipment": ["bodyweight"],
+            },
+        )
+        assert r.status_code == 401
+
+    def test_ai_circuit_rejects_unknown_muscle(self, api_client, demo_headers):
+        r = api_client.post(
+            f"{API}/coach/muscle-circuit",
+            headers=demo_headers,
+            json={
+                "muscle_slug": "unknown",
+                "goal": "hypertrophy",
+                "level": "intermediate",
+                "equipment": ["bodyweight"],
+            },
+        )
+        assert r.status_code == 404

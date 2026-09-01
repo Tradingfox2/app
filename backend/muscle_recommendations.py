@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Optional
 
+from pydantic import BaseModel, Field, model_validator
+
 SUPPORTED_MUSCLES = {
     "chest", "back", "lats", "shoulders", "biceps", "triceps",
     "forearms", "quads", "hamstrings", "glutes", "calves", "abs",
@@ -91,3 +93,63 @@ def build_recommendations(
         "combinations": (primary[:2] + antagonist[:2])[:4],
         "circuits": circuits,
     }
+
+
+class AiCircuitItem(BaseModel):
+    exercise_slug: str
+    sets: int = Field(ge=1, le=6)
+    reps_min: int = Field(ge=1, le=50)
+    reps_max: int = Field(ge=1, le=50)
+    rest_sec: int = Field(ge=15, le=300)
+
+    @model_validator(mode="after")
+    def reps_are_ordered(self):
+        if self.reps_min > self.reps_max:
+            raise ValueError("reps_min must not exceed reps_max")
+        return self
+
+
+class AiCircuit(BaseModel):
+    name: str = Field(min_length=3, max_length=80)
+    rationale: str = Field(min_length=3, max_length=300)
+    items: list[AiCircuitItem] = Field(min_length=2, max_length=5)
+
+
+def validate_ai_circuit(data: Any, allowed_slugs: set[str]) -> AiCircuit:
+    circuit = AiCircuit.model_validate(data)
+    unknown = [
+        item.exercise_slug
+        for item in circuit.items
+        if item.exercise_slug not in allowed_slugs
+    ]
+    if unknown:
+        raise ValueError(f"unknown exercise slugs: {unknown}")
+    return circuit
+
+
+AI_CIRCUIT_SYSTEM = """You are a strength training coach. Generate a workout circuit as valid JSON only.
+
+Requirements:
+- Use ONLY exercise slugs from the provided catalog
+- Include 2-5 exercises
+- Sets: 1-6 per exercise
+- Reps: 1-50 (min must not exceed max)
+- Rest: 15-300 seconds
+- Name: 3-80 characters
+- Rationale: 3-300 characters explaining the selection
+- NO medical claims or guarantees
+
+Return ONLY valid JSON matching this exact structure:
+{
+  "name": "Circuit Name",
+  "rationale": "Brief explanation",
+  "items": [
+    {
+      "exercise_slug": "exact-catalog-slug",
+      "sets": 3,
+      "reps_min": 8,
+      "reps_max": 12,
+      "rest_sec": 60
+    }
+  ]
+}"""
