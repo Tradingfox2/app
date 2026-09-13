@@ -9,7 +9,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ai import llm_json
+from ai import active_model_label, llm_json
+from locales import content_language_instruction, normalize_locale
 from server import can_access_user_data, clean, current_user, db, new_id, now
 
 router = APIRouter()
@@ -85,12 +86,16 @@ async def recovery_snapshot(uid: str) -> dict:
     ]
     baseline = round(sum(hrv_vals) / len(hrv_vals), 1) if hrv_vals else None
     reasons = []
+    reason_codes = []
     if rec and rec["value"] < 55:
         reasons.append(f"recovery score {rec['value']}% < 55%")
+        reason_codes.append("low_recovery")
     if sleep and sleep["value"] < 6:
         reasons.append(f"sleep {sleep['value']}h < 6h")
+        reason_codes.append("low_sleep")
     if hrv and baseline and hrv["value"] < 0.85 * baseline:
         reasons.append(f"HRV {hrv['value']}ms < 85% of 7d baseline {baseline}ms")
+        reason_codes.append("low_hrv")
     return {
         "hrv": hrv["value"] if hrv else None,
         "hrv_baseline_7d": baseline,
@@ -98,6 +103,7 @@ async def recovery_snapshot(uid: str) -> dict:
         "recovery_score": rec["value"] if rec else None,
         "fatigue_high": len(reasons) > 0,
         "reasons": reasons,
+        "reason_codes": reason_codes,
     }
 
 
@@ -201,6 +207,7 @@ def _validate_program(catalog_slugs: set[str], body: GenerateIn):
 @router.post("/coach/generate", status_code=201)
 async def generate_program(body: GenerateIn, user: dict = Depends(current_user)):
     uid = user["id"]
+    locale = normalize_locale(user.get("preferred_locale"))
     recovery = await recovery_snapshot(uid)
     history = await training_history(uid)
     markers = await relevant_biomarkers(uid)
@@ -225,7 +232,10 @@ EXERCISE CATALOG (slug | name | category | equipment):
 Generate the program JSON now."""
     try:
         prog = await llm_json(
-            GENERATE_SYSTEM, prompt, validator=_validate_program({e["slug"] for e in catalog}, body)
+            f"{GENERATE_SYSTEM}\n{content_language_instruction(locale)}",
+            prompt,
+            validator=_validate_program({e["slug"] for e in catalog}, body),
+            task="program",  # Sonnet 5, adaptive thinking, medium effort
         )
     except ValueError as e:
         raise HTTPException(502, f"Program generation failed: {e}") from None
@@ -238,7 +248,8 @@ Generate the program JSON now."""
         "params": body.model_dump(),
         "recovery_snapshot": recovery,
         "program": prog.model_dump(),
-        "model": "gpt-5.4",
+        "model": active_model_label(task="program"),
+        "locale": locale,
         "adjustments": [],
         "created_at": now(),
     }
@@ -265,6 +276,7 @@ async def adjust_today(body: AdjustIn, user: dict = Depends(current_user)):
         raise HTTPException(404, "Program not found")
     if not await can_access_user_data(user["id"], prog["user_id"]):
         raise HTTPException(403, "Not allowed")
+    locale = normalize_locale(user.get("preferred_locale"))
 
     weeks = prog["program"]["weeks"]
     created = prog["created_at"]
@@ -308,7 +320,12 @@ Rewrite the session JSON now."""
         return d
 
     try:
-        adjusted = await llm_json(ADJUST_SYSTEM, prompt, validator=_v)
+        adjusted = await llm_json(
+            f"{ADJUST_SYSTEM}\n{content_language_instruction(locale)}",
+            prompt,
+            validator=_v,
+            task="program",
+        )
     except ValueError as e:
         raise HTTPException(502, f"Adjustment failed: {e}") from None
 
@@ -319,6 +336,7 @@ Rewrite the session JSON now."""
         "original_day": day,
         "adjusted_day": adjusted.model_dump(),
         "recovery": recovery,
+        "locale": locale,
         "created_at": now(),
     }
     await db.programs.update_one({"id": prog["id"]}, {"$push": {"adjustments": record}})

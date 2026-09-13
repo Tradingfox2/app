@@ -44,7 +44,22 @@ CATALOG = [
 ]
 
 
-def test_supported_muscles_match_existing_non_cardio_taxonomy():
+def test_library_covers_each_supported_muscle_with_several_primaries():
+    from collections import Counter
+    from muscle_recommendations import EXERCISE_LIBRARY, merge_exercise_catalog
+
+    counts = Counter(
+        item["primary_muscle_slug"]
+        for item in EXERCISE_LIBRARY
+        if item["primary_muscle_slug"] != "cardio"
+    )
+    for slug in SUPPORTED_MUSCLES:
+        assert counts[slug] >= 4, f"{slug} has only {counts[slug]} primaries"
+    merged = merge_exercise_catalog([])
+    chest = build_recommendations(merged, "chest")
+    assert len(chest["primary"]) >= 8
+    assert len(chest["secondary"]) >= 3
+    assert len(chest["combinations"]) >= 6
     assert SUPPORTED_MUSCLES == {
         "chest", "back", "lats", "shoulders", "biceps", "triceps",
         "forearms", "quads", "hamstrings", "glutes", "calves", "abs",

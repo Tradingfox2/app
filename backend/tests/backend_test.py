@@ -18,11 +18,13 @@ import io
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 import requests
 from dotenv import dotenv_values
+from pymongo import MongoClient
 
 _env = dotenv_values(Path(__file__).resolve().parents[2] / "frontend" / ".env")
 BASE_URL = (_env.get("EXPO_PUBLIC_BACKEND_URL") or os.environ["EXPO_PUBLIC_BACKEND_URL"]).rstrip("/")
@@ -54,6 +56,93 @@ def demo_auth(api_client: requests.Session) -> dict:
 @pytest.fixture(scope="session")
 def demo_headers(demo_auth: dict) -> dict:
     return {"Authorization": f"Bearer {demo_auth['token']}", "Content-Type": "application/json"}
+
+
+@pytest.fixture(scope="class")
+def completed_lab_report(demo_auth: dict):
+    client = MongoClient(os.environ.get("MONGO_URL", "mongodb://127.0.0.1:27017"))
+    database = client[os.environ.get("DB_NAME", "ironflow")]
+    report_id = f"TEST_lab_{uuid.uuid4().hex}"
+    user_id = demo_auth["user"]["id"]
+    created_at = datetime.now(timezone.utc)
+    steps = [
+        {"step": step, "status": "done", "detail": "integration fixture", "at": created_at}
+        for step in [
+            "received",
+            "ocr",
+            "extraction",
+            "normalization",
+            "interpretation",
+            "write",
+            "callback",
+        ]
+    ]
+    database.lab_reports.insert_one(
+        {
+            "id": report_id,
+            "user_id": user_id,
+            "filename": "integration-lab.png",
+            "mime": "image/png",
+            "status": "done",
+            "step": "callback",
+            "provider": "ironflow",
+            "steps": steps,
+            "markers": [
+                {
+                    "marker_slug": "ferritin",
+                    "marker": "Ferritin",
+                    "raw_name": "Ferritin",
+                    "value": 72.0,
+                    "unit": "ng/mL",
+                    "ref_low": 30.0,
+                    "ref_high": 300.0,
+                }
+            ],
+            "markers_count": 1,
+            "interpretation": {
+                "summary": ["Integration fixture summary"],
+                "trends": [],
+                "flags": [],
+                "recommendations": [],
+            },
+            "interpretation_locale": "en",
+            "disclaimer": "Educational test fixture; not medical advice.",
+            "requires_professional_review": True,
+            "created_at": created_at,
+            "completed_at": created_at,
+        }
+    )
+    database.biomarkers.insert_one(
+        {
+            "id": f"TEST_biomarker_{uuid.uuid4().hex}",
+            "user_id": user_id,
+            "marker": "Ferritin",
+            "marker_slug": "ferritin",
+            "value": 72.0,
+            "unit": "ng/mL",
+            "reference_low": 30.0,
+            "reference_high": 300.0,
+            "source": "integration_fixture",
+            "report_id": report_id,
+            "measured_at": created_at,
+            "created_at": created_at,
+        }
+    )
+    database.notifications.insert_one(
+        {
+            "id": f"TEST_notification_{uuid.uuid4().hex}",
+            "user_id": user_id,
+            "type": "lab_report_ready",
+            "report_id": report_id,
+            "read": False,
+            "created_at": created_at,
+        }
+    )
+    yield report_id
+    database.lab_reports.delete_many({"id": report_id})
+    database.biomarkers.delete_many({"report_id": report_id})
+    database.notifications.delete_many({"report_id": report_id})
+    client.close()
 
 
 @pytest.fixture(scope="session")
@@ -102,13 +191,39 @@ class TestAuth:
         r = api_client.get(f"{API}/auth/me")
         assert r.status_code == 401
 
+    def test_update_preferred_locale(self, api_client, demo_headers):
+        r = api_client.patch(
+            f"{API}/auth/me", headers=demo_headers, json={"preferred_locale": "de"}
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["preferred_locale"] == "de"
+
+        persisted = api_client.get(f"{API}/auth/me", headers=demo_headers)
+        assert persisted.status_code == 200
+        assert persisted.json()["preferred_locale"] == "de"
+
+        reset = api_client.patch(
+            f"{API}/auth/me", headers=demo_headers, json={"preferred_locale": "fr"}
+        )
+        assert reset.status_code == 200
+
+    @pytest.mark.parametrize("locale", ["zh", "ar", "invalid"])
+    def test_update_preferred_locale_rejects_unsupported_values(
+        self, api_client, demo_headers, locale
+    ):
+        r = api_client.patch(
+            f"{API}/auth/me", headers=demo_headers, json={"preferred_locale": locale}
+        )
+        assert r.status_code == 422
+
 
 # --------------------------------------------------------------------------- #
 # Workouts + sets (201 semantics)                                             #
 # --------------------------------------------------------------------------- #
 class TestWorkoutSets:
     @pytest.fixture(scope="class")
-    def workout(self, api_client, demo_headers):
+    @classmethod
+    def workout(cls, api_client, demo_headers):
         r = api_client.post(
             f"{API}/workouts",
             headers=demo_headers,
@@ -330,13 +445,13 @@ class TestPrograms:
 # Labs — reuse existing done report, plus format rejection                    #
 # --------------------------------------------------------------------------- #
 class TestLabs:
-    def test_reports_and_interpretation(self, api_client, demo_headers):
+    def test_reports_and_interpretation(self, api_client, demo_headers, completed_lab_report):
         r = api_client.get(f"{API}/labs/reports", headers=demo_headers)
         assert r.status_code == 200, r.text
         reports = r.json()
         assert isinstance(reports, list) and len(reports) > 0, "Expected at least one lab report"
-        done = next((rep for rep in reports if rep["status"] == "done"), None)
-        assert done is not None, "Expected at least one 'done' lab report (seeded by main agent)"
+        done = next((rep for rep in reports if rep["id"] == completed_lab_report), None)
+        assert done is not None, "Expected the test-owned completed lab report"
         # Detail fetch
         d = api_client.get(f"{API}/labs/reports/{done['id']}", headers=demo_headers)
         assert d.status_code == 200
@@ -361,11 +476,16 @@ class TestLabs:
             assert "slug" in g and "points" in g
             assert len(g["points"]) >= 1
 
-    def test_notifications_has_lab_report_ready(self, api_client, demo_headers):
+    def test_notifications_has_lab_report_ready(
+        self, api_client, demo_headers, completed_lab_report
+    ):
         r = api_client.get(f"{API}/notifications", headers=demo_headers)
         assert r.status_code == 200
         notifs = r.json()
-        assert any(n["type"] == "lab_report_ready" for n in notifs), "No lab_report_ready notification"
+        assert any(
+            n["type"] == "lab_report_ready" and n.get("report_id") == completed_lab_report
+            for n in notifs
+        ), "No notification for the test-owned lab report"
 
     def test_labs_upload_rejects_txt(self, api_client, demo_auth):
         files = {"file": ("bad.txt", io.BytesIO(b"not a lab report"), "text/plain")}

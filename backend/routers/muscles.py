@@ -9,10 +9,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from ai import LLMNotConfigured, active_model_label, llm_json, ollama_models, provider_status
+from locales import circuit_fallback, content_language_instruction, normalize_locale
 from muscle_recommendations import (
     AI_CIRCUIT_SYSTEM,
     SUPPORTED_MUSCLES,
     build_recommendations,
+    merge_exercise_catalog,
     validate_ai_circuit,
 )
 from server import current_user, db, now
@@ -123,10 +126,9 @@ async def muscle_recommendations(
     if muscle_slug not in SUPPORTED_MUSCLES:
         raise HTTPException(status_code=404, detail="Unknown muscle")
 
-    catalog = [
-        exercise
-        async for exercise in db.exercises.find({}, {"_id": 0})
-    ]
+    catalog = merge_exercise_catalog(
+        [exercise async for exercise in db.exercises.find({}, {"_id": 0})]
+    )
 
     return build_recommendations(
         catalog=catalog,
@@ -141,13 +143,13 @@ async def ai_muscle_circuit(
     request: AiCircuitIn,
     user: dict = Depends(current_user),
 ):
+    locale = normalize_locale(user.get("preferred_locale"))
     if request.muscle_slug not in SUPPORTED_MUSCLES:
         raise HTTPException(status_code=404, detail="Unknown muscle")
 
-    catalog = [
-        exercise
-        async for exercise in db.exercises.find({}, {"_id": 0})
-    ]
+    catalog = merge_exercise_catalog(
+        [exercise async for exercise in db.exercises.find({}, {"_id": 0})]
+    )
 
     recommendations = build_recommendations(
         catalog=catalog,
@@ -179,31 +181,72 @@ async def ai_muscle_circuit(
     ]
     catalog_text = "\n".join(catalog_lines)
 
-    # Mock LLM response for testing without external API call
-    # In production, this would call llm_json with AI_CIRCUIT_SYSTEM prompt
-    # For now, return a deterministic circuit based on available exercises
-    circuit_items = [
-        {
-            "exercise_slug": ex["slug"],
-            "sets": 3,
-            "reps_min": 8,
-            "reps_max": 12,
-            "rest_sec": 60,
-        }
-        for ex in available_exercises[:4]
-    ]
+    muscle_name = request.muscle_slug.replace("_", " ").title()
+    prompt = f"""Target muscle: {muscle_name} ({request.muscle_slug})
+Antagonist: {recommendations["antagonist_slug"]}
+Goal: {request.goal} | Level: {request.level}
+Equipment available: {', '.join(request.equipment) or 'anything'}
 
-    mock_response = {
-        "name": f"{request.muscle_slug.replace('_', ' ').title()} {request.goal.title()} Circuit",
-        "rationale": f"Progressive {request.goal} circuit for {request.level} level using available equipment.",
-        "items": circuit_items,
-    }
+ALLOWED EXERCISES (use exercise_slug values from this list ONLY):
+{catalog_text}
+
+Build one 3-5 exercise circuit (include at least one antagonist movement). Return ONLY the JSON object."""
+
+    def _validate(data):
+        return validate_ai_circuit(data, allowed_slugs)
 
     try:
-        validated_circuit = validate_ai_circuit(mock_response, allowed_slugs)
-        return validated_circuit.model_dump()
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail="Failed to generate valid circuit"
+        circuit = await llm_json(
+            f"{AI_CIRCUIT_SYSTEM}\n{content_language_instruction(locale)}",
+            prompt,
+            validator=_validate,
+            task="fast",
         )
+        out = circuit.model_dump()
+        out["source"] = active_model_label(task="fast")
+        out["locale"] = locale
+        return out
+    except LLMNotConfigured:
+        pass  # no provider reachable -> deterministic fallback below
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=f"AI circuit generation failed: {e}") from None
+
+    # Deterministic fallback keeps the feature usable offline / without keys.
+    fallback_name, fallback_rationale = circuit_fallback(
+        locale, muscle_name, request.goal.replace("_", " "), request.level
+    )
+    fallback = {
+        "name": fallback_name,
+        "rationale": fallback_rationale,
+        "items": [
+            {"exercise_slug": ex["slug"], "sets": 3, "reps_min": 8, "reps_max": 12, "rest_sec": 60}
+            for ex in available_exercises[:4]
+        ],
+    }
+    try:
+        out = validate_ai_circuit(fallback, allowed_slugs).model_dump()
+        out["source"] = "rules"
+        out["locale"] = locale
+        return out
+    except Exception:
+        raise HTTPException(status_code=502, detail="Failed to generate valid circuit") from None
+
+
+@router.get("/coach/status")
+async def coach_status(user: dict = Depends(current_user)):
+    """Which LLM provider/model the AI coach is using, and which Ollama models are installed."""
+    status = provider_status()
+    status["ollama_models"] = await ollama_models()
+    status["ollama_reachable"] = bool(status["ollama_models"])
+    status["connected"] = (
+        status["configured"]["anthropic"]
+        or status["configured"]["openrouter"]
+        or status["ollama_reachable"]
+    )
+    return status
+
+
+@router.get("/coach/models/ollama")
+async def coach_ollama_models(user: dict = Depends(current_user)):
+    """Models installed on the configured Ollama server (for a future model picker)."""
+    return {"base_url": provider_status()["ollama_base_url"], "models": await ollama_models()}

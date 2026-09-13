@@ -23,9 +23,13 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from jwt import InvalidTokenError
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
+
+import media_storage
+from locales import DEFAULT_LOCALE, SUPPORTED_LOCALES, normalize_locale
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -39,7 +43,9 @@ JWT_SECRET = os.environ.get("JWT_SECRET") or secrets.token_hex(32)
 JWT_ALG = "HS256"
 JWT_TTL_MIN = 60 * 24 * 30  # 30 days
 
-client = AsyncIOMotorClient(mongo_url)
+# tz_aware: Mongo stores UTC; without this, reads come back naive and break
+# arithmetic against now() (timezone-aware) — e.g. muscle recovery ages.
+client = AsyncIOMotorClient(mongo_url, tz_aware=True)
 db = client[db_name]
 
 bearer = HTTPBearer(auto_error=False)
@@ -84,7 +90,16 @@ class PublicUser(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
     role: str
+    coach_status: str = "not_applied"
     avatar_url: Optional[str] = None
+    preferred_locale: str = DEFAULT_LOCALE
+    activity_ranking_opt_in: bool = False
+    staff_role: Optional[str] = None
+
+
+class ProfileUpdateIn(BaseModel):
+    preferred_locale: str | None = Field(default=None, pattern=f"^({'|'.join(SUPPORTED_LOCALES)})$")
+    activity_ranking_opt_in: bool | None = None
 
 
 class TokenOut(BaseModel):
@@ -107,6 +122,12 @@ class WorkoutIn(BaseModel):
     title: str
     notes: Optional[str] = None
     perceived_effort: Optional[int] = Field(default=None, ge=0, le=10)
+    # Exercises queued from the Muscle Explorer / circuits before logging starts.
+    planned_exercise_slugs: list[str] = []
+
+
+class WorkoutPlanIn(BaseModel):
+    exercise_slugs: list[str] = Field(min_length=1, max_length=20)
 
 
 class SetIn(BaseModel):
@@ -142,20 +163,6 @@ class CoachRequestIn(BaseModel):
 
 class CoachStatusIn(BaseModel):
     status: str = Field(pattern="^(active|paused|ended)$")
-
-
-class PostIn(BaseModel):
-    content: str
-    community_id: Optional[str] = None
-    workout_id: Optional[str] = None
-    media_urls: list[str] = []
-
-
-class CommunityIn(BaseModel):
-    name: str
-    slug: str
-    description: Optional[str] = None
-    is_public: bool = True
 
 
 class GroupSessionIn(BaseModel):
@@ -213,7 +220,30 @@ async def current_user(
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=401, detail="User no longer exists")
+    if user.get("suspended_at"):
+        expires = user.get("suspended_until")
+        if expires and expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)  # legacy rows written without tz
+        if expires and expires <= now():
+            await db.users.update_one({"id": user_id}, {"$set": {
+                "suspended_at": None, "suspended_until": None, "suspension_reason": None,
+            }})
+            user = await db.users.find_one({"id": user_id})
+        else:
+            raise HTTPException(status_code=403, detail=user.get("suspension_reason") or "Account suspended")
     return user
+
+
+async def optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+) -> dict | None:
+    """Like current_user, but anonymous callers get None instead of 401."""
+    if not credentials:
+        return None
+    try:
+        return await current_user(credentials)
+    except HTTPException:
+        return None
 
 
 async def can_access_user_data(actor_id: str, owner_id: str) -> bool:
@@ -232,7 +262,14 @@ def to_public_user(u: dict) -> PublicUser:
         email=u["email"],
         full_name=u.get("full_name"),
         role=u.get("role", "athlete"),
+        coach_status=u.get(
+            "coach_status",
+            "approved" if u.get("role") == "coach" else "not_applied",
+        ),
         avatar_url=u.get("avatar_url"),
+        preferred_locale=normalize_locale(u.get("preferred_locale")),
+        activity_ranking_opt_in=u.get("activity_ranking_opt_in", False),
+        staff_role=u.get("staff_role"),
     )
 
 
@@ -248,13 +285,65 @@ async def lifespan(app: FastAPI):
     await db.workouts.create_index([("user_id", 1), ("started_at", -1)])
     await db.workout_sets.create_index([("workout_id", 1), ("set_index", 1)])
     await db.biomarkers.create_index([("user_id", 1), ("measured_at", -1)])
+    await db.biomarkers.create_index(
+        [("terra_session_id", 1), ("terra_result_index", 1)],
+        unique=True,
+        partialFilterExpression={"terra_session_id": {"$type": "string"}},
+    )
+    await db.lab_reports.create_index(
+        "terra_upload_id",
+        unique=True,
+        partialFilterExpression={"terra_upload_id": {"$type": "string"}},
+    )
+    await db.terra_webhook_events.create_index([("received_at", -1)])
     await db.wearable_metrics.create_index(
         [("user_id", 1), ("metric", 1), ("recorded_at", -1)]
+    )
+    await db.wearable_metrics.create_index(
+        [("terra_user_id", 1), ("terra_event_type", 1), ("terra_item_key", 1), ("metric", 1)],
+        unique=True,
+        partialFilterExpression={"terra_user_id": {"$type": "string"}},
     )
     await db.coach_relationships.create_index(
         [("coach_id", 1), ("client_id", 1)], unique=True
     )
+    await db.coach_applications.create_index("user_id", unique=True)
+    await db.communities.create_index("slug", unique=True)
+    await db.community_members.create_index(
+        [("community_id", 1), ("user_id", 1)], unique=True
+    )
+    await db.community_members.create_index(
+        [("owner_id", 1), ("status", 1)]
+    )
+    await db.channels.create_index(
+        [("community_id", 1), ("name", 1)], unique=True
+    )
+    await db.messages.create_index([("channel_id", 1), ("created_at", -1)])
+    await db.messages.create_index([("status", 1), ("created_at", -1)])
     await db.posts.create_index([("created_at", -1)])
+    await db.posts.create_index([("author_id", 1), ("status", 1), ("created_at", -1)])
+    await db.posts.create_index([("repost_of", 1), ("author_id", 1)])
+    await db.post_likes.create_index([("post_id", 1), ("user_id", 1)], unique=True)
+    await db.post_comments.create_index([("post_id", 1), ("created_at", 1)])
+    await db.follows.create_index([("follower_id", 1), ("followee_id", 1)], unique=True)
+    await db.follows.create_index([("followee_id", 1)])
+    await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
+    await db.direct_messages.create_index([("recipient_id", 1), ("read_at", 1)])
+    await db.media.create_index([("user_id", 1), ("created_at", -1)])
+    await db.reports.create_index([("status", 1), ("created_at", 1)])
+    await db.reports.create_index([("reporter_id", 1), ("target_id", 1), ("status", 1)])
+    await db.audit_log.create_index([("created_at", -1)])
+    await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
+    await db.user_notes.create_index([("user_id", 1), ("created_at", -1)])
+    # Terra webhooks are acknowledged after being persisted. Replay unfinished
+    # inbox entries on restart so an interrupted background task is not lost.
+    from routers.labs import process_claimed_terra_lab_event
+
+    async for event in db.terra_webhook_events.find(
+        {"status": {"$in": ["pending", "failed"]}}, {"_id": 0, "payload": 1}
+    ).sort("received_at", 1).limit(100):
+        if event.get("payload"):
+            await process_claimed_terra_lab_event(event["payload"])
     yield
     client.close()
 
@@ -280,8 +369,10 @@ async def register(body: RegisterIn):
         "email": email,
         "password_hash": hash_password(body.password),
         "full_name": body.full_name,
-        "role": body.role,
+        "role": "athlete",
+        "coach_status": "not_applied",
         "avatar_url": None,
+        "preferred_locale": DEFAULT_LOCALE,
         "created_at": now(),
     }
     await db.users.insert_one(user_doc)
@@ -300,6 +391,34 @@ async def login(body: LoginIn):
 @api.get("/auth/me", response_model=PublicUser)
 async def me(user: dict = Depends(current_user)):
     return to_public_user(user)
+
+
+@api.get("/realtime/token")
+async def realtime_token(user: dict = Depends(current_user)):
+    """Short-lived Centrifugo connection token for the signed-in user.
+
+    Returns `enabled: false` rather than erroring when realtime is not
+    configured, so the client can fall back to polling without a failed request.
+    """
+    import realtime
+
+    if not realtime.is_configured():
+        return {"enabled": False, "token": None, "url": None}
+    return {
+        "enabled": True,
+        "token": realtime.connection_token(user["id"]),
+        "url": realtime.CENTRIFUGO_URL,
+    }
+
+
+@api.patch("/auth/me", response_model=PublicUser)
+async def update_me(body: ProfileUpdateIn, user: dict = Depends(current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {**body.model_dump(exclude_none=True), "updated_at": now()}},
+    )
+    updated = await db.users.find_one({"id": user["id"]})
+    return to_public_user(updated)
 
 
 # ---- Library (public) ----------------------------------------------------- #
@@ -341,10 +460,47 @@ async def create_workout(body: WorkoutIn, user: dict = Depends(current_user)):
         "ended_at": None,
         "duration_sec": None,
         "perceived_effort": body.perceived_effort,
+        "planned_exercise_slugs": list(dict.fromkeys(body.planned_exercise_slugs)),
         "created_at": now(),
     }
     await db.workouts.insert_one(doc)
     return clean(doc)
+
+
+async def _load_workout_for(user: dict, workout_id: str) -> dict:
+    w = await db.workouts.find_one({"id": workout_id}, {"_id": 0})
+    if not w:
+        raise HTTPException(404, "Not found")
+    if not await can_access_user_data(user["id"], w["user_id"]):
+        raise HTTPException(403, "Not allowed")
+    return w
+
+
+@api.get("/workouts/{workout_id}")
+async def get_workout(workout_id: str, user: dict = Depends(current_user)):
+    """Single workout + its planned exercises resolved against the catalog."""
+    w = await _load_workout_for(user, workout_id)
+    slugs = w.get("planned_exercise_slugs") or []
+    planned = []
+    if slugs:
+        by_slug = {
+            e["slug"]: clean(e)
+            async for e in db.exercises.find({"slug": {"$in": slugs}}, {"_id": 0})
+        }
+        planned = [by_slug[s] for s in slugs if s in by_slug]
+    w["planned_exercises"] = planned
+    return w
+
+
+@api.post("/workouts/{workout_id}/plan")
+async def plan_exercises(workout_id: str, body: WorkoutPlanIn, user: dict = Depends(current_user)):
+    """Append exercises to a workout's plan (from the Muscle Explorer or a circuit)."""
+    w = await _load_workout_for(user, workout_id)
+    if w.get("ended_at"):
+        raise HTTPException(409, "Workout already finished")
+    merged = list(dict.fromkeys([*(w.get("planned_exercise_slugs") or []), *body.exercise_slugs]))
+    await db.workouts.update_one({"id": workout_id}, {"$set": {"planned_exercise_slugs": merged}})
+    return await get_workout(workout_id, user)
 
 
 @api.post("/workouts/{workout_id}/finish")
@@ -445,7 +601,11 @@ async def add_wearable(body: WearableMetricIn, user: dict = Depends(current_user
 @api.get("/dashboard")
 async def dashboard(user: dict = Depends(current_user)):
     """Aggregated glanceable stats for the Home screen."""
-    uid = user["id"]
+    return await dashboard_snapshot(user["id"])
+
+
+async def dashboard_snapshot(uid: str) -> dict:
+    """Shared by /dashboard and the AI coach (daily tips, coach tip)."""
     week_ago = now() - timedelta(days=7)
     workouts_week = await db.workouts.count_documents({"user_id": uid, "started_at": {"$gte": week_ago}})
     latest_strain = await db.wearable_metrics.find_one(
@@ -460,12 +620,72 @@ async def dashboard(user: dict = Depends(current_user)):
     latest_hrv = await db.wearable_metrics.find_one(
         {"user_id": uid, "metric": "hrv"}, {"_id": 0}, sort=[("recorded_at", -1)]
     )
+    latest_rhr = await db.wearable_metrics.find_one(
+        {"user_id": uid, "metric": "resting_hr"}, {"_id": 0}, sort=[("recorded_at", -1)]
+    )
+
+    # ---- training stats (always available, even without a wearable) ------- #
+    week_workouts = [
+        w async for w in db.workouts.find(
+            {"user_id": uid, "started_at": {"$gte": week_ago}},
+            {"_id": 0, "id": 1, "started_at": 1, "ended_at": 1, "duration_sec": 1},
+        )
+    ]
+    week_ids = [w["id"] for w in week_workouts]
+    sets_week = 0
+    tonnage_week = 0.0
+    muscles_week: set[str] = set()
+    if week_ids:
+        exercise_cache: dict[str, dict] = {}
+        async for s in db.workout_sets.find({"workout_id": {"$in": week_ids}}, {"_id": 0}):
+            sets_week += 1
+            tonnage_week += float(s.get("weight_kg") or 0) * int(s.get("reps") or 0)
+            ex_id = s.get("exercise_id")
+            if ex_id and ex_id not in exercise_cache:
+                exercise_cache[ex_id] = await db.exercises.find_one({"id": ex_id}, {"_id": 0}) or {}
+            slug = exercise_cache.get(ex_id, {}).get("primary_muscle_slug")
+            if slug:
+                muscles_week.add(slug)
+    minutes_week = sum(int(w.get("duration_sec") or 0) for w in week_workouts) // 60
+
+    # Streak: consecutive calendar days (ending today or yesterday) with a workout.
+    days_with_workout: set[str] = set()
+    async for w in db.workouts.find(
+        {"user_id": uid, "started_at": {"$gte": now() - timedelta(days=60)}},
+        {"_id": 0, "started_at": 1},
+    ):
+        if w.get("started_at"):
+            days_with_workout.add(w["started_at"].strftime("%Y-%m-%d"))
+    streak = 0
+    cursor_day = now()
+    if cursor_day.strftime("%Y-%m-%d") not in days_with_workout:
+        cursor_day -= timedelta(days=1)
+    while cursor_day.strftime("%Y-%m-%d") in days_with_workout:
+        streak += 1
+        cursor_day -= timedelta(days=1)
+
+    active = await db.workouts.find_one(
+        {"user_id": uid, "ended_at": None}, {"_id": 0, "id": 1, "title": 1, "started_at": 1},
+        sort=[("started_at", -1)],
+    )
+    wearable_connected = bool(latest_strain or latest_recovery or latest_sleep or latest_hrv)
+
     return {
         "workouts_this_week": workouts_week,
         "strain": clean(latest_strain),
         "recovery": clean(latest_recovery),
         "sleep": clean(latest_sleep),
         "hrv": clean(latest_hrv),
+        "resting_hr": clean(latest_rhr),
+        "wearable_connected": wearable_connected,
+        "training": {
+            "sets_week": sets_week,
+            "tonnage_week_kg": round(tonnage_week, 1),
+            "minutes_week": minutes_week,
+            "muscles_week": sorted(muscles_week),
+            "streak_days": streak,
+        },
+        "active_workout": clean(active),
     }
 
 
@@ -527,63 +747,7 @@ async def update_relationship(rel_id: str, body: CoachStatusIn, user: dict = Dep
     return clean(updated)
 
 
-@api.get("/coaches")
-async def list_coaches():
-    return [
-        clean(c)
-        async for c in db.users.find({"role": "coach"}, {"_id": 0, "password_hash": 0}).limit(50)
-    ]
-
-
-# ---- Communities + posts + sessions --------------------------------------- #
-@api.get("/communities")
-async def list_communities():
-    return [clean(c) async for c in db.communities.find({"is_public": True}, {"_id": 0}).limit(50)]
-
-
-@api.post("/communities")
-async def create_community(body: CommunityIn, user: dict = Depends(current_user)):
-    doc = {
-        "id": new_id(),
-        "owner_id": user["id"],
-        **body.model_dump(),
-        "cover_url": None,
-        "created_at": now(),
-    }
-    await db.communities.insert_one(doc)
-    return clean(doc)
-
-
-@api.get("/posts")
-async def list_posts(community_id: Optional[str] = None, user: dict = Depends(current_user)):
-    q: dict = {}
-    if community_id:
-        q["community_id"] = community_id
-    else:
-        q["community_id"] = None
-    posts = [p async for p in db.posts.find(q, {"_id": 0}).sort("created_at", -1).limit(50)]
-    # attach author
-    for p in posts:
-        author = await db.users.find_one({"id": p["author_id"]}, {"_id": 0, "password_hash": 0})
-        p["author"] = clean(author)
-    return [clean(p) for p in posts]
-
-
-@api.post("/posts")
-async def create_post(body: PostIn, user: dict = Depends(current_user)):
-    doc = {
-        "id": new_id(),
-        "author_id": user["id"],
-        **body.model_dump(),
-        "like_count": 0,
-        "comment_count": 0,
-        "created_at": now(),
-    }
-    await db.posts.insert_one(doc)
-    doc["author"] = to_public_user(user).model_dump()
-    return clean(doc)
-
-
+# ---- Group sessions ------------------------------------------------------- #
 @api.get("/group-sessions")
 async def list_sessions():
     return [
@@ -621,21 +785,12 @@ async def current_sub(user: dict = Depends(current_user)):
 
 @api.post("/subscriptions")
 async def upsert_sub(body: SubscriptionIn, user: dict = Depends(current_user)):
-    await db.subscriptions.update_many(
-        {"user_id": user["id"], "status": "active"},
-        {"$set": {"status": "canceled"}},
-    )
-    doc = {
-        "id": new_id(),
-        "user_id": user["id"],
-        "plan": body.plan,
-        "status": "active",
-        "current_period_start": now(),
-        "current_period_end": now() + timedelta(days=30),
-        "created_at": now(),
-    }
-    await db.subscriptions.insert_one(doc)
-    return clean(doc)
+    if body.plan != "free":
+        raise HTTPException(402, "Verified billing is required to activate a paid plan")
+    existing = await db.subscriptions.find_one({"user_id": user["id"], "status": "active"}, {"_id": 0})
+    if existing and existing.get("plan") != "free":
+        raise HTTPException(409, "Paid subscriptions must be canceled through verified billing")
+    return clean(existing) if existing else {"plan": "free", "status": "active"}
 
 
 @api.get("/referrals/mine")
@@ -709,16 +864,27 @@ async def progression(exercise_id: str, user: dict = Depends(current_user)):
 # --------------------------------------------------------------------------- #
 # Feature routers (import late: they import shared helpers from this module)  #
 from routers.labs import router as labs_router  # noqa: E402
+from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
+from routers.social import router as social_router  # noqa: E402
+from routers.admin import router as admin_router  # noqa: E402
+from tips import router as tips_router  # noqa: E402
 
 api.include_router(program_router)
+api.include_router(community_router)
+api.include_router(social_router)
+api.include_router(admin_router)
 api.include_router(labs_router)
 api.include_router(wearables_router)
 api.include_router(muscles_router)
+api.include_router(tips_router)
 
 app.include_router(api)
+if not media_storage.s3_enabled():
+    media_storage.MEDIA_ROOT.mkdir(exist_ok=True)
+    app.mount("/api/media/files", StaticFiles(directory=media_storage.MEDIA_ROOT), name="media")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

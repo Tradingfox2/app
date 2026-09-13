@@ -12,11 +12,14 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, Field
 
-from ai import llm_json, ocr_document
+from ai import active_model_label, llm_json, llm_labs_json, ocr_document
+from locales import lab_disclaimer, lab_language_instruction, normalize_locale
 from server import can_access_user_data, clean, current_user, db, new_id, now
 from storage import put_object
+from terra_labs import format_observation_for_interpretation, map_result, upload_report
 
 router = APIRouter()
 
@@ -26,12 +29,14 @@ ALLOWED_MIMES = {
     "image/png": "png",
     "image/webp": "webp",
 }
-MAX_BYTES = 15 * 1024 * 1024
-
-DISCLAIMER = (
-    "Interprétation éducative générée par IA — ce n'est PAS un avis médical. "
-    "Ces informations doivent être validées par un professionnel de santé."
-)
+TERRA_ALLOWED_MIMES = {**ALLOWED_MIMES, "image/gif": "gif"}
+LOCAL_MAX_BYTES = 15 * 1024 * 1024
+TERRA_MAX_BYTES = 20 * 1024 * 1024
+TERRA_BASE_URL = os.environ.get("TERRA_BASE_URL", "https://access.tryterra.co/api")
+TERRA_DEV_ID = os.environ.get("TERRA_DEV_ID", "")
+TERRA_API_KEY = os.environ.get("TERRA_API_KEY", "")
+TERRA_LABS_ENABLED = os.environ.get("TERRA_LABS_ENABLED", "").lower() in {"1", "true", "yes"}
+TERRA_LABS_CONFIGURED = TERRA_LABS_ENABLED and bool(TERRA_DEV_ID and TERRA_API_KEY)
 
 # Canonical marker registry: alias (lowercased) -> (slug, display name)
 MARKER_MAP: dict[str, tuple[str, str]] = {
@@ -123,7 +128,7 @@ ref_low/ref_high null when absent. NEVER invent values not present in the text.
 Skip qualitative results without a numeric value."""
 
 INTERPRET_SYSTEM = """Tu es un assistant ÉDUCATIF (NON médical) pour athlètes de force/endurance.
-À partir des marqueurs du jour et de l'historique, produis UNIQUEMENT ce JSON (en français) :
+À partir des marqueurs du jour et de l'historique, produis UNIQUEMENT ce JSON :
 {"summary":["point 1","point 2"],"trends":[{"marker_slug":"ferritin","direction":"up|down|stable",
 "comment":"..."}],"flags":[{"marker_slug":"ferritin","severity":"info|attention|discuss_with_doctor",
 "comment":"..."}]}
@@ -131,6 +136,15 @@ RÈGLES STRICTES : contexte sportif (impact possible sur performance, récupéra
 l'entraînement) ; tendances vs historique fourni ; tout marqueur hors plage de référence devient un
 flag "discuss_with_doctor" ou "attention". JAMAIS de diagnostic, JAMAIS de prescription ou dosage,
 ton prudent. 2 à 5 points de summary maximum. Aucun texte hors du JSON."""
+
+
+async def generate_lab_interpretation(prompt: str, locale: str = "fr") -> Interpretation:
+    """Generate every lab summary with the dedicated Claude Sonnet 4 route."""
+    return await llm_labs_json(
+        f"{INTERPRET_SYSTEM}\n{lab_language_instruction(locale)}",
+        prompt,
+        validator=lambda value: Interpretation.model_validate(value),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -155,7 +169,9 @@ async def log_step(report_id: str, user_id: str, step: str, status: str, detail:
     )
 
 
-async def run_pipeline(report_id: str, user_id: str, tmp_path: str, mime: str):
+async def run_pipeline(
+    report_id: str, user_id: str, tmp_path: str, mime: str, interpretation_locale: str = "fr"
+):
     """n8n-equivalent workflow, one function per node, fully audited."""
     try:
         # 2. OCR
@@ -210,10 +226,10 @@ async def run_pipeline(report_id: str, user_id: str, tmp_path: str, mime: str):
             f"[ref {n['ref_low']}-{n['ref_high']}]"
             for n in normalized
         )
-        interp = await llm_json(
-            INTERPRET_SYSTEM,
-            f"MARQUEURS DU JOUR:\n{today}\n\nHISTORIQUE:\n" + ("\n".join(history) or "aucun"),
-            validator=lambda d: Interpretation.model_validate(d),
+        interp = await generate_lab_interpretation(
+            f"MARQUEURS DU JOUR:\n{today}\n\nHISTORIQUE:\n"
+            + ("\n".join(history) or "aucun"),
+            interpretation_locale,
         )
 
         # 6. Write biomarkers + readable report
@@ -244,6 +260,8 @@ async def run_pipeline(report_id: str, user_id: str, tmp_path: str, mime: str):
                     "markers": normalized,
                     "markers_count": len(normalized),
                     "interpretation": interp.model_dump(),
+                    "interpretation_provider": "anthropic",
+                    "interpretation_model": active_model_label("anthropic", "labs"),
                     "completed_at": now(),
                 }
             },
@@ -274,6 +292,197 @@ async def run_pipeline(report_id: str, user_id: str, tmp_path: str, mime: str):
             pass
 
 
+async def _interpret_terra_results(
+    report_id: str, user_id: str, observations: list[dict], interpretation_locale: str = "fr"
+):
+    """Add IronFlow's educational layer after Terra has standardized the report."""
+    if not observations:
+        return None
+    history = [
+        f"{b.get('marker_slug') or b['marker']}={b['value']} {b.get('unit') or ''} "
+        f"le {b['measured_at']:%Y-%m-%d}"
+        async for b in db.biomarkers.find(
+            {"user_id": user_id, "report_id": {"$ne": report_id}, "value": {"$type": "number"}},
+            {"_id": 0},
+        ).sort("measured_at", -1).limit(40)
+    ]
+    today = "\n".join(format_observation_for_interpretation(item) for item in observations)
+    await log_step(report_id, user_id, "interpretation", "started")
+    interpretation = await generate_lab_interpretation(
+        f"MARQUEURS DU JOUR:\n{today}\n\nHISTORIQUE:\n"
+        + ("\n".join(history) or "aucun"),
+        interpretation_locale,
+    )
+    await log_step(report_id, user_id, "interpretation", "done")
+    return interpretation.model_dump()
+
+
+async def claim_terra_lab_event(payload: dict) -> bool:
+    """Persist the event before acknowledgement; return false on redelivery."""
+    event_id = payload.get("event_id")
+    if not event_id:
+        raise ValueError("Terra lab event is missing event_id")
+    try:
+        await db.terra_webhook_events.insert_one(
+            {
+                "_id": event_id,
+                "event_id": event_id,
+                "type": payload.get("type"),
+                "upload_id": payload.get("upload_id"),
+                "payload": payload,
+                "status": "pending",
+                "received_at": now(),
+            }
+        )
+        return True
+    except DuplicateKeyError:
+        return False
+
+
+async def process_terra_lab_event(payload: dict, *, claimed: bool = False) -> dict:
+    """Persist one signed Terra Lab Reports event. Safe across redelivery."""
+    event_id = payload.get("event_id")
+    upload_id = payload.get("upload_id")
+    event_type = payload.get("type")
+    if not event_id or not upload_id or event_type not in {"lab_report.completed", "lab_report.failed"}:
+        raise ValueError("Invalid Terra lab report event")
+
+    if not claimed and not await claim_terra_lab_event(payload):
+        return {"received": True, "duplicate": True, "processed": 0}
+
+    report = await db.lab_reports.find_one({"terra_upload_id": upload_id}, {"_id": 0})
+    if not report:
+        await db.terra_webhook_events.update_one(
+            {"_id": event_id}, {"$set": {"status": "orphaned", "upload_id": upload_id}}
+        )
+        return {"received": True, "processed": 0, "reason": "unknown upload"}
+
+    data = payload.get("data") or {}
+    if event_type == "lab_report.failed":
+        error = data.get("error") or {}
+        await db.lab_reports.update_one(
+            {"id": report["id"]},
+            {"$set": {
+                "status": "failed",
+                "step": "terra_failed",
+                "error": error.get("message") or "Terra could not process this report",
+                "terra_error": error,
+            }},
+        )
+        await db.terra_webhook_events.update_one({"_id": event_id}, {"$set": {"status": "processed"}})
+        return {"received": True, "processed": 0}
+
+    session_id = str(data.get("session_id") or "")
+    if not session_id:
+        await db.terra_webhook_events.update_one(
+            {"_id": event_id}, {"$set": {"status": "failed", "error": "missing session_id"}}
+        )
+        return {"received": True, "processed": 0, "reason": "missing session id"}
+
+    observations = []
+    for index, result in enumerate(data.get("results") or []):
+        observation = map_result(
+            result,
+            report_id=report["id"],
+            session_id=session_id,
+            user_id=report["user_id"],
+        )
+        observation.update(
+            {
+                "id": new_id(),
+                "terra_result_index": index,
+                "canonical_key": observation.get("marker_slug"),
+                "marker_slug": observation.get("marker_slug") or slugify(observation["raw_name"]),
+                "created_at": now(),
+            }
+        )
+        observations.append(observation)
+        await db.biomarkers.update_one(
+            {"terra_session_id": session_id, "terra_result_index": index},
+            {"$set": observation},
+            upsert=True,
+        )
+
+    interpretation = None
+    interpretation_error = None
+    try:
+        interpretation = await _interpret_terra_results(
+            report["id"],
+            report["user_id"],
+            observations,
+            report.get("interpretation_locale", "fr"),
+        )
+    except Exception as exc:  # Terra results remain usable if the optional AI layer fails.
+        interpretation_error = str(exc)[:500]
+        await log_step(report["id"], report["user_id"], "interpretation", "failed", str(exc))
+
+    session_summary = {
+        "session_id": session_id,
+        "report_type": data.get("report_type"),
+        "report_date": data.get("report_date"),
+        "report_time": data.get("report_time"),
+        "report_locale": data.get("report_locale"),
+        "panels": data.get("panels") or [],
+        "results_count": data.get("results_count", len(observations)),
+    }
+    await db.lab_reports.update_one(
+        {"id": report["id"]},
+        {
+            "$set": {
+                "status": "done",
+                "step": "callback",
+                "provider": "terra",
+                "interpretation": interpretation,
+                "interpretation_error": interpretation_error,
+                "interpretation_provider": "anthropic" if interpretation else None,
+                "interpretation_model": (
+                    active_model_label("anthropic", "labs") if interpretation else None
+                ),
+                "completed_at": now(),
+            },
+            "$addToSet": {"terra_sessions": session_summary},
+        },
+    )
+    all_observations = [
+        clean(item)
+        async for item in db.biomarkers.find({"report_id": report["id"]}, {"_id": 0})
+        .sort([("measured_at", 1), ("terra_result_index", 1)])
+    ]
+    await db.lab_reports.update_one(
+        {"id": report["id"]},
+        {"$set": {"markers": all_observations, "markers_count": len(all_observations)}},
+    )
+    await db.notifications.update_one(
+        {"type": "lab_report_ready", "report_id": report["id"], "terra_session_id": session_id},
+        {"$setOnInsert": {
+            "id": new_id(),
+            "user_id": report["user_id"],
+            "type": "lab_report_ready",
+            "report_id": report["id"],
+            "terra_session_id": session_id,
+            "read": False,
+            "created_at": now(),
+        }},
+        upsert=True,
+    )
+    await log_step(report["id"], report["user_id"], "callback", "done", "Terra report received")
+    await db.terra_webhook_events.update_one({"_id": event_id}, {"$set": {"status": "processed"}})
+    return {"received": True, "processed": len(observations)}
+
+
+async def process_claimed_terra_lab_event(payload: dict):
+    """Record background failures so persisted events can be replayed safely."""
+    event_id = payload.get("event_id")
+    try:
+        await process_terra_lab_event(payload, claimed=True)
+    except Exception as exc:  # noqa: BLE001 - webhook inbox must retain retry state
+        if event_id:
+            await db.terra_webhook_events.update_one(
+                {"_id": event_id},
+                {"$set": {"status": "failed", "error": str(exc)[:500], "failed_at": now()}},
+            )
+
+
 # --------------------------------------------------------------------------- #
 # Endpoints                                                                   #
 # --------------------------------------------------------------------------- #
@@ -284,20 +493,22 @@ async def upload_lab(
     user: dict = Depends(current_user),
 ):
     mime = (file.content_type or "").lower()
-    if mime not in ALLOWED_MIMES:
-        raise HTTPException(415, "Formats acceptés : PDF, JPG, PNG, WebP")
+    allowed_mimes = TERRA_ALLOWED_MIMES if TERRA_LABS_CONFIGURED else ALLOWED_MIMES
+    max_bytes = TERRA_MAX_BYTES if TERRA_LABS_CONFIGURED else LOCAL_MAX_BYTES
+    if mime not in allowed_mimes:
+        formats = "PDF, JPG, PNG, GIF, WebP" if TERRA_LABS_CONFIGURED else "PDF, JPG, PNG, WebP"
+        raise HTTPException(415, f"Formats acceptés : {formats}")
     data = await file.read()
-    if len(data) > MAX_BYTES:
-        raise HTTPException(413, "Fichier trop volumineux (max 15 Mo)")
+    if len(data) > max_bytes:
+        raise HTTPException(413, f"Fichier trop volumineux (max {max_bytes // 1024 // 1024} Mo)")
     if not data:
         raise HTTPException(422, "Fichier vide")
 
     report_id = new_id()
-    ext = ALLOWED_MIMES[mime]
+    interpretation_locale = normalize_locale(user.get("preferred_locale"))
+    ext = allowed_mimes[mime]
     storage_path = f"ironflow/uploads/{user['id']}/{report_id}.{ext}"
     tmp_path = f"/tmp/ironflow_{report_id}.{ext}"
-    with open(tmp_path, "wb") as f:
-        f.write(data)
     try:
         await run_in_threadpool(put_object, storage_path, data, mime)
         stored = True
@@ -324,16 +535,46 @@ async def upload_lab(
         "storage_path": storage_path if stored else None,
         "status": "processing",
         "step": "received",
+        "provider": "terra" if TERRA_LABS_CONFIGURED else "ironflow",
         "steps": [{"step": "received", "status": "done", "detail": file.filename or "", "at": now()}],
         "markers": [],
         "markers_count": 0,
         "interpretation": None,
-        "disclaimer": DISCLAIMER,
+        "interpretation_locale": interpretation_locale,
+        "disclaimer": lab_disclaimer(interpretation_locale),
         "requires_professional_review": True,
         "created_at": now(),
     }
     await db.lab_reports.insert_one(dict(doc))
-    background.add_task(run_pipeline, report_id, user["id"], tmp_path, mime)
+    if TERRA_LABS_CONFIGURED:
+        try:
+            terra_upload = await upload_report(
+                base_url=TERRA_BASE_URL,
+                dev_id=TERRA_DEV_ID,
+                api_key=TERRA_API_KEY,
+                reference_id=user["id"],
+                filename=file.filename or f"report.{ext}",
+                mime=mime,
+                data=data,
+            )
+        except Exception as exc:
+            await db.lab_reports.update_one(
+                {"id": report_id},
+                {"$set": {"status": "failed", "step": "terra_upload", "error": str(exc)[:500]}},
+            )
+            raise HTTPException(502, "Terra could not accept this report") from exc
+        doc["terra_upload_id"] = terra_upload["upload_id"]
+        doc["step"] = "terra_processing"
+        await db.lab_reports.update_one(
+            {"id": report_id},
+            {"$set": {"terra_upload_id": terra_upload["upload_id"], "step": "terra_processing"}},
+        )
+    else:
+        with open(tmp_path, "wb") as f:
+            f.write(data)
+        background.add_task(
+            run_pipeline, report_id, user["id"], tmp_path, mime, interpretation_locale
+        )
     return clean(doc)
 
 
@@ -367,7 +608,9 @@ async def biomarkers_grouped(user: dict = Depends(current_user), owner_id: Optio
     if not await can_access_user_data(user["id"], target):
         raise HTTPException(403, "Not allowed")
     groups: dict[str, dict] = {}
-    async for b in db.biomarkers.find({"user_id": target}, {"_id": 0}).sort("measured_at", 1):
+    async for b in db.biomarkers.find(
+        {"user_id": target, "value": {"$type": "number"}}, {"_id": 0}
+    ).sort("measured_at", 1):
         slug = b.get("marker_slug") or slugify(b["marker"])
         g = groups.setdefault(
             slug,
