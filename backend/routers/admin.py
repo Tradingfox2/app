@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+import notifications
 import staff
 from server import clean, current_user, db, new_id, now
 
@@ -257,11 +258,18 @@ async def review_report(report_id: str, body: ReportReviewIn, user: dict = Depen
                       target_id=report["target_id"], reason=body.note.strip() or None,
                       metadata={"report_id": report_id, "reason": report["reason"]})
     if report.get("reported_user_id") and body.resolution in {"warning_sent", "content_removed"}:
-        await db.notifications.insert_one({
-            "id": new_id(), "user_id": report["reported_user_id"], "type": "moderation_action",
-            "title": "Community guidelines", "body": body.note.strip() or "Content was removed for breaching the guidelines.",
-            "read": False, "created_at": now(),
-        })
+        # Through notifications.create so the row carries `read_at`, which is
+        # the field the notification centre actually reads. A moderation notice
+        # is deliberately NOT sent via notify(): it must reach the member even
+        # if they have blocked the staff account acting on the report.
+        await notifications.create(
+            report["reported_user_id"],
+            "moderation_action",
+            "Community guidelines",
+            body.note.strip() or "Content was removed for breaching the guidelines.",
+            metadata={"report_id": report_id, "target_type": "report",
+                      "target_id": report_id},
+        )
     return clean(await db.reports.find_one({"id": report_id}, {"_id": 0}))
 
 

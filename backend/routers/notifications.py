@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+import notifications
 from server import clean, current_user, db, now
 
 router = APIRouter()
@@ -26,12 +27,14 @@ async def list_notifications(
     query: dict = {"user_id": user["id"]}
     if unread_only:
         query["read_at"] = None
-    return [
+    rows = [
         clean(row)
         async for row in db.notifications.find(query, {"_id": 0})
         .sort("created_at", -1)
         .limit(limit)
     ]
+    # Without this the aggregation can show "3 people" but never say who.
+    return await notifications.resolve_actors(rows)
 
 
 @router.get("/notifications/unread-count")

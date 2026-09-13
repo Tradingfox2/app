@@ -10,7 +10,17 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
 import server  # noqa: E402,F401 — entry point owns router registration
+import notifications  # noqa: E402
+import social_graph  # noqa: E402
 from routers import social, wearables  # noqa: E402
+
+
+def patch_social_db(monkeypatch, db):
+    """Social routes now reach into notifications and the social graph, so the
+    throwaway database has to be installed in all three or a trigger will hit
+    the global client bound to an already-closed event loop."""
+    for module in (social, notifications, social_graph):
+        monkeypatch.setattr(module, "db", db)
 
 
 def run_isolated(scenario):
@@ -33,7 +43,7 @@ def _user(uid):
 
 def test_feed_likes_reposts_comments_and_visibility(monkeypatch):
     async def scenario(db):
-        monkeypatch.setattr(social, "db", db)
+        patch_social_db(monkeypatch, db)
         await db.users.insert_many([{"id": "a", "full_name": "A"}, {"id": "b", "full_name": "B"}, {"id": "c", "full_name": "C"}])
         await db.community_members.insert_many([
             {"community_id": "g", "user_id": "a", "status": "active"}, {"community_id": "g", "user_id": "b", "status": "active"},
@@ -91,7 +101,7 @@ def test_feed_likes_reposts_comments_and_visibility(monkeypatch):
 
 def test_direct_messages_require_relationship(monkeypatch):
     async def scenario(db):
-        monkeypatch.setattr(social, "db", db)
+        patch_social_db(monkeypatch, db)
         await db.users.insert_many([{"id": "a", "full_name": "A"}, {"id": "b", "full_name": "B"}])
         with pytest.raises(HTTPException) as blocked:
             await social.send_direct_message("b", social.DirectMessageIn(content="hi"), _user("a"))
@@ -115,7 +125,7 @@ def test_direct_messages_require_relationship(monkeypatch):
 
 def test_media_upload_validates_type_and_bytes(monkeypatch, tmp_path):
     async def scenario(db):
-        monkeypatch.setattr(social, "db", db)
+        patch_social_db(monkeypatch, db)
         monkeypatch.setattr(social.media_storage, "MEDIA_ROOT", tmp_path)
         monkeypatch.setattr(social.media_storage, "S3_BUCKET", "")
         png = b"\x89PNG\r\n\x1a\n" + b"0" * 64

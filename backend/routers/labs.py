@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from ai import active_model_label, llm_json, llm_labs_json, ocr_document
 from locales import lab_disclaimer, lab_language_instruction, normalize_locale
+import notifications
 from server import can_access_user_data, clean, current_user, db, new_id, now
 from storage import put_object
 from terra_labs import format_observation_for_interpretation, map_result, upload_report
@@ -269,15 +270,12 @@ async def run_pipeline(
         await log_step(report_id, user_id, "write", "done", f"{len(normalized)} biomarkers written")
 
         # 7. Callback -> in-app notification (n8n webhook equivalent)
-        await db.notifications.insert_one(
-            {
-                "id": new_id(),
-                "user_id": user_id,
-                "type": "lab_report_ready",
-                "report_id": report_id,
-                "read": False,
-                "created_at": now(),
-            }
+        await notifications.create(
+            user_id,
+            "lab_report_ready",
+            "Your lab report is ready",
+            metadata={"report_id": report_id, "target_type": "lab_report",
+                      "target_id": report_id},
         )
         await log_step(report_id, user_id, "callback", "done", "notification created")
     except Exception as e:  # noqa: BLE001 — pipeline must record its own failure

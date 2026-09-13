@@ -94,12 +94,15 @@ class PublicUser(BaseModel):
     avatar_url: Optional[str] = None
     preferred_locale: str = DEFAULT_LOCALE
     activity_ranking_opt_in: bool = False
+    is_private: bool = False
     staff_role: Optional[str] = None
 
 
 class ProfileUpdateIn(BaseModel):
     preferred_locale: str | None = Field(default=None, pattern=f"^({'|'.join(SUPPORTED_LOCALES)})$")
     activity_ranking_opt_in: bool | None = None
+    #: A private account converts incoming follows into requests.
+    is_private: bool | None = None
 
 
 class TokenOut(BaseModel):
@@ -269,6 +272,7 @@ def to_public_user(u: dict) -> PublicUser:
         avatar_url=u.get("avatar_url"),
         preferred_locale=normalize_locale(u.get("preferred_locale")),
         activity_ranking_opt_in=u.get("activity_ranking_opt_in", False),
+        is_private=u.get("is_private", False),
         staff_role=u.get("staff_role"),
     )
 
@@ -327,6 +331,14 @@ async def lifespan(app: FastAPI):
     await db.post_comments.create_index([("post_id", 1), ("created_at", 1)])
     await db.follows.create_index([("follower_id", 1), ("followee_id", 1)], unique=True)
     await db.follows.create_index([("followee_id", 1)])
+    # Follow requests are read by status on every profile view and request list.
+    await db.follows.create_index([("followee_id", 1), ("status", 1)])
+    await db.follows.create_index([("follower_id", 1), ("status", 1)])
+    await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
+    await db.blocks.create_index([("blocked_id", 1)])
+    await db.mutes.create_index([("muter_id", 1), ("muted_id", 1)], unique=True)
+    # Aggregation looks up an unread row for the same target before inserting.
+    await db.notifications.create_index([("user_id", 1), ("type", 1), ("metadata.target_id", 1), ("read_at", 1)])
     await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
     await db.direct_messages.create_index([("recipient_id", 1), ("read_at", 1)])
     await db.media.create_index([("user_id", 1), ("created_at", -1)])

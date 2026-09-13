@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
+import notifications  # noqa: E402
 import server  # noqa: E402
 import staff  # noqa: E402
 from routers import admin  # noqa: E402
@@ -42,6 +43,7 @@ def test_permission_matrix_is_least_privilege():
 def test_staff_endpoints_reject_insufficient_roles(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         await db.users.insert_many([account("target"), account("support", staff_role="support"), account("boss", staff_role="admin")])
         for permission, caller in (("users.suspend", account("support", staff_role="support")),
@@ -58,6 +60,7 @@ def test_suspension_blocks_access_and_expires(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(server, "db", db)
         monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         moderator = account("mod", staff_role="moderator")
         await db.users.insert_many([account("target"), moderator, account("boss", staff_role="admin")])
@@ -90,6 +93,7 @@ def test_suspension_blocks_access_and_expires(monkeypatch):
 def test_staff_role_changes_are_admin_only_and_audited(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         boss = account("boss", staff_role="admin")
         await db.users.insert_many([account("target"), boss])
@@ -108,6 +112,7 @@ def test_staff_role_changes_are_admin_only_and_audited(monkeypatch):
 def test_user_detail_never_exposes_health_data(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         await db.users.insert_one({**account("target"), "password_hash": "$2b$secret", "suspended_at": None})
         await db.biomarkers.insert_one({"id": "b1", "user_id": "target", "marker": "Ferritin", "value": 42})
@@ -124,6 +129,7 @@ def test_user_detail_never_exposes_health_data(monkeypatch):
 def test_report_flow_snapshots_content_and_resolves_once(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         moderator = account("mod", staff_role="moderator")
         await db.users.insert_many([account("reporter"), account("author"), moderator])
@@ -156,6 +162,7 @@ def test_report_flow_snapshots_content_and_resolves_once(monkeypatch):
 def test_overview_and_user_search(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         support = account("support", staff_role="support")
         await db.users.insert_many([

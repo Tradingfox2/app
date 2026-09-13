@@ -289,6 +289,14 @@ async def review_coach_application(
             "coach_status": body.status,
         }},
     )
+    approved = body.status == "approved"
+    await notifications.notify(
+        application["user_id"], notifications.COACH_DECISION, actor=user,
+        title=("Your coach application was approved" if approved
+               else "Your coach application was not approved"),
+        body=body.review_note or "",
+        target_type="coach_application", target_id=application_id,
+        metadata={"approved": approved})
     await staff.audit(user, f"coach_application.{body.status}", target_type="user",
                       target_id=application["user_id"], reason=body.review_note,
                       metadata={"application_id": application_id})
@@ -511,6 +519,14 @@ async def review_membership(
     if body.status == "active":
         updates["joined_at"] = now()
     await db.community_members.update_one({"id": member_id}, {"$set": updates})
+    if body.status in {"active", "rejected"}:
+        approved = body.status == "active"
+        await notifications.notify(
+            member["user_id"], notifications.MEMBERSHIP, actor=user,
+            title=(f"You joined {community['name']}" if approved
+                   else f"Your request to join {community['name']} was declined"),
+            target_type="community", target_id=community_id,
+            metadata={"approved": approved})
     return clean(await db.community_members.find_one({"id": member_id}, {"_id": 0}))
 
 

@@ -9,6 +9,8 @@ from pymongo.errors import DuplicateKeyError
 
 import media_storage
 import staff
+import notifications
+import social_graph
 from server import clean, current_user, db, new_id, now
 
 router = APIRouter()
@@ -133,9 +135,20 @@ async def feed(
     if scope == "mine":
         query["author_id"] = user["id"]
     elif scope == "following":
-        following = [row["followee_id"] async for row in db.follows.find({"follower_id": user["id"]}, {"_id": 0, "followee_id": 1})]
+        following = [
+            row["followee_id"]
+            async for row in db.follows.find(
+                {"follower_id": user["id"], "status": social_graph.ACTIVE},
+                {"_id": 0, "followee_id": 1},
+            )
+        ]
         query["author_id"] = {"$in": [*following, user["id"]]}
     query.update(visibility)
+    # Blocked people disappear both ways; muted people only leave the feed.
+    hidden = [a for a in await social_graph.hidden_author_ids(user["id"]) if a != user["id"]]
+    if hidden and scope != "mine":
+        existing = query.get("author_id")
+        query["author_id"] = {**existing, "$nin": hidden} if isinstance(existing, dict) else {"$nin": hidden}
     if before:
         cursor = await db.posts.find_one({"id": before}, {"_id": 0, "created_at": 1})
         if cursor:
@@ -165,6 +178,12 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": now(),
     }
     await db.posts.insert_one(post)
+    name = user.get("full_name") or "Someone"
+    for mentioned in notifications.parse_mentions(post["content"]):
+        await notifications.notify(
+            mentioned, notifications.POST_MENTION, actor=user,
+            title=f"{name} mentioned you in a post", body=post["content"][:140],
+            target_type="post", target_id=post["id"])
     return (await _decorate([post], user["id"]))[0]
 
 
@@ -183,6 +202,14 @@ async def delete_post(post_id: str, user: dict = Depends(current_user)):
     return None
 
 
+async def _notify_post_author(post: dict, actor: dict, kind: str, title: str, body: str = "") -> None:
+    """Shared trigger for the three things that can happen to a post."""
+    await notifications.notify(
+        post["author_id"], kind, actor=actor, title=title, body=body,
+        target_type="post", target_id=post["id"],
+    )
+
+
 @router.post("/posts/{post_id}/like")
 async def like_post(post_id: str, user: dict = Depends(current_user)):
     post = await _post_or_404(post_id, user["id"])
@@ -191,6 +218,8 @@ async def like_post(post_id: str, user: dict = Depends(current_user)):
     except DuplicateKeyError:
         return {"post_id": post_id, "liked": True, "like_count": post.get("like_count", 0)}
     updated = await db.posts.find_one_and_update({"id": post_id}, {"$inc": {"like_count": 1}}, projection={"_id": 0, "like_count": 1}, return_document=True)
+    name = user.get("full_name") or "Someone"
+    await _notify_post_author(post, user, notifications.POST_LIKE, f"{name} liked your post")
     return {"post_id": post_id, "liked": True, "like_count": updated["like_count"]}
 
 
@@ -218,6 +247,8 @@ async def repost(post_id: str, user: dict = Depends(current_user)):
     }
     await db.posts.insert_one(post)
     await db.posts.update_one({"id": original["id"]}, {"$inc": {"repost_count": 1}})
+    name = user.get("full_name") or "Someone"
+    await _notify_post_author(original, user, notifications.POST_REPOST, f"{name} reposted your post")
     return (await _decorate(await _with_originals([post]), user["id"]))[0]
 
 
@@ -237,6 +268,21 @@ async def add_comment(post_id: str, body: CommentIn, user: dict = Depends(curren
     await db.post_comments.insert_one(comment)
     await db.posts.update_one({"id": post_id}, {"$inc": {"comment_count": 1}})
     comment["author"] = await _author(user["id"])
+
+    post = await db.posts.find_one({"id": post_id}, {"_id": 0, "id": 1, "author_id": 1})
+    name = user.get("full_name") or "Someone"
+    if post:
+        await _notify_post_author(
+            post, user, notifications.POST_COMMENT,
+            f"{name} commented on your post", comment["content"][:140])
+    # Someone mentioned in a comment hears about it even if it is not their post.
+    for mentioned in notifications.parse_mentions(comment["content"]):
+        if post and mentioned == post["author_id"]:
+            continue  # already told, as the post author
+        await notifications.notify(
+            mentioned, notifications.POST_MENTION, actor=user,
+            title=f"{name} mentioned you in a comment", body=comment["content"][:140],
+            target_type="post", target_id=post_id)
     return clean(comment)
 
 
@@ -249,17 +295,123 @@ async def follow(user_id: str, user: dict = Depends(current_user)):
         raise HTTPException(409, "You cannot follow yourself")
     if not await db.users.find_one({"id": user_id}, {"_id": 1}):
         raise HTTPException(404, "User not found")
-    try:
-        await db.follows.insert_one({"follower_id": user["id"], "followee_id": user_id, "created_at": now()})
-    except DuplicateKeyError:
-        pass
-    return {"following": True, "user_id": user_id}
+    if await social_graph.blocked_between(user["id"], user_id):
+        raise HTTPException(403, "This account is unavailable")
+
+    edge = await social_graph.create_follow(user["id"], user_id)
+    pending = edge.get("status") == "pending"
+    name = user.get("full_name") or "Someone"
+    await notifications.notify(
+        user_id,
+        notifications.FOLLOW_REQUEST if pending else notifications.FOLLOW,
+        actor=user,
+        title=f"{name} asked to follow you" if pending else f"{name} started following you",
+        target_type="user", target_id=user["id"],
+    )
+    return {"state": "pending" if pending else "following", "user_id": user_id,
+            "following": not pending}
 
 
 @router.delete("/users/{user_id}/follow")
 async def unfollow(user_id: str, user: dict = Depends(current_user)):
+    """Also withdraws a pending request — one control, both meanings."""
     await db.follows.delete_one({"follower_id": user["id"], "followee_id": user_id})
-    return {"following": False, "user_id": user_id}
+    return {"state": "none", "user_id": user_id, "following": False}
+
+
+@router.get("/follow-requests")
+async def follow_requests(user: dict = Depends(current_user)):
+    """Incoming requests awaiting this user's decision."""
+    rows = []
+    async for edge in db.follows.find(
+        {"followee_id": user["id"], "status": "pending"}, {"_id": 0}
+    ).sort("created_at", -1).limit(100):
+        edge["follower"] = await _author(edge["follower_id"])
+        rows.append(clean(edge))
+    return rows
+
+
+@router.post("/follow-requests/{follower_id}/approve")
+async def approve_follow_request(follower_id: str, user: dict = Depends(current_user)):
+    result = await db.follows.update_one(
+        {"follower_id": follower_id, "followee_id": user["id"], "status": "pending"},
+        {"$set": {"status": "active", "approved_at": now()}},
+    )
+    if not result.matched_count:
+        raise HTTPException(404, "Follow request not found")
+    name = user.get("full_name") or "Someone"
+    await notifications.notify(
+        follower_id, notifications.FOLLOW_ACCEPTED, actor=user,
+        title=f"{name} accepted your follow request",
+        target_type="user", target_id=user["id"],
+    )
+    return {"state": "following", "follower_id": follower_id}
+
+
+@router.delete("/follow-requests/{follower_id}", status_code=204)
+async def deny_follow_request(follower_id: str, user: dict = Depends(current_user)):
+    """Denial is silent: the requester is never told, as on every major network."""
+    result = await db.follows.delete_one(
+        {"follower_id": follower_id, "followee_id": user["id"], "status": "pending"}
+    )
+    if not result.deleted_count:
+        raise HTTPException(404, "Follow request not found")
+
+
+@router.get("/users/{user_id}/followers")
+async def followers(user_id: str, user: dict = Depends(current_user)):
+    if not await social_graph.can_view_profile(user["id"], user_id):
+        raise HTTPException(403, "This account is private")
+    rows = []
+    async for edge in db.follows.find(
+        {"followee_id": user_id, "status": social_graph.ACTIVE}, {"_id": 0}
+    ).sort("created_at", -1).limit(200):
+        person = await _author(edge["follower_id"])
+        if person:
+            person["followed_by_me"] = await social_graph.follows_actively(user["id"], person["id"])
+            rows.append(person)
+    return rows
+
+
+@router.get("/users/{user_id}/following")
+async def following(user_id: str, user: dict = Depends(current_user)):
+    if not await social_graph.can_view_profile(user["id"], user_id):
+        raise HTTPException(403, "This account is private")
+    rows = []
+    async for edge in db.follows.find(
+        {"follower_id": user_id, "status": social_graph.ACTIVE}, {"_id": 0}
+    ).sort("created_at", -1).limit(200):
+        person = await _author(edge["followee_id"])
+        if person:
+            person["followed_by_me"] = await social_graph.follows_actively(user["id"], person["id"])
+            rows.append(person)
+    return rows
+
+
+@router.post("/users/{user_id}/block")
+async def block_user(user_id: str, user: dict = Depends(current_user)):
+    if user_id == user["id"]:
+        raise HTTPException(409, "You cannot block yourself")
+    await social_graph.block(user["id"], user_id)
+    return {"blocked": True, "user_id": user_id}
+
+
+@router.delete("/users/{user_id}/block", status_code=204)
+async def unblock_user(user_id: str, user: dict = Depends(current_user)):
+    await social_graph.unblock(user["id"], user_id)
+
+
+@router.post("/users/{user_id}/mute")
+async def mute_user(user_id: str, user: dict = Depends(current_user)):
+    if user_id == user["id"]:
+        raise HTTPException(409, "You cannot mute yourself")
+    await social_graph.mute(user["id"], user_id)
+    return {"muted": True, "user_id": user_id}
+
+
+@router.delete("/users/{user_id}/mute", status_code=204)
+async def unmute_user(user_id: str, user: dict = Depends(current_user)):
+    await social_graph.unmute(user["id"], user_id)
 
 
 @router.get("/users/{user_id}/profile")
@@ -267,11 +419,24 @@ async def public_profile(user_id: str, user: dict = Depends(current_user)):
     profile = await _author(user_id)
     if not profile:
         raise HTTPException(404, "User not found")
-    profile["followers"] = await db.follows.count_documents({"followee_id": user_id})
-    profile["following"] = await db.follows.count_documents({"follower_id": user_id})
+    followers, following = await social_graph.counts(user_id)
+    state = await social_graph.follow_state(user["id"], user_id)
+    profile["followers"] = followers
+    profile["following"] = following
     profile["posts"] = await db.posts.count_documents({"author_id": user_id, "status": {"$ne": "deleted"}, "community_id": None})
-    profile["followed_by_me"] = bool(await db.follows.find_one({"follower_id": user["id"], "followee_id": user_id}))
-    profile["can_message"] = await _can_message(user["id"], user_id)
+    profile["follow_state"] = state
+    profile["followed_by_me"] = state == "following"
+    profile["is_private"] = await social_graph.is_private(user_id)
+    profile["is_blocked"] = bool(await db.blocks.find_one(
+        {"blocker_id": user["id"], "blocked_id": user_id}, {"_id": 1}))
+    profile["is_muted"] = bool(await db.mutes.find_one(
+        {"muter_id": user["id"], "muted_id": user_id}, {"_id": 1}))
+    # A private account shows its header but withholds posts until accepted.
+    profile["can_view_posts"] = await social_graph.can_view_profile(user["id"], user_id)
+    profile["can_message"] = (
+        not await social_graph.blocked_between(user["id"], user_id)
+        and await _can_message(user["id"], user_id)
+    )
     return profile
 
 
@@ -284,8 +449,10 @@ async def _can_message(sender_id: str, recipient_id: str) -> bool:
         return False
     if await db.direct_messages.find_one({"sender_id": recipient_id, "recipient_id": sender_id}, {"_id": 1}):
         return True
-    mutual = await db.follows.find_one({"follower_id": recipient_id, "followee_id": sender_id}, {"_id": 1})
-    if mutual and await db.follows.find_one({"follower_id": sender_id, "followee_id": recipient_id}, {"_id": 1}):
+    # Accepted follows only. A *pending* request is not a relationship, and
+    # counting it would let two strangers unlock DMs just by both asking.
+    if (await social_graph.follows_actively(recipient_id, sender_id)
+            and await social_graph.follows_actively(sender_id, recipient_id)):
         return True
     if await db.coach_relationships.find_one({"status": "active", "$or": [
         {"coach_id": sender_id, "client_id": recipient_id}, {"coach_id": recipient_id, "client_id": sender_id},
@@ -328,9 +495,16 @@ async def thread_messages(peer_id: str, limit: int = Query(default=50, ge=1, le=
 async def send_direct_message(peer_id: str, body: DirectMessageIn, user: dict = Depends(current_user)):
     if not await db.users.find_one({"id": peer_id}, {"_id": 1}):
         raise HTTPException(404, "User not found")
+    if await social_graph.blocked_between(user["id"], peer_id):
+        raise HTTPException(403, "This account is unavailable")
     if not await _can_message(user["id"], peer_id):
         raise HTTPException(403, "You can message people you share a community, coaching relationship or mutual follow with")
     message = {"id": new_id(), "thread_key": _thread_key(user["id"], peer_id), "sender_id": user["id"],
                "recipient_id": peer_id, "content": body.content.strip(), "read_at": None, "created_at": now()}
     await db.direct_messages.insert_one(message)
+    name = user.get("full_name") or "Someone"
+    await notifications.notify(
+        peer_id, notifications.DIRECT_MESSAGE, actor=user,
+        title=f"{name} sent you a message", body=message["content"][:140],
+        target_type="dm", target_id=user["id"])
     return clean(message)
