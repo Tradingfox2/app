@@ -8,9 +8,13 @@ import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { ADD_REACTION, DEFAULT_MEMBER, MANAGE_MESSAGES, PIN_MESSAGE, SEND_MESSAGE, can } from "@/src/permissions";
+import { useRealtimeChannel } from "@/src/realtime";
 
 const QUICK_REACTIONS = ["💪", "🔥", "👏", "🎯", "😂"];
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
+/** Polling cadence with realtime down, and the slower reconcile when it is up. */
+const POLL_MS = 8000;
+const RECONCILE_MS = 45000;
 
 export default function ChannelScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(); const router = useRouter(); const { user } = useAuth(); const { t, formatDate } = useI18n();
@@ -41,12 +45,25 @@ export default function ChannelScreen() {
       if (requestRevision === revision.current) setLoading(false);
     }
   }, [id, t]);
+  // Realtime is additive: a publication appends only what we do not already
+  // have, so it can never duplicate or clobber an optimistic row.
+  const { connected } = useRealtimeChannel(id ? `channel:${id}` : null, event => {
+    if (event.type !== "message.created") return;
+    const incoming = event.message as CommunityMessage | undefined;
+    if (!incoming?.id || incoming.channel_id !== id) return;
+    setMessages(current => current.some(item => item.id === incoming.id) ? current : [...current, incoming]);
+  });
   useFocusEffect(useCallback(() => {
     sendingRef.current = false; setSending(false);
     setMessages([]); setDraft(""); setLoading(true); setError(""); setReplyTo(null); setEditing(null); setActionsFor(null); setPinsOpen(false); void load();
-    const timer = setInterval(() => void load(), 8000);
-    return () => { clearInterval(timer); revision.current += 1; };
+    return () => { revision.current += 1; };
   }, [load]));
+  // The timer never fully stops: with realtime up it drops to a slow reconcile,
+  // so a missed publication cannot leave the channel permanently stale.
+  useFocusEffect(useCallback(() => {
+    const timer = setInterval(() => void load(), connected ? RECONCILE_MS : POLL_MS);
+    return () => clearInterval(timer);
+  }, [load, connected]));
   // One in-flight mutation at a time: the poll above would otherwise overwrite
   // an optimistic row before the server echoes it back.
   const mutate = async (action: () => Promise<void>, failure: string) => {

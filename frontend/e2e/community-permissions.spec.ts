@@ -27,6 +27,7 @@ async function fixtures(page: Page, permissions: number, override?: (route: Rout
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
     if (override && await override(route, path)) return;
+    if (path === "/realtime/token") return route.fulfill({ json: { enabled: false, token: null, url: null } });
     if (path === "/auth/me") return route.fulfill({ json: me });
     if (path === "/channels/fixture-channel") return route.fulfill({ json: channel(permissions) });
     if (path === "/channels/fixture-channel/messages") return route.fulfill({ json: [message] });
@@ -124,4 +125,89 @@ test("pinning is offered with the permission and fills the pins drawer", async (
   await page.getByTestId("toggle-pins").click();
   await expect(page.getByTestId("pins-drawer")).toContainText("Leg day at 18:00");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+
+// --- Realtime ---------------------------------------------------------------
+// Centrifugo is not running in CI, so these drive the client against a mocked
+// socket. The protocol below is Centrifugo's newline-delimited JSON framing.
+
+const REALTIME_URL = "http://centrifugo.test";
+
+/** Minimal Centrifugo server: answers connect + subscribe, then pushes on demand. */
+async function mockCentrifugo(page: Page) {
+  const pushes: ((payload: unknown) => void)[] = [];
+  await page.routeWebSocket(/connection\/websocket/, ws => {
+    ws.onMessage(raw => {
+      const text = typeof raw === "string" ? raw : raw.toString();
+      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        const command = JSON.parse(line);
+        if (command.connect) ws.send(JSON.stringify({ id: command.id, connect: { client: "test-client", version: "5", ping: 0 } }));
+        else if (command.subscribe) ws.send(JSON.stringify({ id: command.id, subscribe: { recoverable: false, epoch: "1", offset: 0 } }));
+        else if (command.id) ws.send(JSON.stringify({ id: command.id }));
+      }
+    });
+    pushes.push(payload => ws.send(JSON.stringify({ push: { channel: "channel:fixture-channel", pub: { data: payload } } })));
+  });
+  return {
+    async push(payload: unknown) {
+      await expect.poll(() => pushes.length).toBeGreaterThan(0);
+      pushes[pushes.length - 1](payload);
+    },
+  };
+}
+
+test("a live publication appends a message without a refetch", async ({ page }) => {
+  const centrifugo = await mockCentrifugo(page);
+  let messageFetches = 0;
+  await fixtures(page, VIEW_CHANNEL | SEND_MESSAGE, async (route, path) => {
+    if (path === "/realtime/token") {
+      await route.fulfill({ json: { enabled: true, token: "synthetic-centrifugo-token", url: REALTIME_URL } });
+      return true;
+    }
+    if (path === "/channels/fixture-channel/messages" && route.request().method() === "GET") {
+      messageFetches += 1;
+      await route.fulfill({ json: [message] });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/channel/fixture-channel");
+  await expect(page.getByTestId("message-msg-1")).toBeVisible();
+  const fetchesBefore = messageFetches;
+
+  await centrifugo.push({
+    type: "message.created",
+    message: { ...message, id: "msg-live", channel_id: "fixture-channel", content: "Pushed over the socket" },
+  });
+
+  await expect(page.getByTestId("message-msg-live")).toBeVisible();
+  await expect(page.getByText("Pushed over the socket", { exact: true })).toBeVisible();
+  // The point of realtime: the message arrived without another GET.
+  expect(messageFetches).toBe(fetchesBefore);
+});
+
+test("a duplicate publication cannot double-render a message", async ({ page }) => {
+  const centrifugo = await mockCentrifugo(page);
+  await fixtures(page, VIEW_CHANNEL | SEND_MESSAGE, async (route, path) => {
+    if (path === "/realtime/token") {
+      await route.fulfill({ json: { enabled: true, token: "synthetic-centrifugo-token", url: REALTIME_URL } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/channel/fixture-channel");
+  await expect(page.getByTestId("message-msg-1")).toBeVisible();
+
+  // The server echoes a message the client already has, twice.
+  for (let i = 0; i < 2; i++) await centrifugo.push({ type: "message.created", message });
+  await expect(page.getByTestId("message-msg-1")).toHaveCount(1);
+});
+
+test("realtime disabled on the server leaves the channel fully usable", async ({ page }) => {
+  // fixtures() reports enabled:false by default — the client must stay on polling.
+  await fixtures(page, VIEW_CHANNEL | SEND_MESSAGE);
+  await page.goto("/channel/fixture-channel");
+  await expect(page.getByTestId("message-msg-1")).toBeVisible();
+  await expect(page.getByTestId("composer-input")).toBeVisible();
 });

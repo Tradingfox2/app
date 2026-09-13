@@ -157,21 +157,37 @@ Channel naming: `community:{id}`, `channel:{id}`, `user:{id}`. Publishes are fir
 
 ## Status — 2026-09-13
 
-**Tasks 1-8 complete.** Backend: 117 tests passing (73 pre-existing + 44 new).
-**Task 9 partially complete:** `frontend/src/permissions.ts`, the channel screen
-and `e2e/community-permissions.spec.ts` (12 passing) are done. The **role editor
-and per-channel permission matrix UI in `community/[id]/manage.tsx` is NOT
-built** — the endpoints exist and are tested, but roles must currently be
-managed through the API.
+**All 9 tasks complete.**
 
-### Deviation from the plan worth recording
+- Backend: 117 tests passing.
+- Frontend: 44 e2e tests passing across desktop and mobile.
+- Role editor and per-channel permission matrix shipped in
+  `community/[id]/manage.tsx`.
+- Realtime is wired end to end: `frontend/src/realtime.ts` connects via the
+  `centrifuge` SDK (the one new dependency, approved 2026-09-13). With realtime
+  up the poll drops from 8s to a 45s reconcile; with it down or disabled the
+  8s poll continues unchanged.
 
-Task 8 originally created an announcement channel by writing a `SEND_MESSAGE`
-deny overwrite against the @everyone role. That muted legacy moderators too,
-because they inherit the default role and have no role document to grant an
-exception to. Replaced with a direct permission requirement: posting to an
-`announcement` channel needs `MANAGE_MESSAGES`. Simpler, and it needs no
-migration.
+### Deviations from the plan worth recording
+
+1. Task 8 originally created an announcement channel by writing a
+   `SEND_MESSAGE` deny overwrite against the @everyone role. That muted legacy
+   moderators too, because they inherit the default role and have no role
+   document to grant an exception to. Replaced with a direct permission
+   requirement: posting to an `announcement` channel needs `MANAGE_MESSAGES`.
+   Lesson: do not model a capability as a deny when some actors are not
+   represented as roles.
+
+2. Consolidating the management screen's single-flight handlers into one `run`
+   helper silently changed the channel-ranking error copy from a generic string
+   to the server's detail, which `community.spec.ts` pins. Restored via an
+   opt-in `generic` flag. Showing the server reason may be better UX, but that
+   is a product decision, not a refactor side effect.
+
+3. Centrifugo is not available in CI, so the realtime e2e tests drive the client
+   against a mocked socket using Playwright's `routeWebSocket` and Centrifugo's
+   newline-delimited JSON framing. This verifies connect, subscribe and
+   publication handling for real rather than assuming them.
 
 ## Deploying Centrifugo
 
