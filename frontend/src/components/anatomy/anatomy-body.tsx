@@ -1,23 +1,19 @@
-import React, { useCallback, useMemo } from "react";
-import { View, StyleSheet } from "react-native";
-import Svg, {
-  Defs,
-  G,
-  LinearGradient,
-  Path,
-  Stop,
-  Circle,
-} from "react-native-svg";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, View, StyleSheet } from "react-native";
+import Svg, { G, Path } from "react-native-svg";
 import type { MuscleSlug, BodySide, ActivationMap } from "./muscle-types";
 import {
-  ANATOMY_VIEWBOX,
-  BODY_SILHOUETTE,
-  LANDMARKS,
+  FRONT_VIEWBOX,
+  BACK_VIEWBOX,
+  BODY_OUTLINE,
+  STRUCTURAL_FRONT,
+  STRUCTURAL_BACK,
   FRONT_MUSCLES,
   BACK_MUSCLES,
   type MusclePathDefinition,
 } from "./anatomy-artwork";
 import { MuscleRegion } from "./muscle-region";
+import { colors } from "../../theme";
 
 export type AnatomyBodyProps = {
   side: BodySide;
@@ -33,6 +29,54 @@ export type AnatomyBodyProps = {
   height?: number;
 };
 
+function resolveSvgNode(ref: unknown): SVGSVGElement | null {
+  if (!ref || typeof ref !== "object") return null;
+  const asEl = ref as SVGSVGElement;
+  if (typeof asEl.addEventListener === "function" && asEl.tagName?.toLowerCase() === "svg") {
+    return asEl;
+  }
+  const inner = (ref as { elementRef?: { current?: SVGSVGElement | null } })
+    .elementRef?.current;
+  if (inner && typeof inner.addEventListener === "function") return inner;
+  return null;
+}
+
+function slugFromDomEvent(
+  event: Event,
+  svg: SVGSVGElement,
+  idToSlug: Map<string, MuscleSlug>,
+): MuscleSlug | null {
+  let node = event.target as Element | null;
+  while (node && node !== svg) {
+    if (node.id && idToSlug.has(node.id)) return idToSlug.get(node.id)!;
+    const data = node.getAttribute?.("data-muscle-slug");
+    if (data) return data as MuscleSlug;
+    node = node.parentElement;
+  }
+
+  const mouse = event as MouseEvent;
+  if (typeof mouse.clientX !== "number") return null;
+  const point = svg.createSVGPoint();
+  point.x = mouse.clientX;
+  point.y = mouse.clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
+  const local = point.matrixTransform(ctm.inverse());
+
+  const paths = svg.querySelectorAll("path[id]");
+  for (let i = paths.length - 1; i >= 0; i -= 1) {
+    const path = paths[i] as SVGPathElement;
+    const slug = idToSlug.get(path.id);
+    if (!slug || typeof path.isPointInFill !== "function") continue;
+    try {
+      if (path.isPointInFill(local)) return slug;
+    } catch {
+      // Some browsers throw if the path is not rendered yet.
+    }
+  }
+  return null;
+}
+
 export function AnatomyBody({
   side,
   volumes,
@@ -43,13 +87,36 @@ export function AnatomyBody({
   animateFibers = true,
   reduceMotion = false,
   onMusclePress,
-  width = 360,
-  height = 760,
+  width = 280,
+  height = 560,
 }: AnatomyBodyProps) {
   const muscles = useMemo<MusclePathDefinition[]>(
     () => (side === "front" ? FRONT_MUSCLES : BACK_MUSCLES),
     [side],
   );
+  const structural = side === "front" ? STRUCTURAL_FRONT : STRUCTURAL_BACK;
+  const svgRef = useRef<unknown>(null);
+  const [svgNode, setSvgNode] = useState<SVGSVGElement | null>(null);
+  const [glow, setGlow] = useState(1);
+
+  useEffect(() => {
+    if (reduceMotion || !selectedMuscle) {
+      setGlow(1);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = setInterval(() => {
+      const progress = Math.min((Date.now() - startedAt) / 600, 1);
+      setGlow(0.65 + 0.35 * Math.sin(progress * Math.PI));
+      if (progress === 1) clearInterval(id);
+    }, 50);
+    return () => clearInterval(id);
+  }, [reduceMotion, selectedMuscle]);
+
+  const setSvgRef = useCallback((node: unknown) => {
+    svgRef.current = node;
+    setSvgNode(resolveSvgNode(node));
+  }, []);
 
   const getLoadPercent = useCallback(
     (slug: MuscleSlug): number => {
@@ -60,145 +127,78 @@ export function AnatomyBody({
     [volumes, max],
   );
 
+  const idToSlug = useMemo(() => {
+    const map = new Map<string, MuscleSlug>();
+    for (const definition of muscles) {
+      map.set(definition.id, definition.slug);
+    }
+    return map;
+  }, [muscles]);
+
   const handleMusclePress = useCallback(
     (slug: MuscleSlug) => {
-      if (interactive && onMusclePress) {
-        onMusclePress(slug);
-      }
+      if (interactive && onMusclePress) onMusclePress(slug);
     },
     [interactive, onMusclePress],
   );
 
+  // On web the listener lives on the wrapping <div>, not on the <svg>: the
+  // react-native-svg ref sometimes resolves after the first paint, and a
+  // container listener also catches taps that land on the svg while it is
+  // yawing in 3D. The svg itself is looked up lazily from the container.
+  const containerRef = useRef<View | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !interactive) return;
+    const container = containerRef.current as unknown as HTMLElement | null;
+    if (!container || typeof container.addEventListener !== "function") return;
+
+    const onClick = (event: Event) => {
+      const svg =
+        svgNode ??
+        (container.querySelector("svg") as SVGSVGElement | null);
+      if (!svg) return;
+      const slug = slugFromDomEvent(event, svg, idToSlug);
+      if (slug) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleMusclePress(slug);
+      }
+    };
+
+    container.addEventListener("click", onClick);
+    return () => container.removeEventListener("click", onClick);
+  }, [handleMusclePress, idToSlug, interactive, svgNode]);
+
   return (
-    <View style={[styles.container, { width, height }]}>
+    <View
+      ref={containerRef}
+      testID={`anatomy-body-${side}`}
+      style={[
+        styles.container,
+        { width, height },
+        Platform.OS === "web" && interactive
+          ? { cursor: "pointer" as const }
+          : null,
+      ]}
+    >
       <Svg
+        ref={setSvgRef as never}
         width={width}
         height={height}
-        viewBox={ANATOMY_VIEWBOX}
+        viewBox={side === "front" ? FRONT_VIEWBOX : BACK_VIEWBOX}
         preserveAspectRatio="xMidYMid meet"
       >
-        <Defs>
-          {/* Skin gradient */}
-          <LinearGradient id="skinGradient" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#F5E6D3" />
-            <Stop offset="50%" stopColor="#E8D5C4" />
-            <Stop offset="100%" stopColor="#DBC8B5" />
-          </LinearGradient>
-
-          {/* Body shadow gradient */}
-          <LinearGradient id="bodyShadow" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0%" stopColor="#C4B5A5" stopOpacity={0.3} />
-            <Stop offset="50%" stopColor="#C4B5A5" stopOpacity={0} />
-            <Stop offset="100%" stopColor="#C4B5A5" stopOpacity={0.3} />
-          </LinearGradient>
-
-          {/* Joint highlight */}
-          <LinearGradient id="jointHighlight" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.4} />
-            <Stop offset="100%" stopColor="#D4C4B0" stopOpacity={0.2} />
-          </LinearGradient>
-        </Defs>
-
-        {/* Static body silhouette layer */}
-        <G opacity={0.95}>
-          {/* Head */}
-          <Path
-            d={BODY_SILHOUETTE.head}
-            fill="url(#skinGradient)"
-            stroke="#D4C4B0"
-            strokeWidth={1}
-          />
-
-          {/* Neck */}
-          <Path
-            d={BODY_SILHOUETTE.neck}
-            fill="url(#skinGradient)"
-            stroke="none"
-          />
-
-          {/* Torso */}
-          <Path
-            d={BODY_SILHOUETTE.torso}
-            fill="url(#skinGradient)"
-            stroke="#D4C4B0"
-            strokeWidth={0.5}
-          />
-
-          {/* Pelvis */}
-          <Path
-            d={BODY_SILHOUETTE.pelvis}
-            fill="url(#skinGradient)"
-            stroke="#D4C4B0"
-            strokeWidth={0.5}
-          />
-
-          {/* Arms */}
-          <Path
-            d={BODY_SILHOUETTE.armLeft}
-            fill="none"
-            stroke="url(#skinGradient)"
-            strokeWidth={28}
-            strokeLinecap="round"
-          />
-          <Path
-            d={BODY_SILHOUETTE.armRight}
-            fill="none"
-            stroke="url(#skinGradient)"
-            strokeWidth={28}
-            strokeLinecap="round"
-          />
-
-          {/* Legs */}
-          <Path
-            d={BODY_SILHOUETTE.legLeft}
-            fill="none"
-            stroke="url(#skinGradient)"
-            strokeWidth={35}
-            strokeLinecap="round"
-          />
-          <Path
-            d={BODY_SILHOUETTE.legRight}
-            fill="none"
-            stroke="url(#skinGradient)"
-            strokeWidth={35}
-            strokeLinecap="round"
-          />
+        <G pointerEvents="none">
+          {structural.map((part) => (
+            <Path
+              key={part.id}
+              d={part.path}
+              fill="#1E293B"
+              stroke="none"
+            />
+          ))}
         </G>
 
-        {/* Anatomical landmarks (bones/tendons) */}
-        <G opacity={0.25} strokeWidth={1} stroke="#A89080" fill="none">
-          {/* Clavicles */}
-          <Path d={LANDMARKS.clavicleLeft} />
-          <Path d={LANDMARKS.clavicleRight} />
-
-          {/* Spine (back view only) */}
-          {side === "back" && <Path d={LANDMARKS.spine} strokeDasharray="3 3" />}
-        </G>
-
-        {/* Joint markers */}
-        <G>
-          {/* Shoulder joints */}
-          <Circle cx={108} cy={166} r={6} fill="url(#jointHighlight)" />
-          <Circle cx={252} cy={166} r={6} fill="url(#jointHighlight)" />
-
-          {/* Elbow joints */}
-          <Circle cx={58} cy={296} r={5} fill="url(#jointHighlight)" />
-          <Circle cx={302} cy={296} r={5} fill="url(#jointHighlight)" />
-
-          {/* Wrist joints */}
-          <Circle cx={60} cy={395} r={3} fill="url(#jointHighlight)" />
-          <Circle cx={300} cy={395} r={3} fill="url(#jointHighlight)" />
-
-          {/* Knee joints */}
-          <Circle cx={140} cy={611} r={5} fill="url(#jointHighlight)" />
-          <Circle cx={220} cy={611} r={5} fill="url(#jointHighlight)" />
-
-          {/* Ankle joints */}
-          <Circle cx={145} cy={736} r={3} fill="url(#jointHighlight)" />
-          <Circle cx={215} cy={736} r={3} fill="url(#jointHighlight)" />
-        </G>
-
-        {/* Muscle regions layer */}
         <G>
           {muscles.map((definition) => (
             <MuscleRegion
@@ -207,13 +207,25 @@ export function AnatomyBody({
               loadPercent={getLoadPercent(definition.slug)}
               selected={selectedMuscle === definition.slug}
               activation={activation?.[definition.slug]}
-              interactive={interactive}
-              animateFibers={animateFibers}
+              interactive={interactive && Platform.OS !== "web"}
+              animateFibers={animateFibers && !activation?.[definition.slug]}
               reduceMotion={reduceMotion}
+              glow={glow}
               onPress={() => handleMusclePress(definition.slug)}
             />
           ))}
         </G>
+
+        <Path
+          d={BODY_OUTLINE[side]}
+          fill="none"
+          stroke={colors.borderStrong}
+          strokeWidth={1.4}
+          strokeOpacity={0.85}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pointerEvents="none"
+        />
       </Svg>
     </View>
   );

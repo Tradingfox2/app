@@ -13,20 +13,31 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { api } from "@/src/api";
-import { colors, radius, spacing } from "@/src/theme";
+import { card, colors, radius, spacing } from "@/src/theme";
+import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
+import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
+import type { MuscleSlug, RecommendationExercise } from "@/src/components/anatomy/muscle-types";
+import { useI18n } from "@/src/i18n";
 
 type Tab = "sessions" | "library";
+type LibraryExercise = RecommendationExercise & { id: string };
 
 export default function Workouts() {
   const router = useRouter();
+  const { t, formatDate } = useI18n();
   const [tab, setTab] = useState<Tab>("sessions");
   const [workouts, setWorkouts] = useState<any[]>([]);
-  const [exercises, setExercises] = useState<any[]>([]);
+  const [exercises, setExercises] = useState<LibraryExercise[]>([]);
   const [muscles, setMuscles] = useState<any[]>([]);
   const [category, setCategory] = useState<string | null>(null);
   const [muscle, setMuscle] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+  const [demoExercise, setDemoExercise] = useState<LibraryExercise | null>(null);
   const [modal, setModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [w, e, m] = await Promise.all([
@@ -44,40 +55,96 @@ export default function Workouts() {
   }, [load]);
 
   const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
     return exercises.filter((ex) => {
       if (category && ex.category !== category) return false;
-      if (muscle && ex.primary_muscle_slug !== muscle) return false;
+      if (
+        muscle &&
+        ex.primary_muscle_slug !== muscle &&
+        !ex.secondary_muscle_slugs?.includes(muscle as any)
+      ) return false;
+      if (
+        normalizedQuery &&
+        !`${ex.name} ${ex.equipment ?? ""} ${ex.instructions ?? ""}`
+          .toLowerCase()
+          .includes(normalizedQuery)
+      ) return false;
       return true;
     });
-  }, [exercises, category, muscle]);
+  }, [exercises, category, muscle, query]);
 
-  const startWorkout = async () => {
-    if (!newTitle.trim()) return;
-    const w = await api.createWorkout(newTitle.trim());
-    setNewTitle("");
-    setModal(false);
-    await load();
-    if (w?.id) router.push(`/workout/${w.id}`);
+  const selectedExercises = useMemo(
+    () => selectedSlugs
+      .map((slug) => exercises.find((exercise) => exercise.slug === slug))
+      .filter((exercise): exercise is LibraryExercise => !!exercise),
+    [exercises, selectedSlugs],
+  );
+
+  const categories = useMemo(
+    () => [
+      ...new Set(
+        exercises
+          .map((exercise) => exercise.category)
+          .filter((value): value is string => !!value),
+      ),
+    ].sort(),
+    [exercises],
+  );
+
+  const toggleExercise = (slug: string) => {
+    setSelectedSlugs((current) =>
+      current.includes(slug)
+        ? current.filter((item) => item !== slug)
+        : [...current, slug],
+    );
   };
 
-  const categories = ["strength", "cardio", "plyo"];
+  const startWorkout = async () => {
+    if (!newTitle.trim() || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const w = await api.createWorkout(
+        newTitle.trim(),
+        undefined,
+        selectedSlugs,
+      );
+      setNewTitle("");
+      setSelectedSlugs([]);
+      setModal(false);
+      await load();
+      if (w?.id) router.push(`/workout/${w.id}`);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : t("Could not create session"));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const openNewSession = () => {
+    setCreateError(null);
+    if (!newTitle.trim()) {
+      setNewTitle(selectedSlugs.length > 0 ? t("Library Session") : "");
+    }
+    setModal(true);
+  };
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="workouts-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>WORKOUTS</Text>
+        <Text style={styles.title}>{t("WORKOUTS")}</Text>
       </View>
 
       <View style={styles.segment}>
-        {(["sessions", "library"] as Tab[]).map((t) => (
+        {(["sessions", "library"] as Tab[]).map((tabKey) => (
           <Pressable
-            key={t}
-            testID={`tab-${t}-btn`}
-            onPress={() => setTab(t)}
-            style={[styles.segBtn, tab === t && styles.segBtnActive]}
+            key={tabKey}
+            testID={`tab-${tabKey}-btn`}
+            onPress={() => setTab(tabKey)}
+            style={[styles.segBtn, tab === tabKey && styles.segBtnActive]}
           >
-            <Text style={[styles.segTxt, tab === t && styles.segTxtActive]}>
-              {t.toUpperCase()}
+            <Text style={[styles.segTxt, tab === tabKey && styles.segTxtActive]}>
+              {t(tabKey === "sessions" ? "SESSIONS" : "LIBRARY")}
             </Text>
           </Pressable>
         ))}
@@ -91,7 +158,7 @@ export default function Workouts() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="barbell-outline" size={48} color={colors.textDim} />
-              <Text style={styles.emptyTxt}>No sessions yet. Start your first!</Text>
+              <Text style={styles.emptyTxt}>{t("No sessions yet. Start your first!")}</Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -103,10 +170,10 @@ export default function Workouts() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.sessionTitle}>{item.title}</Text>
                 <Text style={styles.sessionMeta}>
-                  {new Date(item.started_at).toLocaleDateString()}{" "}
+                  {formatDate(item.started_at)}{" "}
                   {item.duration_sec
                     ? `· ${Math.round(item.duration_sec / 60)} min`
-                    : "· in progress"}
+                    : t("· in progress")}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" color={colors.textMuted} size={20} />
@@ -115,18 +182,40 @@ export default function Workouts() {
         />
       ) : (
         <>
+          <View style={styles.searchWrap}>
+            <Ionicons name="search" color={colors.textMuted} size={18} />
+            <TextInput
+              testID="library-search"
+              value={query}
+              onChangeText={setQuery}
+              placeholder={t("Search exercises or equipment")}
+              placeholderTextColor={colors.textDim}
+              style={styles.searchInput}
+              returnKeyType="search"
+            />
+            {query ? (
+              <Pressable
+                onPress={() => setQuery("")}
+                accessibilityRole="button"
+                accessibilityLabel={t("Clear exercise search")}
+                hitSlop={8}
+              >
+                <Ionicons name="close-circle" color={colors.textMuted} size={18} />
+              </Pressable>
+            ) : null}
+          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.chipsRow}
             contentContainerStyle={styles.chipsContent}
           >
-            <Chip label="ALL" active={!category} onPress={() => setCategory(null)} testID="chip-all" />
+            <Chip label={t("ALL")} active={!category} onPress={() => setCategory(null)} testID="chip-all" />
             {categories.map((c) => (
               <Chip
                 key={c}
                 testID={`chip-${c}`}
-                label={c.toUpperCase()}
+                label={t(c.toUpperCase())}
                 active={category === c}
                 onPress={() => setCategory(category === c ? null : c)}
               />
@@ -138,11 +227,12 @@ export default function Workouts() {
             style={styles.chipsRow}
             contentContainerStyle={styles.chipsContent}
           >
-            {muscles.slice(0, 10).map((m) => (
+            <Chip label={t("ALL MUSCLES")} active={!muscle} onPress={() => setMuscle(null)} testID="muscle-all" />
+            {muscles.map((m) => (
               <Chip
                 key={m.slug}
                 testID={`muscle-${m.slug}`}
-                label={m.name}
+                label={t(MUSCLE_NAMES[m.slug as MuscleSlug] ?? m.name)}
                 active={muscle === m.slug}
                 onPress={() => setMuscle(muscle === m.slug ? null : m.slug)}
               />
@@ -150,20 +240,87 @@ export default function Workouts() {
           </ScrollView>
           <FlatList
             data={filtered}
-            keyExtractor={(e) => e.id}
+            keyExtractor={(e) => e.id ?? e.slug}
             contentContainerStyle={styles.listPad}
+            ListHeaderComponent={
+              selectedExercises.length > 0 ? (
+                <View style={styles.selectionBar} testID="selected-count">
+                  <View style={styles.selectionCopy}>
+                    <Text style={styles.selectionCount}>
+                      {t("{count} SELECTED", { count: selectedExercises.length })}
+                    </Text>
+                    <Text style={styles.selectionNames} numberOfLines={1}>
+                      {selectedExercises.map((exercise) => exercise.name).join(" · ")}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setSelectedSlugs([])}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("Clear selected exercises")}
+                    style={styles.clearSelection}
+                  >
+                    <Text style={styles.clearSelectionText}>{t("CLEAR")}</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.libraryHint}>{t("SELECT EXERCISES TO BUILD A SESSION")}</Text>
+              )
+            }
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="search-outline" size={40} color={colors.textDim} />
+                <Text style={styles.emptyTxt}>{t("No exercises match these filters.")}</Text>
+                <Pressable
+                  style={styles.resetFilters}
+                  onPress={() => {
+                    setQuery("");
+                    setCategory(null);
+                    setMuscle(null);
+                  }}
+                >
+                  <Text style={styles.resetFiltersText}>{t("RESET FILTERS")}</Text>
+                </Pressable>
+              </View>
+            }
             renderItem={({ item }) => (
-              <View style={styles.exCard} testID={`exercise-${item.slug}`}>
-                <View style={styles.exIcon}>
-                  <Ionicons name="fitness" color={colors.brand} size={20} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.exName}>{item.name}</Text>
-                  <Text style={styles.exMeta}>
-                    {item.equipment ?? "—"} · {item.difficulty}
-                  </Text>
-                </View>
-                <Text style={styles.exBadge}>{item.category}</Text>
+              <View
+                style={[
+                  styles.exCard,
+                  selectedSlugs.includes(item.slug) && styles.exCardSelected,
+                ]}
+              >
+                <Pressable
+                  style={styles.exSelect}
+                  testID={`exercise-${item.slug}`}
+                  onPress={() => toggleExercise(item.slug)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selectedSlugs.includes(item.slug) }}
+                  accessibilityLabel={t("Select {name}", { name: item.name })}
+                >
+                  <View style={styles.exIcon}>
+                    <Ionicons
+                      name={selectedSlugs.includes(item.slug) ? "checkmark" : "fitness"}
+                      color={colors.brand}
+                      size={20}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.exName}>{item.name}</Text>
+                    <Text style={styles.exMeta}>
+                      {item.equipment ? t(item.equipment) : "—"} · {t(item.difficulty ?? "")}
+                    </Text>
+                  </View>
+                  <Text style={styles.exBadge}>{t(item.category ?? "")}</Text>
+                </Pressable>
+                <Pressable
+                  testID={`exercise-demo-${item.slug}`}
+                  style={styles.exDemo}
+                  onPress={() => setDemoExercise(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Open {name} exercise demo", { name: item.name })}
+                >
+                  <Ionicons name="play" color={colors.brandOn} size={14} />
+                </Pressable>
               </View>
             )}
           />
@@ -173,30 +330,55 @@ export default function Workouts() {
       <Pressable
         testID="fab-new-workout"
         style={styles.fab}
-        onPress={() => setModal(true)}
+        onPress={openNewSession}
       >
         <Ionicons name="add" color={colors.brandOn} size={28} />
-        <Text style={styles.fabTxt}>NEW SESSION</Text>
+        <Text style={styles.fabTxt}>
+          {tab === "library" && selectedSlugs.length > 0
+            ? t("START WITH {count}", { count: selectedSlugs.length })
+            : t("NEW SESSION")}
+        </Text>
       </Pressable>
 
       <Modal visible={modal} transparent animationType="fade" onRequestClose={() => setModal(false)}>
         <Pressable style={styles.backdrop} onPress={() => setModal(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>NEW SESSION</Text>
+            <Text style={styles.sheetTitle}>{t("NEW SESSION")}</Text>
+            {selectedExercises.length > 0 ? (
+              <View style={styles.planSummary}>
+                <Text style={styles.planSummaryCount}>
+                  {t(selectedExercises.length === 1 ? "{count} PLANNED EXERCISE" : "{count} PLANNED EXERCISES", { count: selectedExercises.length })}
+                </Text>
+                <Text style={styles.planSummaryNames} numberOfLines={2}>
+                  {selectedExercises.map((exercise) => exercise.name).join(" · ")}
+                </Text>
+              </View>
+            ) : null}
             <TextInput
               testID="input-workout-title"
-              placeholder="Session name"
+              placeholder={t("Session name")}
               placeholderTextColor={colors.textDim}
               style={styles.sheetInput}
               value={newTitle}
               onChangeText={setNewTitle}
+              autoFocus
             />
-            <Pressable style={styles.sheetCta} onPress={startWorkout} testID="submit-workout-btn">
-              <Text style={styles.sheetCtaTxt}>START</Text>
+            {createError ? <Text style={styles.createError}>{createError}</Text> : null}
+            <Pressable
+              style={[styles.sheetCta, (!newTitle.trim() || creating) && styles.sheetCtaDisabled]}
+              onPress={startWorkout}
+              disabled={!newTitle.trim() || creating}
+              testID="submit-workout-btn"
+            >
+              <Text style={styles.sheetCtaTxt}>{creating ? t("CREATING...") : t("START SESSION")}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
+      <ExerciseDemoModal
+        exercise={demoExercise}
+        onClose={() => setDemoExercise(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -230,7 +412,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  title: { color: colors.text, fontSize: 24, fontWeight: "900", letterSpacing: 2 },
+  title: { color: colors.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
   segment: {
     flexDirection: "row",
     marginHorizontal: spacing.lg,
@@ -239,7 +421,14 @@ const styles = StyleSheet.create({
     padding: 4,
     marginBottom: spacing.md,
   },
-  segBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: "center", borderRadius: radius.pill },
+  segBtn: {
+    flex: 1,
+    minHeight: 44,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+  },
   segBtnActive: { backgroundColor: colors.brand },
   segTxt: { color: colors.textMuted, fontWeight: "800", letterSpacing: 1, fontSize: 12 },
   segTxtActive: { color: colors.brandOn },
@@ -263,13 +452,24 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
   chipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 11, letterSpacing: 1 },
   chipTxtActive: { color: colors.brand },
+  searchWrap: {
+    minHeight: 44,
+    marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+  },
+  searchInput: { flex: 1, color: colors.text, fontSize: 14, paddingVertical: spacing.sm },
   listPad: { padding: spacing.lg, paddingBottom: 140 },
   sessionCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
+    ...card,
     borderRadius: radius.md,
     padding: spacing.lg,
     marginBottom: spacing.sm,
@@ -279,12 +479,19 @@ const styles = StyleSheet.create({
   exCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
+    ...card,
     borderRadius: radius.md,
-    padding: spacing.md,
     marginBottom: spacing.sm,
+    overflow: "hidden",
+  },
+  exCardSelected: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  exSelect: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 64,
+    padding: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
   },
   exIcon: {
@@ -304,15 +511,50 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
+  exDemo: {
+    width: 44,
+    height: 44,
+    marginRight: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  libraryHint: {
+    color: colors.textDim,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    marginBottom: spacing.md,
+  },
+  selectionBar: {
+    minHeight: 52,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.brandDim,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brand,
+  },
+  selectionCopy: { flex: 1, minWidth: 0 },
+  selectionCount: { color: colors.brand, fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
+  selectionNames: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  clearSelection: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.sm },
+  clearSelectionText: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   empty: { alignItems: "center", padding: spacing.xxxl, gap: spacing.md },
   emptyTxt: { color: colors.textMuted },
+  resetFilters: { minHeight: 40, justifyContent: "center", paddingHorizontal: spacing.md },
+  resetFiltersText: { color: colors.brand, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   fab: {
     position: "absolute",
     bottom: 82,
     left: spacing.lg,
     right: spacing.lg,
+    minHeight: 52,
     backgroundColor: colors.brand,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -340,20 +582,33 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: spacing.md,
   },
+  planSummary: {
+    backgroundColor: colors.brandDim,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brand,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  planSummaryCount: { color: colors.brand, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  planSummaryNames: { color: colors.text, fontSize: 12, lineHeight: 18, marginTop: spacing.xs },
   sheetInput: {
     backgroundColor: colors.surface,
     color: colors.text,
     borderRadius: radius.md,
-    padding: spacing.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.md,
   },
   sheetCta: {
     backgroundColor: colors.brand,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    minHeight: 48,
+    justifyContent: "center",
     alignItems: "center",
   },
+  sheetCtaDisabled: { opacity: 0.45 },
   sheetCtaTxt: { color: colors.brandOn, fontWeight: "900", letterSpacing: 2 },
+  createError: { color: colors.error, fontSize: 12, marginBottom: spacing.md },
 });

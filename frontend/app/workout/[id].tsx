@@ -13,15 +13,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { api } from "@/src/api";
 import { enqueueSet, flushQueue, onQueueChange } from "@/src/offline-queue";
 import { colors, radius, spacing } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 export default function WorkoutLogger() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t, formatNumber } = useI18n();
   const [sets, setSets] = useState<any[]>([]);
   const [exercises, setExercises] = useState<any[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -43,23 +45,40 @@ export default function WorkoutLogger() {
     return unsub;
   }, []);
 
+  // Exercises queued from the Muscle Explorer / circuits (workout.planned_exercises)
+  const [planned, setPlanned] = useState<any[]>([]);
+  const [workoutTitle, setWorkoutTitle] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     if (!id) return;
     await flushQueue().catch(() => {});
-    const [s, ex, ms] = await Promise.all([
+    const [s, ex, ms, w] = await Promise.all([
       api.listSets(id).catch(() => []),
       api.exercises().catch(() => []),
       api.muscles().catch(() => []),
+      api.workout(id).catch(() => null),
     ]);
     setSets(s);
     setExercises(ex);
     setMuscles(ms);
-    if (!selectedEx && ex.length) setSelectedEx(ex[0]);
+    const plan: any[] = w?.planned_exercises ?? [];
+    setPlanned(plan);
+    setWorkoutTitle(w?.title ?? null);
+    // Prefer the first planned exercise that has no sets yet, then any planned, then the catalog.
+    if (!selectedEx) {
+      const logged = new Set(s.map((x: any) => x.exercise_id));
+      const next = plan.find((p) => !logged.has(p.id)) ?? plan[0] ?? ex[0];
+      if (next) setSelectedEx(next);
+    }
   }, [id, selectedEx]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Reload on mount and whenever the screen regains focus (e.g. back from the
+  // Muscle Explorer after queueing more exercises into this session).
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   // Rest timer countdown
   useEffect(() => {
@@ -130,22 +149,72 @@ export default function WorkoutLogger() {
         <Pressable onPress={() => router.back()} testID="back-btn" hitSlop={12}>
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
-        <Text style={styles.title}>LIVE SESSION</Text>
+        <View style={{ alignItems: "center" }}>
+          <Text style={styles.title}>{t("LIVE SESSION")}</Text>
+          {workoutTitle ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {workoutTitle}
+            </Text>
+          ) : null}
+        </View>
         <Pressable onPress={finish} testID="finish-btn" hitSlop={12}>
-          <Text style={styles.finishTxt}>FINISH</Text>
+          <Text style={styles.finishTxt}>{t("FINISH")}</Text>
         </Pressable>
       </View>
+
+      {planned.length > 0 && (
+        <View style={styles.planWrap} testID="planned-queue">
+          <Text style={styles.planLabel}>{t("PLANNED · {count}", { count: formatNumber(planned.length) })}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.planRow}
+          >
+            {planned.map((p, i) => {
+              const done = (setsByEx[p.id] || []).length;
+              const active = selectedEx?.id === p.id;
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setSelectedEx(p)}
+                  style={[styles.planChip, active && styles.planChipActive, done > 0 && styles.planChipDone]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("{name}, {count} sets logged", { name: p.name, count: formatNumber(done) })}
+                  testID={`planned-${p.slug}`}
+                >
+                  <Text style={[styles.planIdx, active && styles.planTxtActive]}>{i + 1}</Text>
+                  <Text style={[styles.planName, active && styles.planTxtActive]} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  {done > 0 ? (
+                    <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={() => router.push("/muscles")}
+              style={[styles.planChip, styles.planChipAdd]}
+              accessibilityRole="button"
+              accessibilityLabel={t("Add exercises from the muscle explorer")}
+            >
+              <Ionicons name="add" size={16} color={colors.brand} />
+              <Text style={[styles.planName, { color: colors.brand }]}>{t("Add")}</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      )}
 
       {queued > 0 && (
         <View style={styles.offlineBanner} testID="offline-banner">
           <Ionicons name="cloud-offline" color={colors.warning} size={14} />
-          <Text style={styles.offlineTxt}>{queued} set{queued > 1 ? "s" : ""} pending sync</Text>
+          <Text style={styles.offlineTxt}>{t(queued === 1 ? "{count} set pending sync" : "{count} sets pending sync", { count: formatNumber(queued) })}</Text>
         </View>
       )}
 
       {restRemaining > 0 && (
         <View style={styles.timer} testID="rest-timer">
-          <Text style={styles.timerLabel}>REST</Text>
+          <Text style={styles.timerLabel}>{t("REST")}</Text>
           <Text style={styles.timerVal}>{restRemaining}s</Text>
           <Pressable onPress={() => setRestRemaining(0)} testID="skip-timer-btn">
             <Ionicons name="close" color={colors.brandOn} size={18} />
@@ -164,9 +233,9 @@ export default function WorkoutLogger() {
             onPress={() => setPickerOpen(true)}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.exSelectorLabel}>EXERCISE</Text>
+              <Text style={styles.exSelectorLabel}>{t("EXERCISE")}</Text>
               <Text style={styles.exSelectorName}>
-                {selectedEx?.name ?? "Pick an exercise"}
+                {selectedEx?.name ?? t("Pick an exercise")}
               </Text>
             </View>
             <Ionicons name="chevron-down" color={colors.brand} size={22} />
@@ -174,19 +243,19 @@ export default function WorkoutLogger() {
 
           {selectedEx && (
             <View style={styles.setsCard}>
-              <Text style={styles.setsHeader}>SETS · {setsByEx[selectedEx.id]?.length || 0}</Text>
+              <Text style={styles.setsHeader}>{t("SETS · {count}", { count: formatNumber(setsByEx[selectedEx.id]?.length || 0) })}</Text>
               {(setsByEx[selectedEx.id] || []).map((s) => (
                 <View key={s.id} style={styles.setRow}>
                   <Text style={styles.setIdx}>#{s.set_index}</Text>
-                  <Text style={styles.setVal}>{s.reps} reps</Text>
-                  <Text style={styles.setVal}>{s.weight_kg} kg</Text>
+                  <Text style={styles.setVal}>{t("{count} reps", { count: formatNumber(s.reps) })}</Text>
+                  <Text style={styles.setVal}>{formatNumber(s.weight_kg)} kg</Text>
                   <Text style={styles.setValDim}>
                     {s.rpe ? `RPE ${s.rpe}` : "—"}
                   </Text>
                 </View>
               ))}
               {(setsByEx[selectedEx.id] || []).length === 0 && (
-                <Text style={styles.setEmpty}>No sets logged yet.</Text>
+                <Text style={styles.setEmpty}>{t("No sets logged yet.")}</Text>
               )}
             </View>
           )}
@@ -198,7 +267,7 @@ export default function WorkoutLogger() {
               onPress={() => router.push(`/progression/${selectedEx.id}`)}
             >
               <Ionicons name="trending-up" color={colors.brand} size={16} />
-              <Text style={styles.progLinkTxt}>See progression & PR</Text>
+              <Text style={styles.progLinkTxt}>{t("See progression & PR")}</Text>
             </Pressable>
           )}
         </ScrollView>
@@ -227,13 +296,13 @@ export default function WorkoutLogger() {
         <View style={styles.pickerBackdrop}>
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHead}>
-              <Text style={styles.pickerTitle}>PICK EXERCISE</Text>
+              <Text style={styles.pickerTitle}>{t("PICK EXERCISE")}</Text>
               <Pressable onPress={() => setPickerOpen(false)} hitSlop={12}>
                 <Ionicons name="close" color={colors.text} size={22} />
               </Pressable>
             </View>
             <TextInput
-              placeholder="Search…"
+              placeholder={t("Search…")}
               placeholderTextColor={colors.textDim}
               style={styles.pickerSearch}
               value={pickerQuery}
@@ -246,7 +315,7 @@ export default function WorkoutLogger() {
               contentContainerStyle={styles.pickerChips}
             >
               <PickerChip
-                label="ALL"
+                label={t("ALL")}
                 active={!pickerMuscle}
                 onPress={() => setPickerMuscle(null)}
               />
@@ -334,7 +403,43 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
-  finishTxt: { color: colors.brand, fontWeight: "900", letterSpacing: 2 },
+  subtitle: { color: colors.textMuted, fontSize: 11, marginTop: 2, maxWidth: 220 },
+  planWrap: { marginBottom: spacing.sm },
+  planLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    letterSpacing: 2,
+    fontWeight: "800",
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.xs,
+  },
+  planRow: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  planChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    maxWidth: 220,
+  },
+  planChipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  planChipDone: { borderColor: colors.success },
+  planChipAdd: { borderStyle: "dashed", borderColor: colors.brand, backgroundColor: "transparent" },
+  planIdx: { color: colors.textDim, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  planName: { color: colors.text, fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  planTxtActive: { color: colors.brand },
+  finishTxt: {
+    color: colors.brand,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    minHeight: 44,
+    textAlignVertical: "center",
+    paddingHorizontal: spacing.sm,
+  },
   offlineBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -352,12 +457,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.brand,
     marginHorizontal: spacing.lg,
-    padding: spacing.md,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+    borderRadius: radius.pill,
     marginBottom: spacing.sm,
   },
-  timerLabel: { color: colors.brandOn, fontWeight: "900", letterSpacing: 2 },
-  timerVal: { color: colors.brandOn, fontWeight: "900", flex: 1, fontSize: 20 },
+  timerLabel: { color: colors.brandOn, fontWeight: "800", letterSpacing: 2 },
+  timerVal: {
+    color: colors.brandOn,
+    fontWeight: "800",
+    flex: 1,
+    fontSize: 20,
+    fontVariant: ["tabular-nums"],
+  },
   exSelector: {
     backgroundColor: colors.surface2,
     borderColor: colors.border,
@@ -393,8 +506,18 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  setIdx: { color: colors.brand, fontWeight: "900", width: 34 },
-  setVal: { color: colors.text, fontWeight: "700", width: 70 },
+  setIdx: {
+    color: colors.success,
+    fontWeight: "800",
+    width: 34,
+    fontVariant: ["tabular-nums"],
+  },
+  setVal: {
+    color: colors.text,
+    fontWeight: "700",
+    width: 70,
+    fontVariant: ["tabular-nums"],
+  },
   setValDim: { color: colors.textMuted, fontSize: 12 },
   setEmpty: { color: colors.textDim, fontStyle: "italic", padding: spacing.sm },
   progLink: {
@@ -432,9 +555,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: colors.border,
+    fontVariant: ["tabular-nums"],
   },
   addBtn: {
     backgroundColor: colors.brand,

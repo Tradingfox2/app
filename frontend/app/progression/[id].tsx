@@ -6,10 +6,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Svg, { Polyline, Line, Circle } from "react-native-svg";
 import { api } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 export default function ProgressionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t, formatNumber } = useI18n();
   const [data, setData] = useState<{ series: any[]; pr: any } | null>(null);
   const [exName, setExName] = useState<string>("Exercise");
 
@@ -26,7 +28,7 @@ export default function ProgressionScreen() {
     })();
   }, [id]);
 
-  const series = data?.series ?? [];
+  const series = useMemo(() => data?.series ?? [], [data?.series]);
   const pr = data?.pr;
 
   const chart = useMemo(() => {
@@ -56,7 +58,7 @@ export default function ProgressionScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} testID="back-btn">
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
-        <Text style={styles.title}>PROGRESSION</Text>
+        <Text style={styles.title}>{t("PROGRESSION")}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -66,8 +68,8 @@ export default function ProgressionScreen() {
         {pr && (
           <View style={styles.prCard} testID="pr-card">
             <View style={styles.prBadge}>
-              <Ionicons name="trophy" color={colors.brandOn} size={16} />
-              <Text style={styles.prBadgeTxt}>PERSONAL RECORD</Text>
+              <Ionicons name="trophy" color={colors.bg} size={16} />
+              <Text style={styles.prBadgeTxt}>{t("PERSONAL RECORD")}</Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: spacing.sm }}>
               <Text style={styles.prVal}>{pr.e1rm}</Text>
@@ -80,11 +82,11 @@ export default function ProgressionScreen() {
         )}
 
         <View style={styles.chartCard}>
-          <Text style={styles.cardTitle}>ESTIMATED 1RM</Text>
+          <Text style={styles.cardTitle}>{t("ESTIMATED 1RM")}</Text>
           {chart.points.length === 0 ? (
             <View style={styles.chartEmpty}>
               <Ionicons name="analytics-outline" size={40} color={colors.textDim} />
-              <Text style={styles.emptyTxt}>Log some sets to see progression</Text>
+              <Text style={styles.emptyTxt}>{t("Log some sets to see progression")}</Text>
             </View>
           ) : (
             <Svg width="100%" height={chart.h} viewBox={`0 0 ${chart.w} ${chart.h}`}>
@@ -116,15 +118,15 @@ export default function ProgressionScreen() {
             </Svg>
           )}
           <View style={styles.chartFoot}>
-            <Text style={styles.footLbl}>MIN {Math.round(chart.min)}kg</Text>
-            <Text style={styles.footLbl}>MAX {Math.round(chart.max)}kg</Text>
+            <Text style={styles.footLbl}>{t("MIN")} {formatNumber(Math.round(chart.min))}kg</Text>
+            <Text style={styles.footLbl}>{t("MAX")} {formatNumber(Math.round(chart.max))}kg</Text>
           </View>
         </View>
 
         <View style={styles.statsRow}>
-          <StatBox label="TOTAL TONNAGE" value={`${Math.round(totalTonnage)}`} unit="kg" />
-          <StatBox label="TOTAL SETS" value={`${totalSets}`} unit="sets" />
-          <StatBox label="SESSIONS" value={`${series.length}`} unit="days" />
+          <StatBox label={t("TOTAL TONNAGE")} value={formatNumber(Math.round(totalTonnage))} unit="kg" />
+          <StatBox label={t("TOTAL SETS")} value={formatNumber(totalSets)} unit={t("sets")} />
+          <StatBox label={t("SESSIONS")} value={formatNumber(series.length)} unit={t("days")} />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -155,8 +157,8 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
   exName: { color: colors.text, fontSize: 22, fontWeight: "900", marginBottom: spacing.lg },
   prCard: {
-    backgroundColor: colors.brandDim,
-    borderColor: colors.brand,
+    backgroundColor: colors.surface,
+    borderColor: colors.pr,
     borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.lg,
@@ -166,14 +168,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.pr,
     alignSelf: "flex-start",
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radius.pill,
   },
-  prBadgeTxt: { color: colors.brandOn, fontWeight: "900", fontSize: 10, letterSpacing: 1 },
-  prVal: { color: colors.brand, fontSize: 36, fontWeight: "900" },
+  prBadgeTxt: { color: colors.bg, fontWeight: "800", fontSize: 10, letterSpacing: 1 },
+  prVal: {
+    color: colors.pr,
+    fontSize: 36,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
   prUnit: { color: colors.textMuted, fontSize: 14 },
   prMeta: { color: colors.textMuted, marginTop: 4 },
   chartCard: {
@@ -205,6 +212,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   statLbl: { color: colors.textMuted, fontSize: 9, letterSpacing: 1.2, fontWeight: "800" },
-  statVal: { color: colors.text, fontSize: 20, fontWeight: "900", marginTop: 4 },
+  statVal: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: 4,
+    fontVariant: ["tabular-nums"],
+  },
   statUnit: { color: colors.textMuted, fontSize: 11 },
 });

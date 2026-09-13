@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,9 +11,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import * as DocumentPicker from "expo-document-picker";
+import * as WebBrowser from "expo-web-browser";
+import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 const PROVIDER_META: Record<string, { label: string; icon: any }> = {
   garmin: { label: "Garmin", icon: "watch" },
@@ -21,12 +25,47 @@ const PROVIDER_META: Record<string, { label: string; icon: any }> = {
   oura: { label: "Oura", icon: "ellipse-outline" },
   apple_health: { label: "Apple Health", icon: "logo-apple" },
   health_connect: { label: "Health Connect", icon: "logo-android" },
+  samsung_health: { label: "Samsung Health", icon: "phone-portrait-outline" },
+  technogym: { label: "Technogym · Mywellness", icon: "barbell" },
+  egym: { label: "EGYM Smart Strength", icon: "barbell-outline" },
 };
 
+// Human labels for the normalized data each source feeds into IronFlow.
+const PROVIDES_LABEL: Record<string, string> = {
+  hrv: "HRV",
+  resting_hr: "Resting HR",
+  sleep_hours: "Sleep",
+  steps: "Steps",
+  calories: "Calories",
+  vo2max: "VO₂max",
+  recovery: "Recovery",
+  strain: "Strain",
+  gym_sessions: "Machine workouts",
+  strength_sets: "Sets & weights",
+  wellness_age: "Wellness Age",
+  biometrics: "Biometrics",
+};
+
+function modeLabel(mode: string): string {
+  if (mode === "cloud") return "LIVE";
+  if (mode === "simulated") return "SAMPLE DATA";
+  if (mode === "pending") return "AWAITING LIVE DATA";
+  return "";
+}
+
 export default function SourcesScreen() {
+  const { t, formatDate } = useI18n();
+  const params = useLocalSearchParams<{ connected?: string; failed?: string }>();
   const [sources, setSources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string>("");
+
+  useEffect(() => {
+    // Terra redirects back here after the provider login.
+    if (params.connected) setNotice(t("{provider} authorised. Live data arrives via secure webhook within minutes.", { provider: params.connected }));
+    if (params.failed) setNotice(t("{provider} connection was cancelled or failed. Try again.", { provider: params.failed }));
+  }, [params.connected, params.failed, t]);
 
   const load = useCallback(async () => {
     try {
@@ -42,21 +81,189 @@ export default function SourcesScreen() {
     load();
   }, [load]);
 
-  const act = async (provider: string, action: "connect" | "disconnect" | "sync") => {
+  const act = async (provider: string, action: "connect" | "disconnect" | "sync" | "import") => {
     setBusy(`${provider}:${action}`);
     try {
-      if (action === "connect") await api.connectSource(provider);
+      if (action === "connect") {
+        const res = await api.connectSource(provider);
+        if (res.auth_url) {
+          // Never a WebView: providers block embedded logins and the user must see the URL bar.
+          await WebBrowser.openBrowserAsync(res.auth_url);
+        } else if (res.status === "pending" && res.message) {
+          setNotice(res.message);
+        }
+      }
+      if (action === "import") {
+        const picked = await DocumentPicker.getDocumentAsync({ type: ["application/zip", "application/x-zip-compressed", "text/csv", "text/comma-separated-values", "*/*"], copyToCacheDirectory: true });
+        if (picked.canceled || !picked.assets[0]) return;
+        const asset = picked.assets[0];
+        const res = await api.importSamsungHealth({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/zip" });
+        Alert.alert(t("Import complete"), t("{count} daily values imported ({metrics}) from {from} to {to}.", { count: res.synced, metrics: res.metrics.join(", "), from: res.from, to: res.to }));
+      }
       if (action === "disconnect") await api.disconnectSource(provider);
       if (action === "sync") {
         const res = await api.syncSource(provider);
-        Alert.alert("Sync complete", `${res.synced} metrics imported (simulated).`);
+        if (res.simulated) {
+          Alert.alert(t("Sync complete"), t("{count} metrics imported (test-account sample data).", { count: res.synced }));
+        } else if (res.synced > 0) {
+          Alert.alert(t("Sync complete"), t("{count} metrics imported.", { count: res.synced }));
+        } else {
+          Alert.alert(
+            t("Nothing to import yet"),
+            res.message ?? t("This source is connected; live data starts once it is authorised."),
+          );
+        }
       }
       await load();
     } catch (e: any) {
-      Alert.alert("Error", e?.message ?? "Try again");
+      Alert.alert(t("Error"), e?.message ?? t("Try again"));
     } finally {
       setBusy(null);
     }
+  };
+
+  const renderCard = (s: any) => {
+    const meta = PROVIDER_META[s.provider] ?? { label: s.label ?? s.provider, icon: "watch" };
+    const connected = s.status === "connected";
+    const pending = s.status === "pending";
+    const canImport = Array.isArray(s.import_formats) && s.import_formats.length > 0;
+    const badge = connected ? (s.mode === "import" ? "IMPORTED" : modeLabel(s.mode)) : pending ? "AWAITING AUTHORISATION" : "";
+    const provides: string[] = s.provides ?? [];
+    return (
+      <View key={s.provider} style={styles.card} testID={`source-${s.provider}`}>
+        <View style={styles.cardHead}>
+          <View style={styles.iconWrap}>
+            <Ionicons name={meta.icon} size={20} color={colors.text} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.providerName}>{s.label ?? meta.label}</Text>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: connected ? colors.success : colors.textDim },
+                ]}
+              />
+              {badge ? (
+                <View
+                  style={[
+                    styles.modeBadge,
+                    s.mode === "cloud" && { backgroundColor: colors.brandDim },
+                  ]}
+                >
+                  <Text
+                    style={[styles.modeBadgeTxt, s.mode === "cloud" && { color: colors.brand }]}
+                  >
+                    {t(badge)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.providerMeta}>
+              {connected
+                ? s.last_sync_at
+                  ? t("Last sync {date}", { date: formatDate(s.last_sync_at, { dateStyle: "short", timeStyle: "short" }) })
+                  : t("Connected — not synced yet")
+                : t("Not connected")}
+            </Text>
+            {provides.length ? (
+              <View style={styles.chipRow}>
+                {provides.map((p) => (
+                  <View key={p} style={styles.chip}>
+                    <Text style={styles.chipTxt}>{t(PROVIDES_LABEL[p] ?? p)}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {s.note ? <Text style={styles.noteTxt}>{s.note}</Text> : null}
+            {s.requires_agreement ? (
+              <Text style={styles.agreementNote}>
+                {t("Live import needs the club's Technogym/EGYM API agreement.")}
+                {s.docs ? (
+                  <Text
+                    style={styles.docsLink}
+                    onPress={() => Linking.openURL(s.docs).catch(() => {})}
+                  >
+                    {"  "}{t("View docs")}
+                  </Text>
+                ) : null}
+              </Text>
+            ) : null}
+            {s.requires_native_build && !canImport ? (
+              <Text style={styles.nativeNote}>{t("Requires a native build (not Expo Go)")}</Text>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.btnRow}>
+          {canImport ? (
+            <Pressable
+              testID={`import-${s.provider}`}
+              onPress={() => act(s.provider, "import")}
+              disabled={busy !== null}
+              style={[styles.btnPrimary, busy === `${s.provider}:import` && { opacity: 0.6 }]}
+            >
+              {busy === `${s.provider}:import` ? (
+                <ActivityIndicator size="small" color={colors.brandOn} />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={14} color={colors.brandOn} />
+              )}
+              <Text style={styles.btnPrimaryTxt}>{t("IMPORT EXPORT FILE")}</Text>
+            </Pressable>
+          ) : null}
+          {connected && !canImport ? (
+            <>
+              <Pressable
+                testID={`sync-${s.provider}`}
+                onPress={() => act(s.provider, "sync")}
+                disabled={busy !== null}
+                style={[styles.btnPrimary, busy === `${s.provider}:sync` && { opacity: 0.6 }]}
+              >
+                {busy === `${s.provider}:sync` ? (
+                  <ActivityIndicator size="small" color={colors.brandOn} />
+                ) : (
+                  <Ionicons name="sync" size={14} color={colors.brandOn} />
+                )}
+                <Text style={styles.btnPrimaryTxt}>{t("SYNC NOW")}</Text>
+              </Pressable>
+              <Pressable
+                testID={`disconnect-${s.provider}`}
+                onPress={() => act(s.provider, "disconnect")}
+                disabled={busy !== null}
+                style={styles.btnGhost}
+              >
+                <Text style={styles.btnGhostTxt}>{t("DISCONNECT")}</Text>
+              </Pressable>
+            </>
+          ) : !canImport ? (
+            <Pressable
+              testID={`connect-${s.provider}`}
+              onPress={() => act(s.provider, "connect")}
+              disabled={busy !== null}
+              style={[styles.btnPrimary, busy === `${s.provider}:connect` && { opacity: 0.6 }]}
+            >
+              {busy === `${s.provider}:connect` ? (
+                <ActivityIndicator size="small" color={colors.brandOn} />
+              ) : (
+                <Ionicons name="link" size={14} color={colors.brandOn} />
+              )}
+              <Text style={styles.btnPrimaryTxt}>{t(pending ? "RETRY CONNECTION" : "CONNECT")}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
+
+  const renderSection = (title: string, kind: string) => {
+    // Fall back to "wearable" for older backends that don't send `kind`.
+    const items = sources.filter((s) => (s.kind ?? "wearable") === kind);
+    if (!items.length) return null;
+    return (
+      <View testID={`section-${kind}`}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {items.map(renderCard)}
+      </View>
+    );
   };
 
   return (
@@ -65,7 +272,7 @@ export default function SourcesScreen() {
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>CONNECTED SOURCES</Text>
+        <Text style={styles.headerTitle}>{t("CONNECTED SOURCES")}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -76,88 +283,18 @@ export default function SourcesScreen() {
           <View style={styles.infoBanner}>
             <Ionicons name="flash" size={14} color={colors.brand} />
             <Text style={styles.infoTxt}>
-              Unified sync via Terra is wired and ready — connections run in simulated mode until
-              your TERRA_API_KEY is added. HRV, sleep, VO2max, resting HR, steps and calories feed
-              the Home rings automatically.
+              {t("Connect your watch, health app or gym equipment. Data flows into one place: wearables feed the Home recovery rings; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.")}
             </Text>
           </View>
+          {notice ? (
+            <View accessibilityRole="alert" style={[styles.infoBanner, { borderColor: colors.brand }]}>
+              <Ionicons name="information-circle" size={14} color={colors.brand} />
+              <Text style={styles.infoTxt}>{notice}</Text>
+            </View>
+          ) : null}
 
-          {sources.map((s) => {
-            const meta = PROVIDER_META[s.provider] ?? { label: s.provider, icon: "watch" };
-            const connected = s.status === "connected";
-            return (
-              <View key={s.provider} style={styles.card} testID={`source-${s.provider}`}>
-                <View style={styles.cardHead}>
-                  <View style={styles.iconWrap}>
-                    <Ionicons name={meta.icon} size={20} color={colors.text} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Text style={styles.providerName}>{meta.label}</Text>
-                      <View
-                        style={[
-                          styles.dot,
-                          { backgroundColor: connected ? colors.success : colors.textDim },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.providerMeta}>
-                      {connected
-                        ? s.last_sync_at
-                          ? `Last sync ${new Date(s.last_sync_at).toLocaleString()}`
-                          : "Connected — not synced yet"
-                        : "Not connected"}
-                      {s.mode === "simulated" && connected ? "  ·  SIMULATED" : ""}
-                    </Text>
-                    {s.requires_native_build && (
-                      <Text style={styles.nativeNote}>Requires a native build (not Expo Go)</Text>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.btnRow}>
-                  {connected ? (
-                    <>
-                      <Pressable
-                        testID={`sync-${s.provider}`}
-                        onPress={() => act(s.provider, "sync")}
-                        disabled={busy !== null}
-                        style={[styles.btnPrimary, busy === `${s.provider}:sync` && { opacity: 0.6 }]}
-                      >
-                        {busy === `${s.provider}:sync` ? (
-                          <ActivityIndicator size="small" color={colors.brandOn} />
-                        ) : (
-                          <Ionicons name="sync" size={14} color={colors.brandOn} />
-                        )}
-                        <Text style={styles.btnPrimaryTxt}>SYNC NOW</Text>
-                      </Pressable>
-                      <Pressable
-                        testID={`disconnect-${s.provider}`}
-                        onPress={() => act(s.provider, "disconnect")}
-                        disabled={busy !== null}
-                        style={styles.btnGhost}
-                      >
-                        <Text style={styles.btnGhostTxt}>DISCONNECT</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <Pressable
-                      testID={`connect-${s.provider}`}
-                      onPress={() => act(s.provider, "connect")}
-                      disabled={busy !== null}
-                      style={[styles.btnPrimary, busy === `${s.provider}:connect` && { opacity: 0.6 }]}
-                    >
-                      {busy === `${s.provider}:connect` ? (
-                        <ActivityIndicator size="small" color={colors.brandOn} />
-                      ) : (
-                        <Ionicons name="link" size={14} color={colors.brandOn} />
-                      )}
-                      <Text style={styles.btnPrimaryTxt}>CONNECT</Text>
-                    </Pressable>
-                  )}
-                </View>
-              </View>
-            );
-          })}
+          {renderSection(t("WEARABLES & HEALTH APPS"), "wearable")}
+          {renderSection(t("GYM EQUIPMENT & CLUBS"), "equipment")}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -186,6 +323,32 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   infoTxt: { color: colors.text, fontSize: 12, lineHeight: 17, flex: 1 },
+  sectionTitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  modeBadge: {
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  modeBadgeTxt: { color: colors.textMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
+  chip: {
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  chipTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
+  noteTxt: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
+  agreementNote: { color: colors.warning, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
+  docsLink: { color: colors.brand, fontWeight: "700" },
   card: {
     backgroundColor: colors.surface2,
     borderWidth: 1,

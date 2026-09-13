@@ -1,21 +1,33 @@
+import { Platform, type TextStyle, type ViewStyle } from "react-native";
+
 export const colors = {
-  bg: "#0A0A0A",
-  surface: "#121212",
-  surface2: "#1C1C1E",
-  surface3: "#2C2C2E",
-  border: "#2C2C2E",
-  borderStrong: "#48484A",
-  text: "#FFFFFF",
-  textMuted: "#A0A0A5",
-  textDim: "#6E6E73",
+  bg: "#090A09",
+  surface: "#121412",
+  surface2: "#1A1D19",
+  surface3: "#242823",
+  border: "#2C302A",
+  borderStrong: "#464D41",
+  text: "#F5F7F2",
+  textMuted: "#A2A99D",
+  textDim: "#687064",
   brand: "#D4FF00",
-  brandOn: "#000000",
+  brandOn: "#090A09",
   brandDim: "#293300",
-  accent: "#39FF14",
-  success: "#34C759",
-  warning: "#FF9F0A",
+  accent: "#9DFF00",
+  success: "#39FF14",
+  warning: "#FFB000",
   error: "#FF453A",
-  info: "#0A84FF",
+  info: "#E8FF65",
+  volt: "#B6F13A",
+  blaze: "#FF8A00",
+  pr: "#FFD23F",
+};
+
+export const alpha = {
+  brandSoft: "rgba(212,255,0,0.14)",
+  infoSoft: "rgba(232,255,101,0.14)",
+  prSoft: "rgba(245,184,61,0.18)",
+  tabFill: "rgba(212,255,0,0.12)",
 };
 
 export const spacing = {
@@ -29,13 +41,77 @@ export const spacing = {
 };
 
 export const radius = {
-  sm: 6,
+  sm: 8,
   md: 12,
-  lg: 20,
+  lg: 16,
   pill: 999,
 };
 
 export const fonts = {
-  display: "System",
-  text: "System",
+  display: Platform.select({
+    web: "Barlow Condensed, Inter, system-ui, sans-serif",
+    default: "System",
+  }) as string,
+  text: Platform.select({
+    web: "Inter, system-ui, sans-serif",
+    default: "System",
+  }) as string,
 };
+
+const tnum = { fontVariant: ["tabular-nums"] as TextStyle["fontVariant"] };
+
+export const type = {
+  screenTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  } satisfies TextStyle,
+  eyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.6,
+  } satisfies TextStyle,
+  section: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.4,
+  } satisfies TextStyle,
+  body: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "400",
+  } satisfies TextStyle,
+  metric: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+    ...tnum,
+  } satisfies TextStyle,
+  caption: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
+  } satisfies TextStyle,
+  button: {
+    color: colors.brandOn,
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  } satisfies TextStyle,
+};
+
+export const card: ViewStyle = {
+  backgroundColor: colors.surface,
+  borderColor: colors.border,
+  borderWidth: 1,
+  borderRadius: radius.lg,
+};
+
+export const hitSlop = { top: 10, bottom: 10, left: 10, right: 10 };

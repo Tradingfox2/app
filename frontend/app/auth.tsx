@@ -13,10 +13,12 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/auth-context";
-import { colors, radius, spacing } from "@/src/theme";
+import { colors, radius, spacing, type } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [role, setRole] = useState<"athlete" | "coach">("athlete");
@@ -34,7 +36,7 @@ export default function AuthScreen() {
       else await register(email.trim(), password, name.trim() || email.split("@")[0], role);
       router.replace("/(tabs)/home");
     } catch (e: any) {
-      setErr(e.message ?? "Something went wrong");
+      setErr(e.message ?? t("Something went wrong"));
     } finally {
       setBusy(false);
     }
@@ -50,7 +52,7 @@ export default function AuthScreen() {
         resizeMode="cover"
       >
         <LinearGradient
-          colors={["rgba(10,10,10,0.2)", "rgba(10,10,10,0.85)", colors.bg]}
+          colors={["rgba(14,17,22,0.15)", "rgba(14,17,22,0.82)", colors.bg]}
           style={StyleSheet.absoluteFill}
           locations={[0, 0.55, 1]}
         />
@@ -67,16 +69,18 @@ export default function AuthScreen() {
         >
           <Text style={styles.brand}>IRONFLOW</Text>
           <Text style={styles.tagline}>
-            {mode === "login" ? "Welcome back." : "Own your performance."}
+            {mode === "login" ? t("Welcome back.") : t("Own your performance.")}
           </Text>
 
           {mode === "register" && (
             <>
+              <Text style={styles.fieldLabel}>{t("Full name")}</Text>
               <TextInput
                 testID="input-name"
                 style={styles.input}
-                placeholder="Full name"
+                placeholder={t("Your name")}
                 placeholderTextColor={colors.textDim}
+                accessibilityLabel={t("Full name")}
                 value={name}
                 onChangeText={setName}
               />
@@ -91,7 +95,7 @@ export default function AuthScreen() {
                     <Text
                       style={[styles.roleTxt, role === r && styles.roleTxtActive]}
                     >
-                      {r.toUpperCase()}
+                      {t(r === "athlete" ? "ATHLETE" : "COACH")}
                     </Text>
                   </Pressable>
                 ))}
@@ -99,22 +103,26 @@ export default function AuthScreen() {
             </>
           )}
 
+          <Text style={styles.fieldLabel}>{t("Email")}</Text>
           <TextInput
             testID="input-email"
             style={styles.input}
-            placeholder="Email"
+            placeholder="you@email.com"
             placeholderTextColor={colors.textDim}
+            accessibilityLabel={t("Email")}
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
             value={email}
             onChangeText={setEmail}
           />
+          <Text style={styles.fieldLabel}>{t("Password")}</Text>
           <TextInput
             testID="input-password"
             style={styles.input}
-            placeholder="Password (min 8 chars)"
+            placeholder={t("At least 8 characters")}
             placeholderTextColor={colors.textDim}
+            accessibilityLabel={t("Password")}
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -133,18 +141,20 @@ export default function AuthScreen() {
             onPress={submit}
           >
             <Text style={styles.ctaTxt}>
-              {busy ? "…" : mode === "login" ? "SIGN IN" : "CREATE ACCOUNT"}
+              {busy ? "…" : mode === "login" ? t("SIGN IN") : t("CREATE ACCOUNT")}
             </Text>
           </Pressable>
 
           <Pressable
             testID="auth-switch-btn"
+            accessibilityRole="button"
+            style={styles.switchBtn}
             onPress={() => setMode(mode === "login" ? "register" : "login")}
           >
             <Text style={styles.switchTxt}>
               {mode === "login"
-                ? "New here? Create an account"
-                : "Already registered? Sign in"}
+                ? t("New here? Create an account")
+                : t("Already registered? Sign in")}
             </Text>
           </Pressable>
         </ScrollView>
@@ -175,15 +185,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: spacing.xl,
   },
+  fieldLabel: {
+    ...type.eyebrow,
+    marginBottom: spacing.xs,
+  },
   input: {
     backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md + 2,
+    minHeight: 48,
     color: colors.text,
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: spacing.md,
   },
   roleRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
@@ -206,13 +220,18 @@ const styles = StyleSheet.create({
   },
   cta: {
     backgroundColor: colors.brand,
-    paddingVertical: spacing.lg,
-    borderRadius: radius.pill,
+    minHeight: 52,
+    justifyContent: "center",
+    borderRadius: radius.md,
     alignItems: "center",
     marginTop: spacing.sm,
     marginBottom: spacing.md,
   },
   ctaTxt: { color: colors.brandOn, fontWeight: "900", letterSpacing: 2, fontSize: 15 },
+  switchBtn: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
   switchTxt: {
     color: colors.textMuted,
     textAlign: "center",

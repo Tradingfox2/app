@@ -14,9 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import Svg, { Line, Polyline } from "react-native-svg";
-import { api } from "@/src/api";
+import Svg, { Polyline } from "react-native-svg";
+import { api, type BiomarkerSeries, type LabMarker, type LabReport } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 const STEP_LABELS: Record<string, string> = {
   received: "Received",
@@ -27,6 +28,8 @@ const STEP_LABELS: Record<string, string> = {
   write: "Saving",
   callback: "Done",
   pipeline: "Pipeline",
+  terra_processing: "Standardizing",
+  terra_failed: "Failed",
 };
 
 const SEVERITY: Record<string, { color: string; label: string }> = {
@@ -53,7 +56,8 @@ function Sparkline({ points }: { points: { value: number }[] }) {
   );
 }
 
-function MarkerCard({ m }: { m: any }) {
+function MarkerCard({ m }: { m: BiomarkerSeries }) {
+  const { t, formatNumber } = useI18n();
   const out =
     (m.ref_low != null && m.latest < m.ref_low) || (m.ref_high != null && m.latest > m.ref_high);
   return (
@@ -61,12 +65,12 @@ function MarkerCard({ m }: { m: any }) {
       <View style={{ flex: 1 }}>
         <Text style={styles.markerName}>{m.name}</Text>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-          <Text style={[styles.markerVal, out && { color: colors.error }]}>{m.latest}</Text>
+          <Text style={[styles.markerVal, out && { color: colors.error }]}>{formatNumber(m.latest)}</Text>
           <Text style={styles.markerUnit}>{m.unit}</Text>
         </View>
         {m.ref_low != null && m.ref_high != null && (
           <Text style={styles.markerRef}>
-            ref {m.ref_low}–{m.ref_high} {out ? "· OUT OF RANGE" : ""}
+            {t("ref")} {formatNumber(m.ref_low)}–{formatNumber(m.ref_high)} {out ? t("· OUT OF RANGE") : ""}
           </Text>
         )}
       </View>
@@ -75,7 +79,21 @@ function MarkerCard({ m }: { m: any }) {
   );
 }
 
-function ReportCard({ report }: { report: any }) {
+function displayMeasurement(marker: LabMarker, t: (source: string) => string) {
+  const measurement = marker.measurement;
+  if (!measurement) return marker.value == null ? t("Not reported") : `${marker.value} ${marker.unit}`.trim();
+  if (measurement.type === "bounded" && measurement.bounded) {
+    const symbol = measurement.bounded.operator === "lt" ? "<" : ">";
+    return `${symbol}${measurement.bounded.value} ${marker.unit}`.trim();
+  }
+  if (measurement.type === "qualitative") return measurement.qualitative?.text ?? t("Not reported");
+  if (measurement.type === "text") return measurement.text ?? t("Not reported");
+  if (measurement.type === "absent") return measurement.absent_reason ?? t("Not reported");
+  return `${marker.value ?? measurement.numeric ?? t("Not reported")} ${marker.unit}`.trim();
+}
+
+function ReportCard({ report }: { report: LabReport }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const done = report.status === "done";
   const failed = report.status === "failed";
@@ -84,6 +102,9 @@ function ReportCard({ report }: { report: any }) {
     <Pressable
       testID={`report-${report.id}`}
       onPress={() => done && setOpen((o) => !o)}
+      accessibilityRole={done ? "button" : undefined}
+      accessibilityLabel={done ? t("{name}, view results and AI interpretation", { name: report.filename ?? t("Report") }) : undefined}
+      accessibilityState={done ? { expanded: open } : undefined}
       style={styles.reportCard}
     >
       <View style={styles.reportHead}>
@@ -93,7 +114,7 @@ function ReportCard({ report }: { report: any }) {
           color={colors.textMuted}
         />
         <Text style={styles.reportName} numberOfLines={1}>
-          {report.filename ?? "Report"}
+          {report.filename ?? t("Report")}
         </Text>
         <View
           style={[
@@ -116,21 +137,51 @@ function ReportCard({ report }: { report: any }) {
               { color: done ? colors.brandOn : colors.text },
             ]}
           >
-            {failed ? "FAILED" : done ? `${report.markers_count} MARKERS` : (STEP_LABELS[report.step] ?? report.step).toUpperCase()}
+            {failed ? t("FAILED") : done ? t("{count} MARKERS", { count: report.markers_count }) : t(STEP_LABELS[report.step] ?? report.step).toUpperCase()}
           </Text>
         </View>
+        {done ? (
+          <Ionicons
+            name={open ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.textMuted}
+          />
+        ) : null}
       </View>
       {failed && report.error ? <Text style={styles.errTxt}>{report.error}</Text> : null}
+      {report.terra_sessions?.[0]?.report_date ? (
+        <Text style={styles.reportMeta}>
+          {t("Collected {date} · Standardized by Terra", { date: report.terra_sessions[0].report_date })}
+        </Text>
+      ) : null}
 
-      {done && open && interp && (
+      {done && open && (
         <View style={{ marginTop: spacing.md }}>
-          {interp.summary.map((s: string, i: number) => (
+          {report.markers.map((marker, index) => (
+            <View key={`${marker.marker_slug}-${index}`} style={styles.resultRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resultName}>{marker.marker}</Text>
+                {marker.loinc_code ? <Text style={styles.resultCode}>LOINC {marker.loinc_code}</Text> : null}
+              </View>
+              <Text
+                style={[
+                  styles.resultValue,
+                  marker.interpretation_flag && marker.interpretation_flag !== "normal"
+                    ? { color: colors.warning }
+                    : null,
+                ]}
+              >
+                {displayMeasurement(marker, t)}
+              </Text>
+            </View>
+          ))}
+          {interp?.summary.map((s: string, i: number) => (
             <View key={i} style={styles.bulletRow}>
               <Text style={styles.bulletDot}>•</Text>
               <Text style={styles.bulletTxt}>{s}</Text>
             </View>
           ))}
-          {interp.trends.length > 0 && (
+          {!!interp?.trends.length && (
             <View style={{ marginTop: spacing.sm }}>
               {interp.trends.map((t: any, i: number) => (
                 <View key={i} style={styles.trendRow}>
@@ -152,15 +203,20 @@ function ReportCard({ report }: { report: any }) {
               ))}
             </View>
           )}
-          {interp.flags.map((f: any, i: number) => {
+          {interp?.flags.map((f, i) => {
             const sev = SEVERITY[f.severity] ?? SEVERITY.info;
             return (
               <View key={i} style={[styles.flagCard, { borderLeftColor: sev.color }]}>
-                <Text style={[styles.flagSev, { color: sev.color }]}>{sev.label}</Text>
+                <Text style={[styles.flagSev, { color: sev.color }]}>{t(sev.label)}</Text>
                 <Text style={styles.flagTxt}>{f.comment}</Text>
               </View>
             );
           })}
+          {!interp && report.interpretation_error ? (
+            <Text style={styles.interpretationUnavailable}>
+              {t("Standardized results are ready. The educational summary is temporarily unavailable.")}
+            </Text>
+          ) : null}
           <View style={styles.disclaimer} testID="disclaimer-banner">
             <Ionicons name="medkit" size={14} color={colors.warning} />
             <Text style={styles.disclaimerTxt}>{report.disclaimer}</Text>
@@ -168,15 +224,16 @@ function ReportCard({ report }: { report: any }) {
         </View>
       )}
       {done && !open && (
-        <Text style={styles.tapHint}>Tap to view AI interpretation</Text>
+        <Text style={styles.tapHint}>{t("View results and AI interpretation")}</Text>
       )}
     </Pressable>
   );
 }
 
 export default function LabsScreen() {
-  const [reports, setReports] = useState<any[]>([]);
-  const [markers, setMarkers] = useState<any[]>([]);
+  const { t } = useI18n();
+  const [reports, setReports] = useState<LabReport[]>([]);
+  const [markers, setMarkers] = useState<BiomarkerSeries[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -220,7 +277,7 @@ export default function LabsScreen() {
       await api.uploadLab(file);
       await load();
     } catch (e: any) {
-      Alert.alert("Upload failed", e?.message ?? "Try again");
+      Alert.alert(t("Upload failed"), e?.message ?? t("Try again"));
     } finally {
       setUploading(false);
     }
@@ -246,8 +303,8 @@ export default function LabsScreen() {
       const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!req.granted) {
         Alert.alert(
-          "Photos access needed",
-          "Allow photo access to upload a picture of your blood panel."
+          t("Photos access needed"),
+          t("Allow photo access to upload a picture of your blood panel.")
         );
         return;
       }
@@ -271,7 +328,7 @@ export default function LabsScreen() {
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>BLOOD PANELS</Text>
+        <Text style={styles.headerTitle}>{t("BLOOD PANELS")}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -297,7 +354,7 @@ export default function LabsScreen() {
             style={[styles.uploadBtn, uploading && { opacity: 0.5 }]}
           >
             <Ionicons name="document-attach" size={18} color={colors.brandOn} />
-            <Text style={styles.uploadTxt}>UPLOAD PDF / FILE</Text>
+            <Text style={styles.uploadTxt}>{t("UPLOAD PDF / FILE")}</Text>
           </Pressable>
           <Pressable
             testID="upload-photo-btn"
@@ -306,29 +363,28 @@ export default function LabsScreen() {
             style={[styles.uploadBtnAlt, uploading && { opacity: 0.5 }]}
           >
             <Ionicons name="image" size={18} color={colors.brand} />
-            <Text style={styles.uploadTxtAlt}>PHOTO</Text>
+            <Text style={styles.uploadTxtAlt}>{t("PHOTO")}</Text>
           </Pressable>
         </View>
         {uploading && (
           <View style={styles.uploadingRow}>
             <ActivityIndicator size="small" color={colors.brand} />
-            <Text style={styles.uploadingTxt}>Uploading…</Text>
+            <Text style={styles.uploadingTxt}>{t("Uploading…")}</Text>
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>REPORTS</Text>
+        <Text style={styles.sectionTitle}>{t("REPORTS")}</Text>
         {reports.length === 0 ? (
           <Text style={styles.emptyTxt}>
-            Upload a blood panel (PDF or photo). IronFlow will extract every marker, plot it over
-            time and give a sport-focused educational read.
+            {t("Upload a blood panel (PDF or photo). IronFlow will standardize its results, plot numeric markers over time and give a sport-focused educational read.")}
           </Text>
         ) : (
           reports.map((r) => <ReportCard key={r.id} report={r} />)
         )}
 
-        <Text style={styles.sectionTitle}>MARKERS OVER TIME</Text>
+        <Text style={styles.sectionTitle}>{t("MARKERS OVER TIME")}</Text>
         {markers.length === 0 ? (
-          <Text style={styles.emptyTxt}>No biomarkers yet.</Text>
+          <Text style={styles.emptyTxt}>{t("No biomarkers yet.")}</Text>
         ) : (
           markers.map((m) => <MarkerCard key={m.slug} m={m} />)
         )}
@@ -408,7 +464,20 @@ const styles = StyleSheet.create({
   },
   statusTxt: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   errTxt: { color: colors.error, fontSize: 12, marginTop: spacing.sm },
+  reportMeta: { color: colors.textDim, fontSize: 11, marginTop: spacing.sm },
   tapHint: { color: colors.textDim, fontSize: 11, marginTop: spacing.sm },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    paddingVertical: spacing.sm,
+  },
+  resultName: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  resultCode: { color: colors.textDim, fontSize: 9, marginTop: 2 },
+  resultValue: { color: colors.text, fontSize: 13, fontWeight: "800", textAlign: "right" },
+  interpretationUnavailable: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
   bulletRow: { flexDirection: "row", gap: 6, marginBottom: 4 },
   bulletDot: { color: colors.brand, fontSize: 13 },
   bulletTxt: { color: colors.text, fontSize: 13, lineHeight: 19, flex: 1 },
@@ -445,7 +514,13 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   markerName: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
-  markerVal: { color: colors.text, fontSize: 22, fontWeight: "900", marginTop: 2 },
+  markerVal: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: 2,
+    fontVariant: ["tabular-nums"],
+  },
   markerUnit: { color: colors.textMuted, fontSize: 11 },
   markerRef: { color: colors.textDim, fontSize: 10, marginTop: 2 },
 });

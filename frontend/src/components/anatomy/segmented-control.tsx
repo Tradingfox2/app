@@ -49,6 +49,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2,
     borderRadius: radius.md,
     padding: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   segment: {
     flex: 1,
@@ -58,12 +60,18 @@ const styles = StyleSheet.create({
     borderRadius: radius.md - 2,
   },
   segmentSelected: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    elevation: 6,
   },
   segmentText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.textMuted,
+    letterSpacing: 0.6,
   },
   segmentTextSelected: {
     color: colors.brandOn,

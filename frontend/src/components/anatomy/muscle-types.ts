@@ -43,6 +43,10 @@ export type RecommendationExercise = {
   equipment?: string | null;
   difficulty?: "beginner" | "intermediate" | "advanced";
   category?: string;
+  instructions?: string;
+  video_url?: string | null;
+  video_poster_url?: string | null;
+  video_duration_sec?: number | null;
 };
 
 export type CircuitItem = {

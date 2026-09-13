@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { router } from "expo-router";
 import { api, auth, User } from "./api";
 
 type Ctx = {
@@ -42,8 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(r.user);
   };
   const logout = async () => {
-    await auth.clearToken();
-    setUser(null);
+    try {
+      await auth.clearToken();
+    } finally {
+      setUser(null);
+      router.replace("/auth");
+    }
   };
   const refresh = async () => {
     try {

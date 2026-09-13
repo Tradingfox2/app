@@ -14,7 +14,11 @@ import { router } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
-import { colors, radius, spacing } from "@/src/theme";
+import { DidYouKnow } from "@/src/components/did-you-know";
+import { colors, radius, spacing, type, card } from "@/src/theme";
+import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
+import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
+import { useI18n } from "@/src/i18n";
 
 function Ring({
   value,
@@ -70,9 +74,7 @@ function Ring({
           justifyContent: "center",
         }}
       >
-        <Text style={{ color: colors.text, fontSize: 22, fontWeight: "800" }}>
-          {Math.round(value)}
-        </Text>
+        <Text style={type.metric}>{Math.round(value)}</Text>
         {unit && (
           <Text style={{ color: colors.textMuted, fontSize: 10 }}>{unit}</Text>
         )}
@@ -84,12 +86,17 @@ function Ring({
 
 export default function Home() {
   const { user } = useAuth();
+  const { t, formatDate, formatNumber } = useI18n();
   const [data, setData] = useState<any>(null);
   const [heatmap, setHeatmap] = useState<{ volumes: Record<string, number>; max: number }>({
     volumes: {},
     max: 0,
   });
+  const [previewMuscle, setPreviewMuscle] = useState<MuscleSlug | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [coach, setCoach] = useState<{ connected: boolean; model: string } | null>(null);
+  const [coachTip, setCoachTip] = useState<{ tip: string; source: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -99,6 +106,14 @@ export default function Home() {
     } catch {
       setData({});
     }
+    api
+      .coachStatus()
+      .then((s) => setCoach({ connected: s.connected, model: s.model }))
+      .catch(() => setCoach(null));
+    api
+      .coachTip()
+      .then((t) => setCoachTip({ tip: t.tip, source: t.source }))
+      .catch(() => setCoachTip(null));
   }, []);
 
   useEffect(() => {
@@ -109,7 +124,31 @@ export default function Home() {
   const recovery = data?.recovery?.value ?? 0;
   const sleep = data?.sleep?.value ?? 0;
   const hrv = data?.hrv?.value ?? 0;
+  const restingHr = data?.resting_hr?.value ?? 0;
   const workoutsWeek = data?.workouts_this_week ?? 0;
+  const training = data?.training ?? {};
+  const wearableConnected = Boolean(data?.wearable_connected);
+  const activeWorkout = data?.active_workout ?? null;
+  const [starting, setStarting] = useState(false);
+
+  const startOrResume = async () => {
+    if (activeWorkout?.id) {
+      router.push(`/workout/${activeWorkout.id}`);
+      return;
+    }
+    if (starting) return;
+    setStarting(true);
+    try {
+      const w = await api.createWorkout(
+        `${t("Session")} · ${formatDate(new Date(), { weekday: "short", day: "numeric", month: "short" })}`,
+      );
+      router.push(`/workout/${w.id}`);
+    } catch {
+      router.push("/(tabs)/workouts");
+    } finally {
+      setStarting(false);
+    }
+  };
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="home-screen">
@@ -129,54 +168,162 @@ export default function Home() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.hello}>HELLO</Text>
+            <Text style={type.eyebrow}>{t("READY TO TRAIN")}</Text>
             <Text style={styles.name}>{user?.full_name ?? user?.email}</Text>
           </View>
           <View style={styles.streak} testID="streak-badge">
-            <Text style={styles.streakLabel}>THIS WEEK</Text>
+            <Text style={styles.streakLabel}>{t("THIS WEEK")}</Text>
             <Text style={styles.streakNum}>{workoutsWeek}</Text>
-            <Text style={styles.streakLabel}>workouts</Text>
+            <Text style={styles.streakLabel}>{t("workouts")}</Text>
           </View>
         </View>
 
         <View style={styles.ringsCard} testID="rings-card">
-          <Text style={styles.cardTitle}>TODAY</Text>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle}>{t("TODAY")}</Text>
+            {!wearableConnected && (
+              <Text style={styles.cardHint}>{t("NO WEARABLE DATA")}</Text>
+            )}
+          </View>
           <View style={styles.rings}>
-            <Ring value={strain} max={21} color={colors.brand} label="STRAIN" />
-            <Ring value={recovery} max={100} color={colors.success} label="RECOVERY" unit="%" />
-            <Ring value={sleep} max={10} color={colors.info} label="SLEEP" unit="h" />
+            <Ring value={strain} max={21} color={colors.brand} label={t("STRAIN")} />
+            <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
+            <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
+          </View>
+          {!wearableConnected && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Connect a wearable source")}
+              onPress={() => router.push("/sources")}
+              style={styles.connectRow}
+              testID="connect-source-cta"
+            >
+              <Ionicons name="watch-outline" size={16} color={colors.brand} />
+              <Text style={styles.connectTxt}>
+                {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.brand} />
+            </Pressable>
+          )}
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={activeWorkout ? t("Resume your live session") : t("Start a workout")}
+          onPress={startOrResume}
+          disabled={starting}
+          style={[styles.startCta, activeWorkout && styles.resumeCta]}
+          testID="start-workout-cta"
+        >
+          <Ionicons
+            name={activeWorkout ? "play-circle" : "add-circle"}
+            size={22}
+            color={colors.brandOn}
+          />
+          <Text style={type.button}>
+            {activeWorkout ? t("RESUME SESSION") : starting ? t("STARTING…") : t("START WORKOUT")}
+          </Text>
+        </Pressable>
+
+        <View style={styles.statsCard} testID="training-week-card">
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle}>{t("TRAINING · 7 DAYS")}</Text>
+            <View style={styles.streakPill}>
+              <Ionicons name="flame" size={12} color={colors.blaze} />
+              <Text style={styles.streakPillTxt}>{t("{count}d streak", { count: training.streak_days ?? 0 })}</Text>
+            </View>
+          </View>
+          <View style={styles.statsRow}>
+            <Stat label={t("SETS")} value={formatNumber(training.sets_week ?? 0)} />
+            <Stat
+              label="TONNAGE"
+              value={
+                (training.tonnage_week_kg ?? 0) >= 1000
+                  ? `${((training.tonnage_week_kg ?? 0) / 1000).toFixed(1)}t`
+                  : `${Math.round(training.tonnage_week_kg ?? 0)}`
+              }
+              unit={(training.tonnage_week_kg ?? 0) >= 1000 ? "" : "kg"}
+            />
+            <Stat label={t("MINUTES")} value={formatNumber(training.minutes_week ?? 0)} />
+            <Stat label={t("MUSCLES")} value={formatNumber(training.muscles_week?.length ?? 0)} />
           </View>
         </View>
 
+        <DidYouKnow count={7} />
+
         <View style={styles.quickRow}>
-          <QuickAction icon="sparkles" label="AI COACH" testID="quick-program" onPress={() => router.push("/program")} />
-          <QuickAction icon="flask" label="LABS" testID="quick-labs" onPress={() => router.push("/labs")} />
-          <QuickAction icon="watch" label="SOURCES" testID="quick-sources" onPress={() => router.push("/sources")} />
-          <QuickAction icon="qr-code" label="CHECK-IN" testID="quick-checkin" onPress={() => router.push("/checkin")} />
+          <QuickAction icon="sparkles" label={t("AI COACH")} testID="quick-program" onPress={() => router.push("/program")} />
+          <QuickAction icon="flask" label={t("LABS")} testID="quick-labs" onPress={() => router.push("/labs")} />
+          <QuickAction icon="watch" label={t("SOURCES")} testID="quick-sources" onPress={() => router.push("/sources")} />
+          <QuickAction icon="qr-code" label={t("CHECK-IN")} testID="quick-checkin" onPress={() => router.push("/checkin")} />
         </View>
 
         <View style={styles.metricRow}>
           <MetricCard label="HRV" value={hrv ? `${Math.round(hrv)}` : "—"} unit="ms" />
           <MetricCard
-            label="RESTING HR"
-            value={data?.hrv ? "58" : "—"}
+            label={t("RESTING HR")}
+            value={restingHr ? `${Math.round(restingHr)}` : "—"}
             unit="bpm"
           />
         </View>
 
-        <View style={styles.tipCard}>
-          <Text style={styles.tipTitle}>COACH TIP</Text>
-          <Text style={styles.tipTxt}>
-            Recovery is your compass. Push hard on green days, glide on red ones.
+        <Pressable
+          style={styles.tipCard}
+          onPress={() => router.push("/program")}
+          accessibilityRole="button"
+          accessibilityLabel={t("Open the AI coach")}
+          testID="coach-tip-card"
+        >
+          <View style={styles.cardHead}>
+            <Text style={styles.tipTitle}>{t("COACH TIP")}</Text>
+            {coach && (
+              <View style={styles.coachBadge}>
+                <View
+                  style={[
+                    styles.coachDot,
+                    { backgroundColor: coach.connected ? colors.brand : colors.warning },
+                  ]}
+                />
+                <Text style={styles.coachBadgeTxt}>
+                  {coach.connected
+                    ? `AI · ${
+                        coachTip?.source && coachTip.source !== "library"
+                          ? coachTip.source.split(":").pop()
+                          : coach.model
+                      }`
+                    : t("AI OFFLINE")}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.tipTxt} testID="coach-tip-text">
+            {coachTip?.tip ??
+              t("Recovery is your compass. Push hard on green days, glide on red ones.")}
           </Text>
-        </View>
+        </Pressable>
 
         <View style={styles.heatCard} testID="home-heatmap-card">
-          <Text style={styles.cardTitle}>MUSCLE LOAD · 7 DAYS</Text>
+          <Text style={styles.cardTitle}>{t("MUSCLE LOAD · 7 DAYS")}</Text>
           <MuscleHeatmap
             volumes={heatmap.volumes}
             max={heatmap.max}
-            onPress={() => router.push("/muscles")}
+            selectedMuscle={previewMuscle}
+            activation={
+              previewMuscle ? combinationActivation(previewMuscle) : undefined
+            }
+            spinning
+            bodyWidth={previewMuscle ? 158 : 150}
+            bodyHeight={previewMuscle ? 316 : 300}
+            onPress={() =>
+              router.push(
+                previewMuscle ? `/muscles?muscle=${previewMuscle}` : "/muscles",
+              )
+            }
+            onMusclePress={(muscle) => {
+              setPreviewMuscle((current) =>
+                current === muscle ? null : muscle,
+              );
+            }}
           />
         </View>
       </ScrollView>
@@ -203,12 +350,24 @@ function QuickAction({
   );
 }
 
+function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statVal}>
+        {value}
+        {unit ? <Text style={styles.statUnit}> {unit}</Text> : null}
+      </Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function MetricCard({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>{label}</Text>
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-        <Text style={styles.metricVal}>{value}</Text>
+        <Text style={type.metric}>{value}</Text>
         <Text style={styles.metricUnit}>{unit}</Text>
       </View>
     </View>
@@ -224,8 +383,17 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: spacing.lg,
   },
-  hello: { color: colors.textMuted, fontSize: 12, letterSpacing: 2, fontWeight: "700" },
-  name: { color: colors.text, fontSize: 24, fontWeight: "800", marginTop: 2 },
+  name: { ...type.screenTitle, marginTop: 4 },
+  startCta: {
+    minHeight: 52,
+    backgroundColor: colors.brand,
+    borderRadius: radius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   streak: {
     backgroundColor: colors.surface2,
     borderRadius: radius.md,
@@ -239,24 +407,59 @@ const styles = StyleSheet.create({
   streakNum: {
     color: colors.brand,
     fontSize: 26,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 30,
+    fontVariant: ["tabular-nums"],
   },
   ringsCard: {
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
+    ...card,
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
   cardTitle: {
-    color: colors.textMuted,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: "700",
+    ...type.section,
     marginBottom: spacing.md,
   },
+  cardHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  cardHint: { ...type.eyebrow, color: colors.textDim, fontSize: 10 },
+  connectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+  },
+  connectTxt: { flex: 1, color: colors.text, fontSize: 12, fontWeight: "600" },
+  resumeCta: { backgroundColor: colors.accent },
+  statsCard: {
+    ...card,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  statsRow: { flexDirection: "row", justifyContent: "space-between" },
+  stat: { flex: 1, alignItems: "flex-start" },
+  statVal: { ...type.metric, fontSize: 22 },
+  statUnit: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
+  statLabel: { ...type.eyebrow, fontSize: 10, marginTop: 2 },
+  streakPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  streakPillTxt: { color: colors.text, fontSize: 11, fontWeight: "700" },
   rings: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -273,7 +476,7 @@ const styles = StyleSheet.create({
   quickBtn: {
     flex: 1,
     minHeight: 64,
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
@@ -281,17 +484,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
   },
-  quickLabel: { color: colors.textMuted, fontSize: 8.5, fontWeight: "800", letterSpacing: 0.8 },
+  quickLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "700", letterSpacing: 0.4 },
   metricCard: {
     flex: 1,
-    backgroundColor: colors.surface2,
+    ...card,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
   },
-  metricLabel: { color: colors.textMuted, fontSize: 10, letterSpacing: 1.5, fontWeight: "700" },
-  metricVal: { color: colors.text, fontSize: 26, fontWeight: "800", marginTop: 6 },
+  metricLabel: { ...type.eyebrow },
   metricUnit: { color: colors.textMuted, fontSize: 12 },
   tipCard: {
     backgroundColor: colors.brandDim,
@@ -308,12 +508,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   tipTxt: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  coachBadge: { flexDirection: "row", alignItems: "center", gap: 6 },
+  coachDot: { width: 8, height: 8, borderRadius: 4 },
+  coachBadgeTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
   heatCard: {
     marginTop: spacing.md,
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
+    ...card,
     padding: spacing.lg,
   },
 });

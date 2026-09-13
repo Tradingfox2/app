@@ -16,7 +16,263 @@ export type User = {
   email: string;
   full_name: string | null;
   role: "athlete" | "coach" | "admin";
+  coach_status: "not_applied" | "pending" | "approved" | "rejected";
   avatar_url: string | null;
+  preferred_locale: SupportedLocale;
+  activity_ranking_opt_in?: boolean;
+  staff_role?: StaffRole | null;
+};
+
+export type StaffRole = "support" | "moderator" | "admin";
+
+export type AdminAccount = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  coach_status: string;
+  staff_role: StaffRole | null;
+  created_at: string;
+  suspended_at: string | null;
+  suspended_until: string | null;
+  suspension_reason: string | null;
+  stats?: { workouts: number; posts: number; communities: number; reports_against: number };
+  notes?: { id: string; note: string; author_email: string; created_at: string }[];
+};
+
+export type ModerationReport = {
+  id: string;
+  target_type: "post" | "comment" | "message" | "user" | "community";
+  target_id: string;
+  reason: string;
+  detail: string;
+  content_snapshot: string;
+  status: "open" | "resolved";
+  resolution: string | null;
+  created_at: string;
+  reporter: { id: string; full_name: string | null; email: string } | null;
+  reported_user: { id: string; full_name: string | null; email: string } | null;
+};
+
+export type AuditEntry = {
+  id: string;
+  actor_email: string | null;
+  actor_staff_role: string | null;
+  action: string;
+  target_type: string;
+  target_id: string;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AdminOverview = {
+  users: { total: number; new_7d: number; suspended: number; coaches: number };
+  queues: { open_reports: number; pending_coach_applications: number; pending_memberships: number };
+  activity: { workouts_24h: number; posts_24h: number; messages_24h: number; communities: number };
+  permissions: string[];
+  staff_role: StaffRole | null;
+};
+
+export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
+
+export type Membership = {
+  id: string;
+  community_id: string;
+  user_id: string;
+  role: "owner" | "moderator" | "member";
+  status: "pending" | "active" | "rejected" | "left" | "banned";
+  entitlement_source: "ownership" | "free" | "payment";
+  /** Custom roles assigned on top of the legacy `role` string. */
+  role_ids?: string[];
+  joined_at: string | null;
+  user?: Pick<User, "id" | "full_name" | "avatar_url">;
+};
+
+export type Community = {
+  id: string;
+  owner_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  is_public: boolean;
+  join_policy: "open" | "approval" | "paid";
+  price_cents: number;
+  currency: string;
+  member_count: number;
+  owner: Pick<User, "id" | "full_name" | "avatar_url"> | null;
+  membership: Membership | null;
+  created_at: string;
+};
+
+export type ChannelKind = "text" | "announcement" | "program" | "challenge" | "checkin" | "live";
+
+export type CommunityChannel = {
+  id: string;
+  community_id: string;
+  name: string;
+  description: string;
+  is_default: boolean;
+  ranking_opt_in?: boolean;
+  kind?: ChannelKind;
+  overwrites?: ChannelOverwrite[];
+  /** Caller's effective mask for this channel, resolved server-side. */
+  permissions?: number;
+};
+
+export type ChannelOverwrite = { role_id: string; allow: number; deny: number };
+
+export type CommunityRole = {
+  id: string;
+  community_id: string;
+  name: string;
+  color: string;
+  rank: number;
+  permissions: number;
+  is_default: boolean;
+};
+
+export type MessageReaction = { emoji: string; user_ids: string[] };
+
+export type CommunityMessage = {
+  id: string;
+  channel_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+  author: Pick<User, "id" | "full_name" | "avatar_url"> | null;
+  reactions?: MessageReaction[];
+  reply_to_id?: string | null;
+  reply_to?: { id: string; author_id: string; content: string } | null;
+  pinned_at?: string | null;
+  edited_at?: string | null;
+};
+
+export type CoachApplication = {
+  id?: string;
+  status: "not_applied" | "pending" | "approved" | "rejected";
+  bio?: string;
+  specialties?: string[];
+  credentials?: string[];
+  review_note?: string | null;
+};
+
+export type PartnerDashboard = {
+  community_count: number;
+  active_members: number;
+  pending_members: number;
+  payout_status: string;
+  balances: { _id: string; gross_cents: number; net_cents: number }[];
+  communities: Community[];
+};
+
+export type MediaItem = { id: string; kind: "image" | "video"; url: string };
+
+export type Post = {
+  id: string;
+  author_id: string;
+  author: Pick<User, "id" | "full_name" | "avatar_url"> | null;
+  content: string;
+  community_id: string | null;
+  media: MediaItem[];
+  repost_of: string | null;
+  original?: (Post & { unavailable?: boolean }) | null;
+  like_count: number;
+  comment_count: number;
+  repost_count: number;
+  liked_by_me: boolean;
+  reposted_by_me: boolean;
+  created_at: string;
+};
+
+export type PostComment = {
+  id: string;
+  post_id: string;
+  author_id: string;
+  author: Pick<User, "id" | "full_name" | "avatar_url"> | null;
+  content: string;
+  created_at: string;
+};
+
+export type DirectMessage = {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  content: string;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type DmThread = {
+  peer: Pick<User, "id" | "full_name" | "avatar_url"> | null;
+  last_message: DirectMessage;
+  unread: number;
+};
+
+export type LabMeasurement = {
+  type: "numeric" | "bounded" | "qualitative" | "text" | "absent" | string;
+  numeric?: number;
+  bounded?: { operator: "lt" | "gt" | string; value: number };
+  qualitative?: { text: string };
+  text?: string;
+  absent_reason?: string | null;
+  units?: string;
+  ucum_code?: string;
+};
+
+export type LabMarker = {
+  marker_slug: string;
+  canonical_key?: string | null;
+  marker: string;
+  raw_name: string;
+  value: number | null;
+  bound_operator?: string | null;
+  unit: string;
+  loinc_code?: string | null;
+  interpretation_flag?: string | null;
+  measurement?: LabMeasurement;
+};
+
+export type LabInterpretation = {
+  summary: string[];
+  trends: { marker_slug: string; direction: "up" | "down" | "stable"; comment: string }[];
+  flags: { marker_slug: string; severity: string; comment: string }[];
+};
+
+export type LabReport = {
+  id: string;
+  filename?: string | null;
+  mime: string;
+  provider?: "terra" | "ironflow" | string;
+  status: "processing" | "done" | "failed" | string;
+  step: string;
+  markers: LabMarker[];
+  markers_count: number;
+  interpretation?: LabInterpretation | null;
+  interpretation_error?: string | null;
+  interpretation_provider?: string | null;
+  interpretation_model?: string | null;
+  interpretation_locale?: SupportedLocale;
+  disclaimer: string;
+  requires_professional_review: boolean;
+  error?: string | null;
+  terra_sessions?: {
+    session_id: string;
+    report_type?: string;
+    report_date?: string;
+    report_locale?: string;
+    results_count: number;
+  }[];
+};
+
+export type BiomarkerSeries = {
+  slug: string;
+  name: string;
+  unit: string;
+  ref_low?: number | null;
+  ref_high?: number | null;
+  latest: number;
+  points: { date: string; value: number }[];
 };
 
 const TOKEN_KEY = "ironflow_token";
@@ -50,6 +306,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+export type UploadFile = { uri: string; name: string; mimeType: string };
+
+async function upload<T>(path: string, file: UploadFile): Promise<T> {
+  const token = await auth.getToken();
+  const form = new FormData();
+  if (Platform.OS === "web") {
+    const blob = await (await fetch(file.uri)).blob();
+    form.append("file", blob, file.name);
+  } else {
+    form.append("file", { uri: file.uri, name: file.name, type: file.mimeType } as any);
+  }
+  const res = await fetch(`${BASE}/api${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.detail || `Upload failed: ${res.status}`);
+  return body as T;
+}
+
+export function mediaUrl(url: string): string {
+  return url.startsWith("/") ? `${BASE}${url}` : url;
+}
+
 export const api = {
   register: (email: string, password: string, full_name: string, role: string) =>
     request<{ access_token: string; user: User }>("/auth/register", {
@@ -62,6 +343,13 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<User>("/auth/me"),
+  updateProfile: (preferred_locale: SupportedLocale) =>
+    request<User>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify({ preferred_locale }),
+    }),
+  updateRankingPreference: (activity_ranking_opt_in: boolean) =>
+    request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ activity_ranking_opt_in }) }),
 
   dashboard: () => request<any>("/dashboard"),
 
@@ -75,8 +363,17 @@ export const api = {
   muscles: () => request<any[]>("/muscles"),
 
   workouts: () => request<any[]>("/workouts"),
-  createWorkout: (title: string, notes?: string) =>
-    request<any>("/workouts", { method: "POST", body: JSON.stringify({ title, notes }) }),
+  workout: (id: string) => request<any>(`/workouts/${id}`),
+  createWorkout: (title: string, notes?: string, planned_exercise_slugs: string[] = []) =>
+    request<any>("/workouts", {
+      method: "POST",
+      body: JSON.stringify({ title, notes, planned_exercise_slugs }),
+    }),
+  planExercises: (workoutId: string, exercise_slugs: string[]) =>
+    request<any>(`/workouts/${workoutId}/plan`, {
+      method: "POST",
+      body: JSON.stringify({ exercise_slugs }),
+    }),
   finishWorkout: (id: string) => request<any>(`/workouts/${id}/finish`, { method: "POST" }),
   listSets: (workoutId: string) => request<any[]>(`/workouts/${workoutId}/sets`),
   addSet: (workoutId: string, payload: any) =>
@@ -94,7 +391,7 @@ export const api = {
   addWearable: (payload: any) =>
     request<any>("/wearable-metrics", { method: "POST", body: JSON.stringify(payload) }),
 
-  coaches: () => request<User[]>("/coaches"),
+  coaches: () => request<(User & { community_count: number; member_count: number })[]>("/coaches"),
   relationships: () => request<any[]>("/coach/relationships"),
   requestCoach: (client_email: string) =>
     request<any>("/coach/request", { method: "POST", body: JSON.stringify({ client_email }) }),
@@ -104,11 +401,142 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
-  communities: () => request<any[]>("/communities"),
+  communities: (scope: "discover" | "mine" = "discover") =>
+    request<Community[]>(`/communities?scope=${scope}`),
+  community: (id: string) => request<Community>(`/communities/${id}`),
+  createCommunity: (payload: {
+    name: string;
+    slug: string;
+    description: string;
+    is_public: boolean;
+    join_policy: Community["join_policy"];
+    price_cents: number;
+    currency: string;
+  }) => request<Community>("/communities", { method: "POST", body: JSON.stringify(payload) }),
+  joinCommunity: (id: string) =>
+    request<Membership>(`/communities/${id}/join`, { method: "POST" }),
+  leaveCommunity: (id: string) =>
+    request<void>(`/communities/${id}/membership`, { method: "DELETE" }),
+  communityMembers: (id: string) => request<Membership[]>(`/communities/${id}/members`),
+  reviewCommunityMember: (communityId: string, memberId: string, status: string) =>
+    request<Membership>(`/communities/${communityId}/members/${memberId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  communityChannels: (id: string) =>
+    request<CommunityChannel[]>(`/communities/${id}/channels`),
+  createCommunityChannel: (communityId: string, name: string, description = "") =>
+    request<CommunityChannel>(`/communities/${communityId}/channels`, {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    }),
+  channel: (id: string) => request<CommunityChannel>(`/channels/${id}`),
+  channelMessages: (id: string, before?: string) =>
+    request<CommunityMessage[]>(`/channels/${id}/messages${before ? `?before=${before}` : ""}`),
+  updateChannelRanking: (id: string, ranking_opt_in: boolean) =>
+    request<CommunityChannel>(`/channels/${id}/ranking`, { method: "PATCH", body: JSON.stringify({ ranking_opt_in }) }),
+  communityRoles: (id: string) => request<CommunityRole[]>(`/communities/${id}/roles`),
+  createRole: (id: string, body: { name: string; color?: string; rank?: number; permissions?: number }) =>
+    request<CommunityRole>(`/communities/${id}/roles`, { method: "POST", body: JSON.stringify(body) }),
+  updateRole: (roleId: string, body: Partial<Pick<CommunityRole, "name" | "color" | "rank" | "permissions">>) =>
+    request<CommunityRole>(`/roles/${roleId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteRole: (roleId: string) => request<void>(`/roles/${roleId}`, { method: "DELETE" }),
+  assignMemberRoles: (communityId: string, memberId: string, role_ids: string[]) =>
+    request<Membership>(`/communities/${communityId}/members/${memberId}/roles`, {
+      method: "PUT",
+      body: JSON.stringify({ role_ids }),
+    }),
+  setChannelOverwrites: (channelId: string, overwrites: ChannelOverwrite[]) =>
+    request<CommunityChannel>(`/channels/${channelId}/overwrites`, {
+      method: "PUT",
+      body: JSON.stringify(overwrites),
+    }),
+
+  addReaction: (messageId: string, emoji: string) =>
+    request<CommunityMessage>(`/messages/${messageId}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ emoji }),
+    }),
+  removeReaction: (messageId: string, emoji: string) =>
+    request<CommunityMessage>(`/messages/${messageId}/reactions?emoji=${encodeURIComponent(emoji)}`, {
+      method: "DELETE",
+    }),
+  editMessage: (messageId: string, content: string) =>
+    request<CommunityMessage>(`/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ content }) }),
+  deleteMessage: (messageId: string) => request<void>(`/messages/${messageId}`, { method: "DELETE" }),
+  pinMessage: (messageId: string) => request<CommunityMessage>(`/messages/${messageId}/pin`, { method: "POST" }),
+  unpinMessage: (messageId: string) => request<void>(`/messages/${messageId}/pin`, { method: "DELETE" }),
+  channelPins: (channelId: string) => request<CommunityMessage[]>(`/channels/${channelId}/pins`),
+  realtimeToken: () => request<{ enabled: boolean; token: string | null; url: string | null }>("/realtime/token"),
+
+  createChannelMessage: (id: string, content: string, reply_to_id?: string | null) =>
+    request<CommunityMessage>(`/channels/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content, reply_to_id: reply_to_id ?? null }),
+    }),
+  coachApplication: () => request<CoachApplication>("/coach/application"),
+  applyToCoach: (bio: string, specialties: string[], credentials: string[]) =>
+    request<CoachApplication>("/coach/applications", {
+      method: "POST",
+      body: JSON.stringify({ bio, specialties, credentials }),
+    }),
+  partnerDashboard: () => request<PartnerDashboard>("/partner/dashboard"),
+  communityRankings: () =>
+    request<{
+      communities: Pick<Community, "id" | "name" | "member_count">[];
+      coaches: { coach: Community["owner"]; community_count: number; member_count: number }[];
+      users: { id: string; full_name: string | null; avatar_url: string | null; active_days: number }[];
+      channels: { id: string; name: string; community_id: string; community_name: string; contributors: number }[];
+      window_days: number;
+    }>("/community-rankings"),
   posts: (community_id?: string) =>
     request<any[]>(`/posts${community_id ? `?community_id=${community_id}` : ""}`),
-  createPost: (content: string) =>
-    request<any>("/posts", { method: "POST", body: JSON.stringify({ content }) }),
+  createPost: (content: string, community_id?: string) =>
+    request<any>("/posts", { method: "POST", body: JSON.stringify({ content, community_id }) }),
+
+  // Social feed
+  feed: (scope: "all" | "following" | "mine" = "all", before?: string) =>
+    request<Post[]>(`/feed?scope=${scope}${before ? `&before=${before}` : ""}`),
+  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null }) =>
+    request<Post>("/posts", { method: "POST", body: JSON.stringify(payload) }),
+  deletePost: (id: string) => request<void>(`/posts/${id}`, { method: "DELETE" }),
+  likePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "POST" }),
+  unlikePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "DELETE" }),
+  repost: (id: string) => request<Post>(`/posts/${id}/repost`, { method: "POST" }),
+  comments: (id: string) => request<PostComment[]>(`/posts/${id}/comments`),
+  addComment: (id: string, content: string) =>
+    request<PostComment>(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ content }) }),
+  uploadMedia: (file: UploadFile) => upload<MediaItem>("/media", file),
+  follow: (userId: string) => request<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
+  unfollow: (userId: string) => request<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
+  publicProfile: (userId: string) =>
+    request<Pick<User, "id" | "full_name" | "avatar_url"> & { followers: number; following: number; posts: number; followed_by_me: boolean; can_message: boolean }>(`/users/${userId}/profile`),
+  dmThreads: () => request<DmThread[]>("/dm"),
+  dmMessages: (peerId: string) => request<DirectMessage[]>(`/dm/${peerId}/messages`),
+  sendDm: (peerId: string, content: string) =>
+    request<DirectMessage>(`/dm/${peerId}/messages`, { method: "POST", body: JSON.stringify({ content }) }),
+  importSamsungHealth: (file: UploadFile) =>
+    upload<{ synced: number; files: number; metrics: string[]; from: string; to: string }>("/wearables/sources/samsung_health/import", file),
+
+  // Moderation + back office
+  report: (payload: { target_type: ModerationReport["target_type"]; target_id: string; reason: string; detail?: string }) =>
+    request<ModerationReport>("/reports", { method: "POST", body: JSON.stringify(payload) }),
+  adminOverview: () => request<AdminOverview>("/admin/overview"),
+  adminUsers: (q: string, status: "all" | "active" | "suspended" | "staff") =>
+    request<{ users: AdminAccount[]; count: number }>(`/admin/users?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+  adminUser: (id: string) => request<AdminAccount>(`/admin/users/${id}`),
+  adminAddNote: (id: string, note: string) =>
+    request<unknown>(`/admin/users/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }),
+  adminSuspend: (id: string, reason: string, days?: number) =>
+    request<AdminAccount>(`/admin/users/${id}/suspend`, { method: "POST", body: JSON.stringify({ reason, days }) }),
+  adminReinstate: (id: string, reason: string) =>
+    request<AdminAccount>(`/admin/users/${id}/reinstate`, { method: "POST", body: JSON.stringify({ reason }) }),
+  adminSetStaffRole: (id: string, staff_role: StaffRole | null, reason: string) =>
+    request<AdminAccount>(`/admin/users/${id}/staff-role`, { method: "PATCH", body: JSON.stringify({ staff_role, reason }) }),
+  adminReports: (status: "open" | "resolved" = "open") => request<ModerationReport[]>(`/admin/reports?status=${status}`),
+  adminReviewReport: (id: string, resolution: string, note: string) =>
+    request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
+  adminAuditLog: () => request<AuditEntry[]>("/admin/audit-log"),
 
   groupSessions: () => request<any[]>("/group-sessions"),
 
@@ -155,11 +583,31 @@ export const api = {
       body: JSON.stringify({ program_id, week_index, day_index }),
     }),
   programs: () => request<any[]>("/programs"),
+  coachStatus: () =>
+    request<{
+      provider: string;
+      model: string;
+      connected: boolean;
+      ollama_reachable: boolean;
+      ollama_models: string[];
+      configured: { anthropic: boolean; openrouter: boolean; ollama: boolean };
+    }>("/coach/status"),
+  ollamaModels: () => request<{ base_url: string; models: string[] }>("/coach/models/ollama"),
+  // One personalised coaching sentence per day (fast model, cached server-side)
+  coachTip: () =>
+    request<{ date: string; source: string; tip: string; focus: string }>("/coach/tip"),
+
+  // Daily did-you-know tips (5-10, stable per user per day)
+  dailyTips: (count = 7) =>
+    request<{
+      date: string;
+      tips: { id: string; category: string; title: string; body: string }[];
+    }>(`/tips/daily?count=${count}`),
 
   // Lab reports pipeline
-  labReports: () => request<any[]>("/labs/reports"),
-  labReport: (id: string) => request<any>(`/labs/reports/${id}`),
-  biomarkersGrouped: () => request<any[]>("/biomarkers/grouped"),
+  labReports: () => request<LabReport[]>("/labs/reports"),
+  labReport: (id: string) => request<LabReport>(`/labs/reports/${id}`),
+  biomarkersGrouped: () => request<BiomarkerSeries[]>("/biomarkers/grouped"),
   uploadLab: async (file: { uri: string; name: string; mimeType: string }) => {
     const token = await auth.getToken();
     const form = new FormData();

@@ -1,165 +1,226 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
-import Svg, { Ellipse, Circle, Rect } from "react-native-svg";
+import React, { useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Animated,
+  Easing,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing } from "@/src/theme";
+import { AnatomyBody } from "@/src/components/anatomy/anatomy-body";
+import type {
+  ActivationMap,
+  BodySide,
+  MuscleSlug,
+} from "@/src/components/anatomy/muscle-types";
+import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
+import { useI18n } from "@/src/i18n";
+
+const YAW_MS = 8000;
+// The idle "spin" is a gentle ±18° yaw driven by Animated on every platform.
+// (A CSS class approach was tried before, but react-native-web drops the
+// `className` prop, so nothing ever rotated on web.) The JS driver is used on
+// web because the native driver is not available there; the rotation only
+// touches the wrapper's transform, so the SVG muscles stay fully tappable.
 
 type Props = {
-  volumes: Record<string, number>;
+  volumes: Record<string, number> | Partial<Record<MuscleSlug, number>>;
   max: number;
+  selectedMuscle?: MuscleSlug | null;
+  activation?: ActivationMap;
+  spinning?: boolean;
+  reduceMotion?: boolean;
+  emphasize?: BodySide | null;
+  bodyWidth?: number;
+  bodyHeight?: number;
+  showLegend?: boolean;
+  showStatus?: boolean;
   onPress?: () => void;
+  onMusclePress?: (muscle: MuscleSlug) => void;
 };
 
-/**
- * Color-code a muscle region based on its normalized volume.
- * dim → warm → hot (brand lime).
- */
-function shade(vol: number, max: number): string {
-  if (!max || !vol) return colors.surface3;
-  const t = Math.min(1, vol / max);
-  if (t < 0.15) return "#3a3a1a";
-  if (t < 0.35) return "#6a7c1a";
-  if (t < 0.65) return "#a5c800";
-  return colors.brand;
-}
+export function MuscleHeatmap({
+  volumes,
+  max,
+  selectedMuscle = null,
+  activation,
+  spinning = true,
+  reduceMotion = false,
+  emphasize = null,
+  bodyWidth = 150,
+  bodyHeight = 300,
+  showLegend = true,
+  showStatus = true,
+  onPress,
+  onMusclePress,
+}: Props) {
+  const { t } = useI18n();
+  const mapped = volumes as Partial<Record<MuscleSlug, number>>;
+  const yaw = useRef(new Animated.Value(0.5)).current;
+  const shouldSpin = spinning && !reduceMotion;
+  const useNative = Platform.OS !== "web";
 
-/**
- * Very stylized front / back body silhouette. Each region uses an ellipse or
- * rectangle whose fill is the intensity color. Purely presentational.
- */
-function BodyFront({ volumes, max }: Props) {
-  const c = (k: string) => shade(volumes[k] || 0, max);
-  return (
-    <Svg width={130} height={280} viewBox="0 0 130 280">
-      {/* head */}
-      <Circle cx="65" cy="22" r="16" fill={colors.surface3} />
-      {/* neck */}
-      <Rect x="58" y="34" width="14" height="10" fill={colors.surface3} />
-      {/* shoulders */}
-      <Ellipse cx="38" cy="52" rx="14" ry="10" fill={c("shoulders")} />
-      <Ellipse cx="92" cy="52" rx="14" ry="10" fill={c("shoulders")} />
-      {/* chest */}
-      <Ellipse cx="52" cy="70" rx="14" ry="14" fill={c("chest")} />
-      <Ellipse cx="78" cy="70" rx="14" ry="14" fill={c("chest")} />
-      {/* biceps */}
-      <Ellipse cx="28" cy="80" rx="8" ry="18" fill={c("biceps")} />
-      <Ellipse cx="102" cy="80" rx="8" ry="18" fill={c("biceps")} />
-      {/* forearms */}
-      <Ellipse cx="22" cy="115" rx="7" ry="16" fill={c("forearms")} />
-      <Ellipse cx="108" cy="115" rx="7" ry="16" fill={c("forearms")} />
-      {/* abs */}
-      <Rect x="52" y="88" width="26" height="42" rx="4" fill={c("abs")} />
-      {/* obliques */}
-      <Ellipse cx="46" cy="118" rx="5" ry="14" fill={c("obliques")} />
-      <Ellipse cx="84" cy="118" rx="5" ry="14" fill={c("obliques")} />
-      {/* quads */}
-      <Ellipse cx="52" cy="170" rx="12" ry="30" fill={c("quads")} />
-      <Ellipse cx="78" cy="170" rx="12" ry="30" fill={c("quads")} />
-      {/* calves front / shins are neutral */}
-      <Ellipse cx="52" cy="230" rx="9" ry="22" fill={colors.surface3} />
-      <Ellipse cx="78" cy="230" rx="9" ry="22" fill={colors.surface3} />
-    </Svg>
-  );
-}
-
-function BodyBack({ volumes, max }: Props) {
-  const c = (k: string) => shade(volumes[k] || 0, max);
-  return (
-    <Svg width={130} height={280} viewBox="0 0 130 280">
-      {/* head */}
-      <Circle cx="65" cy="22" r="16" fill={colors.surface3} />
-      <Rect x="58" y="34" width="14" height="10" fill={colors.surface3} />
-      {/* traps + upper back */}
-      <Rect x="45" y="46" width="40" height="18" rx="6" fill={c("back")} />
-      {/* rear shoulders */}
-      <Ellipse cx="34" cy="54" rx="12" ry="9" fill={c("shoulders")} />
-      <Ellipse cx="96" cy="54" rx="12" ry="9" fill={c("shoulders")} />
-      {/* lats */}
-      <Ellipse cx="48" cy="82" rx="12" ry="18" fill={c("lats")} />
-      <Ellipse cx="82" cy="82" rx="12" ry="18" fill={c("lats")} />
-      {/* triceps */}
-      <Ellipse cx="26" cy="82" rx="8" ry="18" fill={c("triceps")} />
-      <Ellipse cx="104" cy="82" rx="8" ry="18" fill={c("triceps")} />
-      {/* forearms */}
-      <Ellipse cx="22" cy="115" rx="7" ry="16" fill={c("forearms")} />
-      <Ellipse cx="108" cy="115" rx="7" ry="16" fill={c("forearms")} />
-      {/* lower back */}
-      <Rect x="52" y="108" width="26" height="24" rx="4" fill={c("lower_back")} />
-      {/* glutes */}
-      <Ellipse cx="52" cy="150" rx="14" ry="16" fill={c("glutes")} />
-      <Ellipse cx="78" cy="150" rx="14" ry="16" fill={c("glutes")} />
-      {/* hamstrings */}
-      <Ellipse cx="52" cy="192" rx="12" ry="26" fill={c("hamstrings")} />
-      <Ellipse cx="78" cy="192" rx="12" ry="26" fill={c("hamstrings")} />
-      {/* calves */}
-      <Ellipse cx="52" cy="242" rx="10" ry="22" fill={c("calves")} />
-      <Ellipse cx="78" cy="242" rx="10" ry="22" fill={c("calves")} />
-    </Svg>
-  );
-}
-
-export function MuscleHeatmap({ volumes, max, onPress }: Props) {
-  const content = (
-    <>
-      <View style={styles.bodies}>
-        <View style={styles.bodyBlock}>
-          <BodyFront volumes={volumes} max={max} />
-          <Text style={styles.bodyLbl}>FRONT</Text>
-        </View>
-        <View style={styles.bodyBlock}>
-          <BodyBack volumes={volumes} max={max} />
-          <Text style={styles.bodyLbl}>BACK</Text>
-        </View>
-      </View>
-      <View style={styles.legend}>
-        <Text style={styles.legendTxt}>LOW</Text>
-        <View style={[styles.legendChip, { backgroundColor: "#3a3a1a" }]} />
-        <View style={[styles.legendChip, { backgroundColor: "#6a7c1a" }]} />
-        <View style={[styles.legendChip, { backgroundColor: "#a5c800" }]} />
-        <View style={[styles.legendChip, { backgroundColor: colors.brand }]} />
-        <Text style={styles.legendTxt}>HIGH</Text>
-      </View>
-      {onPress && (
-        <View style={styles.explorePrompt}>
-          <Text style={styles.exploreText}>Explore muscles</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
-        </View>
-      )}
-    </>
-  );
-
-  if (onPress) {
-    return (
-      <Pressable
-        style={styles.wrap}
-        testID="muscle-heatmap"
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel="Open muscle explorer"
-        accessibilityHint="View detailed muscle training status and exercises"
-      >
-        {content}
-      </Pressable>
+  useEffect(() => {
+    if (!shouldSpin) {
+      yaw.stopAnimation();
+      Animated.timing(yaw, {
+        toValue: 0.5,
+        duration: 350,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: useNative,
+      }).start();
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(yaw, {
+          toValue: 1,
+          duration: YAW_MS / 2,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: useNative,
+        }),
+        Animated.timing(yaw, {
+          toValue: 0,
+          duration: YAW_MS / 2,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: useNative,
+        }),
+      ]),
     );
-  }
+    loop.start();
+    return () => loop.stop();
+  }, [shouldSpin, yaw, useNative]);
+
+  const rotateY = yaw.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-18deg", "18deg"],
+  });
+  // The back body yaws in counter-phase so the pair reads as one turning figure.
+  const rotateYBack = yaw.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["18deg", "-18deg"],
+  });
+
+  const bodyProps = {
+    volumes: mapped,
+    max,
+    selectedMuscle,
+    activation,
+    interactive: !!onMusclePress,
+    animateFibers: true,
+    reduceMotion,
+    onMusclePress,
+    width: bodyWidth,
+    height: bodyHeight,
+  } as const;
 
   return (
     <View style={styles.wrap} testID="muscle-heatmap">
-      {content}
+      <View style={styles.bodies}>
+        <BodyColumn
+          label={t("FRONT")}
+          side="front"
+          emphasized={emphasize === "front"}
+          rotateY={rotateY}
+          bodyProps={bodyProps}
+        />
+        <BodyColumn
+          label={t("BACK")}
+          side="back"
+          emphasized={emphasize === "back"}
+          rotateY={rotateYBack}
+          bodyProps={bodyProps}
+        />
+      </View>
+      {showStatus && selectedMuscle ? (
+        <Text style={styles.selectedName}>
+          {t("{name} · tap another muscle or explore", { name: MUSCLE_NAMES[selectedMuscle] })}
+        </Text>
+      ) : null}
+      {showLegend ? (
+      <View style={styles.legend}>
+        <Text style={styles.legendTxt}>{t("LOW")}</Text>
+        <View style={[styles.legendChip, { backgroundColor: "#0E7490" }]} />
+        <View style={[styles.legendChip, { backgroundColor: "#15803D" }]} />
+        <View style={[styles.legendChip, { backgroundColor: "#C2410C" }]} />
+        <View style={[styles.legendChip, { backgroundColor: "#BE123C" }]} />
+        <Text style={styles.legendTxt}>{t("HIGH")}</Text>
+      </View>
+      ) : null}
+      {onPress ? (
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={t("Open muscle explorer")}
+          style={styles.explorePrompt}
+        >
+          <Text style={styles.exploreText}>{t("Explore muscles")}</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function BodyColumn({
+  label,
+  side,
+  emphasized,
+  rotateY,
+  bodyProps,
+}: {
+  label: string;
+  side: BodySide;
+  emphasized: boolean;
+  rotateY: Animated.AnimatedInterpolation<string | number>;
+  bodyProps: Omit<React.ComponentProps<typeof AnatomyBody>, "side">;
+}) {
+  return (
+    <View style={styles.bodyBlock} testID={`body-${side}`}>
+      <Animated.View
+        style={[
+          styles.bodyFrame,
+          emphasized && styles.bodyFrameOn,
+          { transform: [{ perspective: 600 }, { rotateY }] },
+        ]}
+      >
+        <AnatomyBody {...bodyProps} side={side} />
+      </Animated.View>
+      <Text style={[styles.bodyLbl, emphasized && styles.bodyLblOn]}>
+        {label}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { alignItems: "center" },
-  bodies: { flexDirection: "row", gap: spacing.lg },
+  bodies: { flexDirection: "row", gap: spacing.lg, alignItems: "flex-end" },
   bodyBlock: { alignItems: "center" },
+  bodyFrame: {
+    borderRadius: 12,
+    overflow: "visible",
+  },
+  bodyFrameOn: {
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
   bodyLbl: {
     color: colors.textMuted,
     fontSize: 10,
     letterSpacing: 2,
     fontWeight: "700",
     marginTop: spacing.xs,
+  },
+  bodyLblOn: { color: colors.brand },
+  selectedName: {
+    color: colors.brand,
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: spacing.sm,
   },
   legend: {
     flexDirection: "row",
@@ -172,7 +233,8 @@ const styles = StyleSheet.create({
   explorePrompt: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: spacing.md,
+    minHeight: 44,
+    marginTop: spacing.sm,
     gap: spacing.xs,
   },
   exploreText: {

@@ -20,6 +20,7 @@ import {
   ProgramSchema,
 } from "@/src/program-schema";
 import { colors, radius, spacing } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 const GOALS = [
   { key: "strength", label: "STRENGTH" },
@@ -58,13 +59,14 @@ function Chip({
 }
 
 function ExerciseRow({ ex }: { ex: any }) {
+  const { t } = useI18n();
   return (
     <View style={styles.exRow}>
       <View style={{ flex: 1 }}>
         <Text style={styles.exName}>{ex.name}</Text>
         <Text style={styles.exMeta}>
           {ex.sets} × {ex.reps_min === ex.reps_max ? ex.reps_min : `${ex.reps_min}-${ex.reps_max}`} · RPE{" "}
-          {ex.target_rpe} · {ex.rest_sec}s rest
+          {ex.target_rpe} · {t("{seconds}s rest", { seconds: ex.rest_sec })}
           {ex.load_pct_1rm ? ` · ${ex.load_pct_1rm}% 1RM` : ""}
         </Text>
       </View>
@@ -72,13 +74,24 @@ function ExerciseRow({ ex }: { ex: any }) {
   );
 }
 
-function DayCard({ day, badge }: { day: ProgramDay; badge?: string }) {
+function DayCard({
+  day,
+  badge,
+  onStart,
+  starting,
+}: {
+  day: ProgramDay;
+  badge?: string;
+  onStart?: () => void;
+  starting?: boolean;
+}) {
+  const { t } = useI18n();
   return (
-    <View style={styles.dayCard}>
+    <View style={styles.dayCard} testID={`day-card-${day.day_index}`}>
       <View style={styles.dayHead}>
-        <Text style={styles.dayTitle}>DAY {day.day_index}</Text>
+        <Text style={styles.dayTitle}>{t("DAY {day}", { day: day.day_index })}</Text>
         <View style={styles.focusBadge}>
-          <Text style={styles.focusTxt}>{FOCUS_LABELS[day.focus] ?? day.focus}</Text>
+          <Text style={styles.focusTxt}>{t(FOCUS_LABELS[day.focus] ?? day.focus)}</Text>
         </View>
         {badge ? (
           <View style={[styles.focusBadge, { backgroundColor: colors.warning }]}>
@@ -89,11 +102,37 @@ function DayCard({ day, badge }: { day: ProgramDay; badge?: string }) {
       {day.exercises.map((ex, i) => (
         <ExerciseRow key={`${ex.exercise_slug}-${i}`} ex={ex} />
       ))}
+      {onStart ? (
+        <Pressable
+          onPress={onStart}
+          disabled={starting}
+          accessibilityRole="button"
+          accessibilityLabel={t("Start day {day} session", { day: day.day_index })}
+          testID={`start-day-${day.day_index}`}
+          style={[styles.startDayBtn, starting && { opacity: 0.6 }]}
+        >
+          {starting ? (
+            <ActivityIndicator color={colors.brandOn} size="small" />
+          ) : (
+            <Ionicons name="play" size={14} color={colors.brandOn} />
+          )}
+          <Text style={styles.startDayTxt}>
+            {starting ? t("OPENING…") : t("START DAY {day}", { day: day.day_index })}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
+function goBack() {
+  // Deep links (web refresh, shared URL) have no history: fall back to Home.
+  if (router.canGoBack()) router.back();
+  else router.replace("/(tabs)/home");
+}
+
 export default function ProgramScreen() {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -146,7 +185,7 @@ export default function ProgramScreen() {
       setProgram(parsed);
       setWeekIdx(parsed.weeks[0]?.week_index ?? 1);
     } catch (e: any) {
-      Alert.alert("Generation failed", e?.message ?? "Try again");
+      Alert.alert(t("Generation failed"), e?.message ?? t("Try again"));
     } finally {
       setGenerating(false);
     }
@@ -159,22 +198,57 @@ export default function ProgramScreen() {
       const res = await api.adjustProgram(programDoc.id, weekIdx);
       setAdjustResult(res);
     } catch (e: any) {
-      Alert.alert("Adjustment failed", e?.message ?? "Try again");
+      Alert.alert(t("Adjustment failed"), e?.message ?? t("Try again"));
     } finally {
       setAdjusting(false);
     }
   };
 
+  // Turn a program day into a live session: plan its exercises and open the logger.
+  const [startingDay, setStartingDay] = useState<number | null>(null);
+  const startDay = async (day: ProgramDay, adjusted = false) => {
+    if (startingDay !== null) return;
+    setStartingDay(day.day_index);
+    try {
+      const slugs = day.exercises.map((ex) => ex.exercise_slug);
+      const title = `${t("WEEK {week}", { week: weekIdx })} · ${t("DAY {day}", { day: day.day_index })} · ${t(FOCUS_LABELS[day.focus] ?? day.focus)}${adjusted ? t(" (adjusted)") : ""}`;
+      const existing = await api.workouts().catch(() => []);
+      const open = existing.find((w: any) => !w.ended_at);
+      let workoutId: string;
+      if (open) {
+        await api.planExercises(open.id, slugs);
+        workoutId = open.id;
+      } else {
+        const created = await api.createWorkout(title, undefined, slugs);
+        workoutId = created.id;
+      }
+      router.push(`/workout/${workoutId}`);
+    } catch (e: any) {
+      Alert.alert(t("Could not start session"), e?.message ?? t("Try again"));
+    } finally {
+      setStartingDay(null);
+    }
+  };
+
   const week = program?.weeks.find((w) => w.week_index === weekIdx) ?? program?.weeks[0];
   const rec = programDoc?.recovery_snapshot;
+  const modelLabel: string | null = programDoc?.model
+    ? String(programDoc.model).split(":").pop() ?? null
+    : null;
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="program-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable
+          testID="back-btn"
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel={t("Back")}
+          style={styles.backBtn}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>AI COACH</Text>
+        <Text style={styles.headerTitle}>{t("AI COACH")}</Text>
         {program ? (
           <Pressable
             testID="regenerate-btn"
@@ -198,31 +272,31 @@ export default function ProgramScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           {!program ? (
             <>
-              <Text style={styles.sectionTitle}>GOAL</Text>
+              <Text style={styles.sectionTitle}>{t("GOAL")}</Text>
               <View style={styles.chipRow}>
                 {GOALS.map((g) => (
                   <Chip
                     key={g.key}
                     testID={`goal-${g.key}`}
-                    label={g.label}
+                    label={t(g.label)}
                     active={goal === g.key}
                     onPress={() => setGoal(g.key)}
                   />
                 ))}
               </View>
-              <Text style={styles.sectionTitle}>LEVEL</Text>
+              <Text style={styles.sectionTitle}>{t("LEVEL")}</Text>
               <View style={styles.chipRow}>
                 {LEVELS.map((l) => (
                   <Chip
                     key={l.key}
                     testID={`level-${l.key}`}
-                    label={l.label}
+                    label={t(l.label)}
                     active={level === l.key}
                     onPress={() => setLevel(l.key)}
                   />
                 ))}
               </View>
-              <Text style={styles.sectionTitle}>DAYS / WEEK</Text>
+              <Text style={styles.sectionTitle}>{t("DAYS / WEEK")}</Text>
               <View style={styles.chipRow}>
                 {[2, 3, 4, 5, 6].map((d) => (
                   <Chip
@@ -234,13 +308,13 @@ export default function ProgramScreen() {
                   />
                 ))}
               </View>
-              <Text style={styles.sectionTitle}>EQUIPMENT</Text>
+              <Text style={styles.sectionTitle}>{t("EQUIPMENT")}</Text>
               <View style={styles.chipRow}>
                 {EQUIPMENT.map((eq) => (
                   <Chip
                     key={eq}
                     testID={`equip-${eq}`}
-                    label={eq.toUpperCase()}
+                    label={t(eq.toUpperCase())}
                     active={equipment.includes(eq)}
                     onPress={() =>
                       setEquipment((prev) =>
@@ -260,19 +334,18 @@ export default function ProgramScreen() {
                 {generating ? (
                   <>
                     <ActivityIndicator color={colors.brandOn} size="small" />
-                    <Text style={styles.ctaTxt}>BUILDING YOUR BLOCK…</Text>
+                    <Text style={styles.ctaTxt}>{t("BUILDING YOUR BLOCK…")}</Text>
                   </>
                 ) : (
                   <>
                     <Ionicons name="sparkles" size={16} color={colors.brandOn} />
-                    <Text style={styles.ctaTxt}>GENERATE 4-WEEK PROGRAM</Text>
+                    <Text style={styles.ctaTxt}>{t("GENERATE 4-WEEK PROGRAM")}</Text>
                   </>
                 )}
               </Pressable>
               {generating && (
                 <Text style={styles.genHint}>
-                  Periodization, recovery and your last 14 days of training are being analyzed.
-                  This can take 1-2 minutes.
+                  {t("Periodization, recovery and your last 14 days of training are being analyzed. This can take 1-2 minutes.")}
                 </Text>
               )}
             </>
@@ -286,7 +359,7 @@ export default function ProgramScreen() {
                   ]}
                 >
                   <Text style={styles.recTitle}>
-                    {rec.fatigue_high ? "HIGH FATIGUE AT GENERATION" : "RECOVERY OK AT GENERATION"}
+                    {rec.fatigue_high ? t("HIGH FATIGUE AT GENERATION") : t("RECOVERY OK AT GENERATION")}
                   </Text>
                   <Text style={styles.recTxt}>
                     HRV {rec.hrv ?? "—"}ms (7d {rec.hrv_baseline_7d ?? "—"}ms) · Sleep{" "}
@@ -311,7 +384,12 @@ export default function ProgramScreen() {
               </View>
               {week && (
                 <View style={styles.phaseRow}>
-                  <Text style={styles.phaseTxt}>{PHASE_LABELS[week.phase] ?? week.phase}</Text>
+                  <Text style={styles.phaseTxt}>{t(PHASE_LABELS[week.phase] ?? week.phase)}</Text>
+                  {modelLabel ? (
+                    <Text style={styles.modelTxt} testID="program-model">
+                      {t("Built by {model}", { model: modelLabel })}
+                    </Text>
+                  ) : null}
                 </View>
               )}
 
@@ -327,7 +405,7 @@ export default function ProgramScreen() {
                   <Ionicons name="pulse" size={16} color={colors.brand} />
                 )}
                 <Text style={styles.adjustTxt}>
-                  {adjusting ? "CHECKING RECOVERY…" : "ADJUST TODAY'S SESSION"}
+                  {adjusting ? t("CHECKING RECOVERY…") : t("ADJUST TODAY'S SESSION")}
                 </Text>
               </Pressable>
 
@@ -342,18 +420,28 @@ export default function ProgramScreen() {
                   testID="adjust-result"
                 >
                   <Text style={styles.recTitle}>
-                    {adjustResult.adjusted ? "RECOVERY-GATED WORKOUT" : "NO CHANGE NEEDED"}
+                    {adjustResult.adjusted ? t("RECOVERY-GATED WORKOUT") : t("NO CHANGE NEEDED")}
                   </Text>
                   <Text style={styles.recTxt}>{adjustResult.reason}</Text>
                 </View>
               )}
 
               {adjustResult?.adjusted && (
-                <DayCard day={adjustResult.day} badge="ADJUSTED" />
+                <DayCard
+                  day={adjustResult.day}
+                  badge={t("ADJUSTED")}
+                  onStart={() => startDay(adjustResult.day, true)}
+                  starting={startingDay === adjustResult.day.day_index}
+                />
               )}
 
               {week?.days.map((d) => (
-                <DayCard key={d.day_index} day={d} />
+                <DayCard
+                  key={d.day_index}
+                  day={d}
+                  onStart={() => startDay(d)}
+                  starting={startingDay === d.day_index}
+                />
               ))}
             </>
           )}
@@ -424,8 +512,26 @@ const styles = StyleSheet.create({
   },
   recTitle: { color: colors.text, fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },
   recTxt: { color: colors.textMuted, fontSize: 12, marginTop: 4, lineHeight: 17 },
-  phaseRow: { marginVertical: spacing.md },
+  phaseRow: {
+    marginVertical: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
   phaseTxt: { color: colors.brand, fontWeight: "900", letterSpacing: 3, fontSize: 12 },
+  modelTxt: { color: colors.textMuted, fontSize: 11, fontWeight: "600" },
+  startDayBtn: {
+    marginTop: spacing.md,
+    minHeight: 44,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+  },
+  startDayTxt: { color: colors.brandOn, fontWeight: "900", letterSpacing: 1.5, fontSize: 12 },
   adjustBtn: {
     flexDirection: "row",
     alignItems: "center",

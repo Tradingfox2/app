@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -17,8 +17,13 @@ import type {
   Circuit,
 } from "./muscle-types";
 import { MUSCLE_NAMES } from "./anatomy-artwork";
+import { MUSCLE_KNOWLEDGE } from "./muscle-knowledge";
+import { localizeMuscleKnowledge } from "./muscle-knowledge-locales";
+import { ANTAGONISTS, SYNERGISTS } from "./muscle-relations";
 import { loadState, type LoadState } from "./muscle-region";
-import { colors, spacing, radius } from "../../theme";
+import { colors, fonts, spacing, radius } from "../../theme";
+import { ExerciseDemoModal } from "../exercises/exercise-demo-modal";
+import { useI18n } from "../../i18n";
 
 // Theme aliases for readability
 const card = colors.surface;
@@ -27,6 +32,13 @@ const muted = colors.textMuted;
 const full = radius.pill;
 
 type DetailTab = "overview" | "exercises" | "circuits";
+
+function uniqueExercises(exercises: RecommendationExercise[]) {
+  return exercises.filter(
+    (exercise, index, list) =>
+      list.findIndex((candidate) => candidate.slug === exercise.slug) === index,
+  );
+}
 
 export type MuscleDetailSheetProps = {
   muscle: MuscleSlug;
@@ -37,8 +49,14 @@ export type MuscleDetailSheetProps = {
   regenerating: boolean;
   aiCircuit: AiCircuit | null;
   onExerciseSelect: (exercise: RecommendationExercise) => void;
+  onPartnerPress?: (muscle: MuscleSlug) => void;
+  onRetryRecommendations: () => void;
   onRegenerate: () => void;
   onClose: () => void;
+  /** Queue one or more exercise slugs into the live session (creates one if needed). */
+  onAddToWorkout?: (slugs: string[], label: string) => void;
+  /** `slugs.join("|")` of the add currently in flight — used to show a spinner. */
+  addingKey?: string | null;
 };
 
 const RECOVERY_LABELS: Record<MuscleStats["recovery_state"], string> = {
@@ -98,30 +116,74 @@ function StatRow({ label, value }: { label: string; value: string }) {
 function ExerciseCard({
   exercise,
   onPress,
+  onDemo,
+  onAdd,
+  adding,
 }: {
   exercise: RecommendationExercise;
   onPress: () => void;
+  onDemo: () => void;
+  onAdd?: () => void;
+  adding?: boolean;
 }) {
+  const { t } = useI18n();
+  const partners = (exercise.secondary_muscle_slugs ?? []).filter(
+    (slug) => slug !== exercise.primary_muscle_slug,
+  );
+
+  // Two sibling Pressables (not nested): nested <button> is invalid HTML on web.
   return (
-    <Pressable
-      style={styles.exerciseCard}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`Select ${exercise.name}`}
-    >
-      <View style={styles.exerciseInfo}>
-        <Text style={styles.exerciseName}>{exercise.name}</Text>
-        <View style={styles.exerciseMeta}>
-          {exercise.equipment && (
-            <Text style={styles.exerciseTag}>{exercise.equipment}</Text>
-          )}
-          {exercise.difficulty && (
-            <Text style={styles.exerciseTag}>{exercise.difficulty}</Text>
-          )}
+    <View style={styles.exerciseCard}>
+      <Pressable
+        style={styles.exercisePreview}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={t("Preview {name} on the body", { name: exercise.name })}
+      >
+        <View style={styles.exerciseInfo}>
+          <Text style={styles.exerciseName}>{exercise.name}</Text>
+          <View style={styles.exerciseMeta}>
+            {exercise.equipment && (
+              <Text style={styles.exerciseTag}>{t(exercise.equipment)}</Text>
+            )}
+            {exercise.difficulty && (
+              <Text style={styles.exerciseTag}>{t(exercise.difficulty)}</Text>
+            )}
+            {partners.map((slug) => (
+              <Text key={slug} style={[styles.exerciseTag, styles.partnerTag]}>
+                + {t(MUSCLE_NAMES[slug])}
+              </Text>
+            ))}
+          </View>
         </View>
-      </View>
-      <Ionicons name="play-circle-outline" size={28} color={colors.accent} />
-    </Pressable>
+      </Pressable>
+      <Pressable
+        onPress={onDemo}
+        hitSlop={6}
+        style={styles.demoBtn}
+        accessibilityRole="button"
+        accessibilityLabel={t("Open {name} exercise demo", { name: exercise.name })}
+      >
+        <Ionicons name="play" size={16} color={colors.brandOn} />
+      </Pressable>
+      {onAdd ? (
+        <Pressable
+          onPress={onAdd}
+          disabled={adding}
+          hitSlop={6}
+          style={[styles.addBtn, adding && styles.buttonDisabled]}
+          accessibilityRole="button"
+          accessibilityLabel={t("Add {name} to workout", { name: exercise.name })}
+          testID={`add-exercise-${exercise.slug}`}
+        >
+          {adding ? (
+            <ActivityIndicator size="small" color={colors.brandOn} />
+          ) : (
+            <Ionicons name="add" size={22} color={colors.brandOn} />
+          )}
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -129,11 +191,16 @@ function CircuitCard({
   circuit,
   isAi,
   onExerciseSelect,
+  onAdd,
+  adding,
 }: {
   circuit: Circuit | AiCircuit;
   isAi?: boolean;
   onExerciseSelect: (slug: string) => void;
+  onAdd?: () => void;
+  adding?: boolean;
 }) {
+  const { t, formatNumber } = useI18n();
   return (
     <View style={[styles.circuitCard, isAi && styles.circuitCardAi]}>
       <View style={styles.circuitHeader}>
@@ -145,6 +212,24 @@ function CircuitCard({
           </View>
         )}
       </View>
+      {onAdd ? (
+        <Pressable
+          onPress={onAdd}
+          disabled={adding}
+          style={[styles.circuitAddBtn, adding && styles.buttonDisabled]}
+          accessibilityRole="button"
+          accessibilityLabel={t("Add {name} to workout", { name: circuit.name })}
+        >
+          {adding ? (
+            <ActivityIndicator size="small" color={colors.brand} />
+          ) : (
+            <Ionicons name="add-circle" size={18} color={colors.brand} />
+          )}
+          <Text style={styles.circuitAddText}>
+            {t("Add {count} exercises to workout", { count: formatNumber(circuit.items.length) })}
+          </Text>
+        </Pressable>
+      ) : null}
       {circuit.rationale && (
         <Text style={styles.circuitRationale}>{circuit.rationale}</Text>
       )}
@@ -162,9 +247,9 @@ function CircuitCard({
                 {item.name || item.exercise_slug}
               </Text>
               <Text style={styles.circuitItemPrescription}>
-                {item.sets}×{item.reps_min}
-                {item.reps_min !== item.reps_max ? `-${item.reps_max}` : ""} |{" "}
-                {item.rest_sec}s rest
+                {formatNumber(item.sets)}×{formatNumber(item.reps_min)}
+                {item.reps_min !== item.reps_max ? `-${formatNumber(item.reps_max)}` : ""} |{" "}
+                {t("{seconds}s rest", { seconds: formatNumber(item.rest_sec) })}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={muted} />
@@ -184,12 +269,39 @@ export function MuscleDetailSheet({
   regenerating,
   aiCircuit,
   onExerciseSelect,
+  onPartnerPress,
+  onRetryRecommendations,
   onRegenerate,
   onClose,
+  onAddToWorkout,
+  addingKey,
 }: MuscleDetailSheetProps) {
-  const [tab, setTab] = useState<DetailTab>("overview");
-  const muscleName = MUSCLE_NAMES[muscle];
+  const { locale, t, formatDate, formatNumber } = useI18n();
+  const [tab, setTab] = useState<DetailTab>("exercises");
+  const [demoExercise, setDemoExercise] =
+    useState<RecommendationExercise | null>(null);
+  const isAdding = (slugs: string[]) => addingKey === slugs.join("|");
+  const addOne = onAddToWorkout
+    ? (exercise: RecommendationExercise) => () =>
+        onAddToWorkout([exercise.slug], exercise.name)
+    : undefined;
+  const addCircuit = onAddToWorkout
+    ? (circuit: Circuit | AiCircuit) => () =>
+        onAddToWorkout(
+          circuit.items.map((item) => item.exercise_slug),
+          circuit.name,
+        )
+    : undefined;
+  const muscleName = t(MUSCLE_NAMES[muscle]);
   const state = stats ? loadState(stats.load_percent) : "untrained";
+  const partners = [
+    ...SYNERGISTS[muscle],
+    ANTAGONISTS[muscle],
+  ].filter((slug, index, list) => list.indexOf(slug) === index);
+
+  useEffect(() => {
+    setTab("exercises");
+  }, [muscle]);
 
   const handleCircuitExerciseSelect = (slug: string) => {
     // Find the exercise in recommendations to get full data
@@ -204,71 +316,203 @@ export function MuscleDetailSheet({
     }
   };
 
-  const renderOverview = () => {
-    if (!stats) {
-      return (
-        <View style={styles.emptyState}>
-          <Ionicons name="barbell-outline" size={48} color={muted} />
-          <Text style={styles.emptyText}>
-            No training recorded for this muscle in the last 7 days.
-          </Text>
-        </View>
-      );
-    }
+  const renderPartnerRow = () => (
+    <View style={styles.partnerBlock}>
+      <Text style={styles.sectionTitle}>{t("Works with")}</Text>
+      <View style={styles.partnerRow}>
+        {partners.map((slug) => {
+          const isAntagonist = slug === ANTAGONISTS[muscle];
+          return (
+            <Pressable
+              key={slug}
+              style={[
+                styles.partnerChip,
+                isAntagonist && styles.partnerChipAntagonist,
+              ]}
+              onPress={() => onPartnerPress?.(slug)}
+              accessibilityRole="button"
+              accessibilityLabel={t("Select {name}", { name: t(MUSCLE_NAMES[slug]) })}
+            >
+              <View
+                style={[
+                  styles.partnerDot,
+                  {
+                    backgroundColor: isAntagonist
+                      ? colors.blaze
+                      : colors.volt,
+                  },
+                ]}
+              />
+              <Text style={styles.partnerChipText}>{t(MUSCLE_NAMES[slug])}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
 
-    const lastTrained = stats.last_trained_at
-      ? new Date(stats.last_trained_at).toLocaleDateString()
-      : "Never";
+  const renderOverview = () => {
+    const lastTrained = stats?.last_trained_at
+      ? formatDate(stats.last_trained_at)
+      : t("Never");
+
+    const know = localizeMuscleKnowledge(
+      muscle,
+      locale,
+      MUSCLE_KNOWLEDGE[muscle],
+    );
+    const setsDone = stats?.sets_7d ?? 0;
+    const [setsMin, setsMax] = know.sets;
+    const weeklyVerdict =
+      setsDone === 0
+        ? t("Not trained this week — aim for {frequency}.", {
+            frequency: t("{min}–{max}×/week", {
+              min: formatNumber(know.sessions[0]),
+              max: formatNumber(know.sessions[1]),
+            }),
+          })
+        : setsDone < setsMin
+          ? t("{done} sets so far — {remaining} more reach the productive range.", { done: formatNumber(setsDone), remaining: formatNumber(setsMin - setsDone) })
+          : setsDone <= setsMax
+            ? t("{done} sets this week — you are in the productive {min}–{max} range.", { done: formatNumber(setsDone), min: formatNumber(setsMin), max: formatNumber(setsMax) })
+            : t("{done} sets this week — above {max}; watch recovery or deload.", { done: formatNumber(setsDone), max: formatNumber(setsMax) });
 
     return (
-      <View style={styles.overviewContent}>
-        <View style={styles.statusBadge}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: RECOVERY_COLORS[stats.recovery_state] },
-            ]}
-          />
-          <Text style={styles.statusText}>
-            {RECOVERY_LABELS[stats.recovery_state]}
-          </Text>
+      <ScrollView key={`${muscle}-overview`} style={styles.overviewContent}>
+        {renderPartnerRow()}
+
+        <View style={styles.knowCard} testID="muscle-knowledge">
+          <Text style={styles.knowRole}>{know.role}</Text>
+          <Text style={styles.knowHeading}>{t("WHY TRAIN IT")}</Text>
+          <Text style={styles.knowBody}>{know.why}</Text>
+          <Text style={styles.knowHeading}>{t("COACH INSIGHT")}</Text>
+          <Text style={styles.knowBody}>{know.insight}</Text>
+          <Text style={styles.knowHeading}>{t("WEEKLY PRESCRIPTION")}</Text>
+          <View style={styles.knowPills}>
+            <View style={styles.knowPill}>
+              <Ionicons name="calendar-outline" size={12} color={colors.volt} />
+              <Text style={styles.knowPillText}>
+                {t("{min}–{max}×/week", {
+                  min: formatNumber(know.sessions[0]),
+                  max: formatNumber(know.sessions[1]),
+                })}
+              </Text>
+            </View>
+            <View style={styles.knowPill}>
+              <Ionicons name="layers-outline" size={12} color={colors.volt} />
+              <Text style={styles.knowPillText}>
+                {t("{min}–{max} hard sets/week", {
+                  min: formatNumber(know.sets[0]),
+                  max: formatNumber(know.sets[1]),
+                })}
+              </Text>
+            </View>
+            <View style={styles.knowPill}>
+              <Ionicons name="repeat-outline" size={12} color={colors.volt} />
+              <Text style={styles.knowPillText}>{t("{range} reps", { range: know.reps })}</Text>
+            </View>
+            <View style={styles.knowPill}>
+              <Ionicons name="time-outline" size={12} color={colors.volt} />
+              <Text style={styles.knowPillText}>
+                {t("{hours} h between sessions", {
+                  hours: formatNumber(know.restHours),
+                })}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.knowVerdict}>{weeklyVerdict}</Text>
         </View>
 
-        <View style={styles.statsGrid}>
-          <StatRow label="Sets (7 days)" value={String(stats.sets_7d)} />
-          <StatRow label="Load" value={`${stats.load_percent}%`} />
-          <StatRow label="Status" value={LOAD_LABELS[state]} />
-          <StatRow label="Last trained" value={lastTrained} />
-        </View>
-      </View>
+        {stats ? (
+          <>
+            <View style={styles.statusBadge}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: RECOVERY_COLORS[stats.recovery_state] },
+                ]}
+              />
+              <Text style={styles.statusText}>
+                {t(RECOVERY_LABELS[stats.recovery_state])}
+              </Text>
+            </View>
+
+            <View style={styles.statsGrid}>
+              <StatRow label={t("Sets (7 days)")} value={formatNumber(stats.sets_7d)} />
+              <StatRow label={t("Load")} value={`${formatNumber(stats.load_percent)}%`} />
+              <StatRow label={t("Status")} value={t(LOAD_LABELS[state])} />
+              <StatRow label={t("Last trained")} value={lastTrained} />
+            </View>
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="barbell-outline" size={36} color={muted} />
+            <Text style={styles.emptyText}>
+              {t("No training recorded for this muscle in the last 7 days.")}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
     );
   };
 
   const renderExercises = () => {
-    const primary = recommendations?.primary ?? [];
-    const secondary = recommendations?.secondary ?? [];
+    const primary = uniqueExercises(recommendations?.primary ?? []);
+    const secondary = uniqueExercises(recommendations?.secondary ?? []);
+    const combinations = uniqueExercises(recommendations?.combinations ?? []);
 
-    if (primary.length === 0 && secondary.length === 0) {
+    if (
+      primary.length === 0 &&
+      secondary.length === 0 &&
+      combinations.length === 0
+    ) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="fitness-outline" size={48} color={muted} />
           <Text style={styles.emptyText}>
-            No exercises match the selected equipment.
+            {t("No exercises match the selected equipment.")}
           </Text>
         </View>
       );
     }
 
     return (
-      <ScrollView style={styles.exerciseList}>
+      <ScrollView key={`${muscle}-exercises`} style={styles.exerciseList}>
+        {renderPartnerRow()}
+
+        {onAddToWorkout ? (
+          <Text style={styles.hintText}>
+            {t("Tap a card to preview it on the body · tap + to add it to your session")}
+          </Text>
+        ) : null}
+
+        {combinations.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>{t("Combination Exercises")}</Text>
+            {combinations.map((exercise) => (
+              <ExerciseCard
+                key={exercise.slug}
+                exercise={exercise}
+                onPress={() => onExerciseSelect(exercise)}
+                onDemo={() => setDemoExercise(exercise)}
+                onAdd={addOne?.(exercise)}
+                adding={isAdding([exercise.slug])}
+              />
+            ))}
+          </>
+        )}
+
         {primary.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Primary Exercises</Text>
+            <Text style={styles.sectionTitle}>{t("Primary Exercises")}</Text>
             {primary.map((exercise) => (
               <ExerciseCard
                 key={exercise.slug}
                 exercise={exercise}
                 onPress={() => onExerciseSelect(exercise)}
+                onDemo={() => setDemoExercise(exercise)}
+                onAdd={addOne?.(exercise)}
+                adding={isAdding([exercise.slug])}
               />
             ))}
           </>
@@ -276,12 +520,15 @@ export function MuscleDetailSheet({
 
         {secondary.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Secondary (Compound)</Text>
+            <Text style={styles.sectionTitle}>{t("Secondary (Compound)")}</Text>
             {secondary.map((exercise) => (
               <ExerciseCard
                 key={exercise.slug}
                 exercise={exercise}
                 onPress={() => onExerciseSelect(exercise)}
+                onDemo={() => setDemoExercise(exercise)}
+                onAdd={addOne?.(exercise)}
+                adding={isAdding([exercise.slug])}
               />
             ))}
           </>
@@ -295,13 +542,15 @@ export function MuscleDetailSheet({
     const combinations = recommendations?.combinations ?? [];
 
     return (
-      <ScrollView style={styles.circuitList}>
+      <ScrollView key={`${muscle}-circuits`} style={styles.circuitList}>
         {/* Deterministic circuits first */}
         {circuits.map((circuit, index) => (
           <CircuitCard
             key={`circuit-${index}`}
             circuit={circuit}
             onExerciseSelect={handleCircuitExerciseSelect}
+            onAdd={addCircuit?.(circuit)}
+            adding={isAdding(circuit.items.map((i) => i.exercise_slug))}
           />
         ))}
 
@@ -311,6 +560,8 @@ export function MuscleDetailSheet({
             circuit={aiCircuit}
             isAi
             onExerciseSelect={handleCircuitExerciseSelect}
+            onAdd={addCircuit?.(aiCircuit)}
+            adding={isAdding(aiCircuit.items.map((i) => i.exercise_slug))}
           />
         )}
 
@@ -320,7 +571,7 @@ export function MuscleDetailSheet({
           onPress={onRegenerate}
           disabled={regenerating}
           accessibilityRole="button"
-          accessibilityLabel="Generate AI circuit"
+          accessibilityLabel={t("Generate AI circuit")}
         >
           {regenerating ? (
             <ActivityIndicator size="small" color="#FFF" />
@@ -328,19 +579,22 @@ export function MuscleDetailSheet({
             <Ionicons name="sparkles" size={18} color="#FFF" />
           )}
           <Text style={styles.regenerateText}>
-            {regenerating ? "Generating..." : "Generate AI Circuit"}
+            {regenerating ? t("Generating...") : t("Generate AI Circuit")}
           </Text>
         </Pressable>
 
-        {/* Combination exercises */}
+        {/* Combination exercises stay on Circuits too for existing users */}
         {combinations.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Combination Exercises</Text>
+            <Text style={styles.sectionTitle}>{t("Combination Exercises")}</Text>
             {combinations.map((exercise) => (
               <ExerciseCard
                 key={exercise.slug}
                 exercise={exercise}
                 onPress={() => onExerciseSelect(exercise)}
+                onDemo={() => setDemoExercise(exercise)}
+                onAdd={addOne?.(exercise)}
+                adding={isAdding([exercise.slug])}
               />
             ))}
           </>
@@ -351,36 +605,45 @@ export function MuscleDetailSheet({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Compact command bar keeps the selected muscle and its actions visible. */}
       <View style={styles.header}>
-        <Text style={styles.title}>{muscleName}</Text>
+        <View style={styles.titleBlock}>
+          <Text style={styles.title}>{muscleName}</Text>
+          <Text style={styles.titleMeta}>
+            {t("{min}–{max}×/week", {
+              min: formatNumber(MUSCLE_KNOWLEDGE[muscle].sessions[0]),
+              max: formatNumber(MUSCLE_KNOWLEDGE[muscle].sessions[1]),
+            })}
+          </Text>
+        </View>
+
+        <View style={styles.tabBar} accessibilityRole="tablist">
+          <TabButton
+            label={t("Overview")}
+            active={tab === "overview"}
+            onPress={() => setTab("overview")}
+          />
+          <TabButton
+            label={t("Exercises")}
+            active={tab === "exercises"}
+            onPress={() => setTab("exercises")}
+          />
+          <TabButton
+            label={t("Circuits")}
+            active={tab === "circuits"}
+            onPress={() => setTab("circuits")}
+          />
+        </View>
+
         <Pressable
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close"
+          accessibilityLabel={t("Close")}
           hitSlop={12}
+          style={styles.closeButton}
         >
-          <Ionicons name="close" size={24} color={colors.text} />
+          <Ionicons name="close" size={20} color={colors.text} />
         </Pressable>
-      </View>
-
-      {/* Tab bar */}
-      <View style={styles.tabBar}>
-        <TabButton
-          label="Overview"
-          active={tab === "overview"}
-          onPress={() => setTab("overview")}
-        />
-        <TabButton
-          label="Exercises"
-          active={tab === "exercises"}
-          onPress={() => setTab("exercises")}
-        />
-        <TabButton
-          label="Circuits"
-          active={tab === "circuits"}
-          onPress={() => setTab("circuits")}
-        />
       </View>
 
       {/* Content */}
@@ -388,7 +651,7 @@ export function MuscleDetailSheet({
         {loading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator size="large" color={colors.accent} />
-            <Text style={styles.loadingText}>Loading recommendations...</Text>
+            <Text style={styles.loadingText}>{t("Loading recommendations...")}</Text>
           </View>
         ) : error ? (
           <View style={styles.errorState}>
@@ -396,10 +659,10 @@ export function MuscleDetailSheet({
             <Text style={styles.errorText}>{error}</Text>
             <Pressable
               style={styles.retryButton}
-              onPress={onRegenerate}
+              onPress={onRetryRecommendations}
               accessibilityRole="button"
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("Retry")}</Text>
             </Pressable>
           </View>
         ) : (
@@ -410,6 +673,10 @@ export function MuscleDetailSheet({
           </>
         )}
       </View>
+      <ExerciseDemoModal
+        exercise={demoExercise}
+        onClose={() => setDemoExercise(null)}
+      />
     </View>
   );
 }
@@ -423,44 +690,69 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    minHeight: 50,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.borderStrong,
+  },
+  titleBlock: {
+    minWidth: 104,
+    flexShrink: 1,
   },
   title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 18,
+    fontWeight: "900",
+    color: colors.brand,
+    letterSpacing: 0,
+  },
+  titleMeta: {
+    color: colors.textMuted,
+    fontSize: 9,
+    lineHeight: 12,
   },
   tabBar: {
+    flex: 1,
     flexDirection: "row",
-    paddingHorizontal: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    justifyContent: "center",
+    gap: 2,
   },
   tabButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginRight: spacing.xs,
+    minHeight: 34,
+    justifyContent: "center",
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
   },
   tabButtonActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: colors.accent,
+    backgroundColor: colors.brand,
   },
   tabLabel: {
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: "700",
     color: muted,
   },
   tabLabelActive: {
-    color: colors.accent,
-    fontWeight: "600",
+    color: colors.brandOn,
+    fontWeight: "900",
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
   content: {
     flex: 1,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   loadingState: {
     flex: 1,
@@ -507,6 +799,46 @@ const styles = StyleSheet.create({
   },
   overviewContent: {
     flex: 1,
+  },
+  knowCard: {
+    backgroundColor: background,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.volt,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  knowRole: { color: colors.text, fontSize: 13, fontWeight: "700", marginBottom: spacing.xs },
+  knowHeading: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.6,
+    marginTop: spacing.sm,
+    marginBottom: 2,
+  },
+  knowBody: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  knowPills: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.xs },
+  knowPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  knowPillText: { color: colors.text, fontSize: 11, fontWeight: "700" },
+  knowVerdict: {
+    marginTop: spacing.sm,
+    color: colors.volt,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
   },
   statusBadge: {
     flexDirection: "row",
@@ -565,10 +897,58 @@ const styles = StyleSheet.create({
   exerciseCard: {
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing.sm,
     backgroundColor: background,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    minHeight: 60,
+  },
+  exercisePreview: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 44,
+  },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  demoBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hintText: {
+    color: muted,
+    fontSize: 12,
+    marginTop: spacing.xs,
+  },
+  circuitAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    alignSelf: "flex-start",
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: full,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandDim,
+    marginBottom: spacing.sm,
+  },
+  circuitAddText: {
+    color: colors.brand,
+    fontSize: 12,
+    fontWeight: "700",
   },
   exerciseInfo: {
     flex: 1,
@@ -591,6 +971,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderRadius: radius.sm,
     textTransform: "capitalize",
+  },
+  partnerTag: {
+    color: colors.info,
+    textTransform: "none",
+  },
+  partnerBlock: {
+    marginBottom: spacing.sm,
+  },
+  partnerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  partnerChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: background,
+    borderRadius: full,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.xs,
+  },
+  partnerChipAntagonist: {
+    borderColor: colors.warning,
+  },
+  partnerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  partnerChipText: {
+    fontSize: 12,
+    color: colors.text,
+    fontWeight: "600",
   },
   circuitList: {
     flex: 1,

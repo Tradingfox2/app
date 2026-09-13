@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth-context";
+import { I18nProvider } from "@/src/i18n";
 import { colors } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
@@ -26,16 +27,18 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <View style={{ flex: 1, backgroundColor: colors.bg }}>
-            <StatusBar style="light" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.bg },
-                animation: "fade",
-              }}
-            />
-          </View>
+          <I18nProvider>
+            <View style={{ flex: 1, backgroundColor: colors.bg }}>
+              <StatusBar style="light" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.bg },
+                  animation: "fade",
+                }}
+              />
+            </View>
+          </I18nProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

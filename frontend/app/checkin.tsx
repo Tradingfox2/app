@@ -15,8 +15,10 @@ import { router } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { api } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 export default function CheckinScreen() {
+  const { t, formatDate, formatNumber } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -50,7 +52,7 @@ export default function CheckinScreen() {
       setScanning(false);
       await load();
     } catch (e: any) {
-      setError(e?.message ?? "Check-in failed");
+      setError(e?.message ?? t("Check-in failed"));
       setScanning(false);
     } finally {
       setBusy(false);
@@ -82,7 +84,7 @@ export default function CheckinScreen() {
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>GYM CHECK-IN</Text>
+        <Text style={styles.headerTitle}>{t("GYM CHECK-IN")}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -103,17 +105,16 @@ export default function CheckinScreen() {
               onPress={() => setScanning(false)}
               style={styles.cancelBtn}
             >
-              <Text style={styles.cancelTxt}>CANCEL</Text>
+              <Text style={styles.cancelTxt}>{t("CANCEL")}</Text>
             </Pressable>
           </View>
         ) : (
           <>
             <View style={styles.explainCard}>
               <Ionicons name="qr-code" size={30} color={colors.brand} />
-              <Text style={styles.explainTitle}>Scan your gym's QR code</Text>
+              <Text style={styles.explainTitle}>{t("Scan your gym's QR code")}</Text>
               <Text style={styles.explainTxt}>
-                Log your visit, link it to today's session and unlock partner rewards every 10
-                check-ins.
+                {t("Log your visit, link it to today's session and unlock partner rewards every 10 check-ins.")}
               </Text>
               <Pressable
                 testID="scan-btn"
@@ -121,29 +122,28 @@ export default function CheckinScreen() {
                 style={styles.cta}
               >
                 <Ionicons name="camera" size={16} color={colors.brandOn} />
-                <Text style={styles.ctaTxt}>SCAN QR CODE</Text>
+                <Text style={styles.ctaTxt}>{t("SCAN QR CODE")}</Text>
               </Pressable>
             </View>
 
             {error === "denied" && (
               <View style={styles.errBanner}>
                 <Text style={styles.errTxt}>
-                  Camera access is needed to scan the gym QR code. Tap "Scan" again to allow it.
+                  {t("Camera access is needed to scan the gym QR code. Tap Scan again to allow it.")}
                 </Text>
               </View>
             )}
             {error === "settings" && (
               <View style={styles.errBanner}>
                 <Text style={styles.errTxt}>
-                  Camera access is blocked. Enable it in Settings to scan QR codes — or use the
-                  gym list below.
+                  {t("Camera access is blocked. Enable it in Settings to scan QR codes, or use the gym list below.")}
                 </Text>
                 <Pressable
                   testID="open-settings-btn"
                   onPress={() => Linking.openSettings()}
                   style={styles.settingsBtn}
                 >
-                  <Text style={styles.settingsTxt}>OPEN SETTINGS</Text>
+                  <Text style={styles.settingsTxt}>{t("OPEN SETTINGS")}</Text>
                 </Pressable>
               </View>
             )}
@@ -161,21 +161,21 @@ export default function CheckinScreen() {
                   color={colors.brand}
                 />
                 <Text style={styles.resultTitle}>
-                  {result.reward_unlocked ? "REWARD UNLOCKED!" : "CHECKED IN"}
+                  {result.reward_unlocked ? t("REWARD UNLOCKED!") : t("CHECKED IN")}
                 </Text>
                 <Text style={styles.resultGym}>
                   {result.gym.name} · {result.gym.city}
                 </Text>
                 <Text style={styles.resultMeta}>
-                  Visit #{result.total_visits}
+                  {t("Visit #{count}", { count: formatNumber(result.total_visits) })}
                   {result.reward_unlocked
-                    ? " — claim your partner reward at the desk"
-                    : ` · ${result.visits_until_reward} more for a reward`}
+                    ? t(" — claim your partner reward at the desk")
+                    : t(" · {count} more for a reward", { count: formatNumber(result.visits_until_reward) })}
                 </Text>
               </View>
             )}
 
-            <Text style={styles.sectionTitle}>PARTNER GYMS</Text>
+            <Text style={styles.sectionTitle}>{t("PARTNER GYMS")}</Text>
             {gyms.map((g) => (
               <View key={g.id} style={styles.gymRow} testID={`gym-${g.id}`}>
                 <View style={{ flex: 1 }}>
@@ -192,7 +192,7 @@ export default function CheckinScreen() {
                     {busy ? (
                       <ActivityIndicator size="small" color={colors.brand} />
                     ) : (
-                      <Text style={styles.gymBtnTxt}>CHECK IN</Text>
+                      <Text style={styles.gymBtnTxt}>{t("CHECK IN")}</Text>
                     )}
                   </Pressable>
                 )}
@@ -201,13 +201,13 @@ export default function CheckinScreen() {
 
             {visits.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>RECENT VISITS</Text>
+                <Text style={styles.sectionTitle}>{t("RECENT VISITS")}</Text>
                 {visits.slice(0, 10).map((v) => (
                   <View key={v.id} style={styles.visitRow}>
                     <Ionicons name="location" size={14} color={colors.textMuted} />
                     <Text style={styles.visitTxt}>{v.gym_name}</Text>
                     <Text style={styles.visitDate}>
-                      {new Date(v.checked_in_at).toLocaleDateString()}
+                      {formatDate(v.checked_in_at)}
                     </Text>
                   </View>
                 ))}
