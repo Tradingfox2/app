@@ -46,12 +46,29 @@ export default function Profile() {
   const [rankingOptIn, setRankingOptIn] = useState(user?.activity_ranking_opt_in ?? false);
   useEffect(() => setRankingOptIn(user?.activity_ranking_opt_in ?? false), [user?.activity_ranking_opt_in]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [requestCount, setRequestCount] = useState(0);
+  const [isPrivate, setIsPrivate] = useState(user?.is_private ?? false);
+  const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const privacyBusy = useRef(false);
+  useEffect(() => setIsPrivate(user?.is_private ?? false), [user?.is_private]);
+  const savePrivacy = async (value: boolean) => {
+    if (privacyBusy.current) return;
+    privacyBusy.current = true; setSavingPrivacy(true); setRankingError("");
+    // Optimistic so the switch does not stutter; reverted if the write fails.
+    setIsPrivate(value);
+    try { const updated = await api.updatePrivacy(value); setIsPrivate(updated.is_private ?? value); await refresh(); }
+    catch { setIsPrivate(!value); setRankingError(t("Something went wrong")); }
+    finally { privacyBusy.current = false; setSavingPrivacy(false); }
+  };
   // Refreshed on focus so the badge is current after reading the centre.
   // A failure just leaves the badge hidden — it must never break Profile.
   useFocusEffect(useCallback(() => {
     let cancelled = false;
     api.unreadNotificationCount()
       .then(result => { if (!cancelled) setUnreadCount(result.count); })
+      .catch(() => undefined);
+    api.followRequests()
+      .then(rows => { if (!cancelled) setRequestCount(rows.length); })
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, []));
@@ -165,6 +182,14 @@ export default function Profile() {
             </View>
             <Ionicons name={user?.role === "coach" ? "analytics" : "ribbon"} size={28} color={colors.brand} />
           </Pressable>
+          <Pressable testID="open-follow-requests" style={styles.refCard} onPress={() => router.push("/follow-requests")}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refLabel}>{t("FOLLOW REQUESTS")}</Text>
+              <Text style={styles.refMeta}>{t("People asking to follow your private account.")}</Text>
+            </View>
+            {requestCount > 0 ? <View testID="follow-request-badge" style={styles.badge}><Text style={styles.badgeText}>{requestCount > 99 ? "99+" : requestCount}</Text></View> : null}
+            <Ionicons name="person-add" size={28} color={colors.brand} />
+          </Pressable>
           <Pressable testID="open-notifications" style={styles.refCard} onPress={() => router.push("/notifications")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("NOTIFICATIONS")}</Text>
@@ -218,6 +243,13 @@ export default function Profile() {
               <Text style={styles.refMeta}>{t("Publishes your name and active-day count from opted-in public channels. Off by default; opt out anytime.")}</Text>
             </View>
             <Switch testID="activity-ranking-consent" accessibilityLabel={t("Appear in activity rankings")} value={rankingOptIn} disabled={savingRanking} onValueChange={value => void saveRanking(value)} trackColor={{ true: colors.brand }} />
+          </View>
+          <View style={styles.refCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refLabel}>{t("Private account")}</Text>
+              <Text style={styles.refMeta}>{t("New followers have to be approved, and only approved followers see your posts.")}</Text>
+            </View>
+            <Switch testID="private-account-toggle" accessibilityLabel={t("Private account")} value={isPrivate} disabled={savingPrivacy} onValueChange={value => void savePrivacy(value)} trackColor={{ true: colors.brand }} />
           </View>
           {rankingError ? <Text accessibilityRole="alert" style={{ color: colors.error }}>{rankingError}</Text> : null}
         </View>

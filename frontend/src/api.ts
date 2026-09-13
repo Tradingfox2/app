@@ -20,6 +20,8 @@ export type User = {
   avatar_url: string | null;
   preferred_locale: SupportedLocale;
   activity_ranking_opt_in?: boolean;
+  /** A private account turns incoming follows into requests. */
+  is_private?: boolean;
   staff_role?: StaffRole | null;
 };
 
@@ -136,6 +138,33 @@ export type MessageReaction = { emoji: string; user_ids: string[] };
 
 export type MentionedUser = Pick<User, "id" | "full_name" | "avatar_url">;
 
+/** `none` -> can follow, `pending` -> request sent, `following` -> accepted. */
+export type FollowState = "none" | "pending" | "following";
+
+export type Connection = MentionedUser & { followed_by_me: boolean };
+
+export type FollowRequest = {
+  id?: string;
+  follower_id: string;
+  followee_id: string;
+  status: "pending";
+  created_at: string;
+  follower: MentionedUser | null;
+};
+
+export type PublicProfile = MentionedUser & {
+  followers: number;
+  following: number;
+  posts: number;
+  follow_state: FollowState;
+  followed_by_me: boolean;
+  is_private: boolean;
+  is_blocked: boolean;
+  is_muted: boolean;
+  can_view_posts: boolean;
+  can_message: boolean;
+};
+
 export type AppNotification = {
   id: string;
   user_id: string;
@@ -143,6 +172,10 @@ export type AppNotification = {
   title: string;
   body: string;
   metadata: Record<string, unknown>;
+  /** Everyone who triggered this row; >1 when the event aggregated. */
+  actor_ids?: string[];
+  actor_count?: number;
+  actors?: MentionedUser[];
   read_at: string | null;
   created_at: string;
 };
@@ -209,11 +242,14 @@ export type Post = {
   repost_count: number;
   liked_by_me: boolean;
   reposted_by_me: boolean;
+  workout_id?: string | null;
+  status?: string;
   created_at: string;
 };
 
 export type PostComment = {
   id: string;
+  status?: string;
   post_id: string;
   author_id: string;
   author: Pick<User, "id" | "full_name" | "avatar_url"> | null;
@@ -223,6 +259,7 @@ export type PostComment = {
 
 export type DirectMessage = {
   id: string;
+  thread_key?: string;
   sender_id: string;
   recipient_id: string;
   content: string;
@@ -377,6 +414,8 @@ export const api = {
     }),
   updateRankingPreference: (activity_ranking_opt_in: boolean) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ activity_ranking_opt_in }) }),
+  updatePrivacy: (is_private: boolean) =>
+    request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ is_private }) }),
 
   dashboard: () => request<any>("/dashboard"),
 
@@ -554,10 +593,27 @@ export const api = {
   addComment: (id: string, content: string) =>
     request<PostComment>(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ content }) }),
   uploadMedia: (file: UploadFile) => upload<MediaItem>("/media", file),
-  follow: (userId: string) => request<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
-  unfollow: (userId: string) => request<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
-  publicProfile: (userId: string) =>
-    request<Pick<User, "id" | "full_name" | "avatar_url"> & { followers: number; following: number; posts: number; followed_by_me: boolean; can_message: boolean }>(`/users/${userId}/profile`),
+  /** Returns `state: "pending"` when the target account is private. */
+  follow: (userId: string) =>
+    request<{ state: FollowState; user_id: string; following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
+  /** Also withdraws a pending request — one control, both meanings. */
+  unfollow: (userId: string) =>
+    request<{ state: FollowState; user_id: string; following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
+  publicProfile: (userId: string) => request<PublicProfile>(`/users/${userId}/profile`),
+
+  followRequests: () => request<FollowRequest[]>("/follow-requests"),
+  approveFollowRequest: (followerId: string) =>
+    request<{ state: FollowState; follower_id: string }>(`/follow-requests/${followerId}/approve`, { method: "POST" }),
+  denyFollowRequest: (followerId: string) =>
+    request<void>(`/follow-requests/${followerId}`, { method: "DELETE" }),
+
+  followers: (userId: string) => request<Connection[]>(`/users/${userId}/followers`),
+  followingList: (userId: string) => request<Connection[]>(`/users/${userId}/following`),
+
+  blockUser: (userId: string) => request<{ blocked: boolean }>(`/users/${userId}/block`, { method: "POST" }),
+  unblockUser: (userId: string) => request<void>(`/users/${userId}/block`, { method: "DELETE" }),
+  muteUser: (userId: string) => request<{ muted: boolean }>(`/users/${userId}/mute`, { method: "POST" }),
+  unmuteUser: (userId: string) => request<void>(`/users/${userId}/mute`, { method: "DELETE" }),
   dmThreads: () => request<DmThread[]>("/dm"),
   dmMessages: (peerId: string) => request<DirectMessage[]>(`/dm/${peerId}/messages`),
   sendDm: (peerId: string, content: string) =>

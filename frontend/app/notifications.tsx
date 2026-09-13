@@ -7,13 +7,37 @@ import { api, AppNotification } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
-/** Icon per notification kind; anything unrecognised still renders sensibly. */
+/** Icon per notification kind; anything unrecognised still renders sensibly.
+ *  `moderation_action` and `lab_report_ready` are the keys the backend actually
+ *  writes — the previous `moderation` / `lab_report` entries never matched. */
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  follow: "person-add-outline",
+  follow_request: "person-add",
+  follow_accepted: "checkmark-circle-outline",
+  post_like: "heart",
+  post_comment: "chatbubble-outline",
+  post_repost: "repeat",
+  post_mention: "at",
   mention: "at",
-  moderation: "shield-checkmark-outline",
-  lab_report: "flask-outline",
+  direct_message: "mail-outline",
+  membership: "people-outline",
+  coach_decision: "ribbon-outline",
+  moderation_action: "shield-checkmark-outline",
+  lab_report_ready: "flask-outline",
   community: "people-outline",
 };
+
+/**
+ * "Ana and 3 others liked your post".
+ *
+ * The backend title names only the most recent actor, so the count is appended
+ * here. Falls back to a generic line for rows written without a title.
+ */
+function summarise(row: AppNotification, t: (key: string) => string): string {
+  const base = row.title?.trim() || t("New activity");
+  const others = (row.actor_count ?? 0) - 1;
+  return others > 0 ? `${base} ${t("and {count} others").replace("{count}", String(others))}` : base;
+}
 
 export default function NotificationsScreen() {
   const router = useRouter(); const { t, formatDate } = useI18n();
@@ -52,7 +76,20 @@ export default function NotificationsScreen() {
       api.markNotificationRead(row.id).catch(() => void load(unreadOnly));
     }
     const channelId = row.metadata?.channel_id;
-    if (typeof channelId === "string") router.push({ pathname: "/channel/[id]", params: { id: channelId } });
+    if (typeof channelId === "string") {
+      router.push({ pathname: "/channel/[id]", params: { id: channelId } });
+      return;
+    }
+    // Every event written through notify() carries target_type + target_id.
+    const target = typeof row.metadata?.target_id === "string" ? row.metadata.target_id : null;
+    if (!target) return;
+    switch (row.metadata?.target_type) {
+      case "user": return router.push({ pathname: "/user/[id]", params: { id: target } });
+      case "dm": return router.push({ pathname: "/dm/[id]", params: { id: target } });
+      case "community": return router.push({ pathname: "/community/[id]", params: { id: target } });
+      case "post": return router.push("/community");
+      default: return;
+    }
   };
 
   return <SafeAreaView style={styles.safe}>
@@ -77,7 +114,7 @@ export default function NotificationsScreen() {
       renderItem={({ item }) => <Pressable accessibilityRole="button" testID={`notification-${item.id}`} onPress={() => void open(item)} style={[styles.row, !item.read_at && styles.rowUnread]}>
         <Ionicons name={ICONS[item.type] ?? "notifications-outline"} size={18} color={item.read_at ? colors.textDim : colors.brand} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.title}>{summarise(item, t)}</Text>
           {item.body ? <Text numberOfLines={2} style={styles.body}>{item.body}</Text> : null}
           <Text style={styles.time}>{formatDate(item.created_at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
         </View>
