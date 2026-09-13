@@ -44,12 +44,18 @@ export default function ManageCommunity() {
   }, [load]));
   // Every mutation is single-flight and re-reads from the server on success, so
   // a permission change can never be shown as applied when it was not.
-  const run = async (action: () => Promise<void>, failure = "Something went wrong") => {
+  // `generic` keeps the fallback copy even when the server sent a reason, for the
+  // actions that have always reported failure generically.
+  const run = async (action: () => Promise<void>, failure = "Something went wrong", generic = false) => {
     if (busy.current) return;
     const current = generation.current;
     busy.current = true; setReviewing(true); setError("");
     try { await action(); }
-    catch (cause) { if (current === generation.current) setError(cause instanceof Error ? cause.message : t(failure)); }
+    catch (cause) {
+      if (current === generation.current) {
+        setError(!generic && cause instanceof Error ? cause.message : t(failure));
+      }
+    }
     finally { if (current === generation.current) { busy.current = false; setReviewing(false); } }
   };
   const review = (memberId: string, status: "active" | "rejected") => run(async () => {
@@ -63,7 +69,7 @@ export default function ManageCommunity() {
   const publishChannel = (channel: CommunityChannel, value: boolean) => run(async () => {
     const updated = await api.updateChannelRanking(channel.id, value);
     setChannels(rows => rows.map(row => row.id === updated.id ? { ...row, ...updated } : row));
-  });
+  }, "Something went wrong", true);
   const addRole = () => run(async () => {
     if (!id || roleName.trim().length < 2) return;
     await api.createRole(id, { name: roleName.trim() }); setRoleName(""); await load();
