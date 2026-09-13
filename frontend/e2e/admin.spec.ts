@@ -98,3 +98,13 @@ test("audit tab shows who did what", async ({ page }) => {
   await expect(page.getByText(`${support.email} → user:${target.id}`, { exact: true })).toBeVisible();
   await expect(page.getByText("Repeated harassment", { exact: true })).toBeVisible();
 });
+
+test("the Profile entry point actually opens the console", async ({ page }) => {
+  await fixtures(page, support);
+  await page.goto("/profile");
+  await page.getByTestId("open-admin-console").click();
+  // Regression guard: app/admin/index.tsx is served at /admin, so pushing
+  // "/admin/index" lands on the not-found screen instead.
+  await expect(page.getByTestId("admin-tab-users")).toBeVisible();
+  await expect(page.getByText("Page could not be found.", { exact: true })).toHaveCount(0);
+});

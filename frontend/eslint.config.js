@@ -5,6 +5,6 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*', 'src/components/anatomy/ref/*'],
+    ignores: ['dist/*', 'src/components/anatomy/ref/*', 'scripts/cmd-guard/vendor/*'],
   },
 ]);

@@ -3,12 +3,13 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable,
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { api, CommunityChannel, CommunityMessage } from "@/src/api";
+import { api, CommunityChannel, CommunityMessage, MentionedUser, Membership } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { ADD_REACTION, DEFAULT_MEMBER, MANAGE_MESSAGES, PIN_MESSAGE, SEND_MESSAGE, can } from "@/src/permissions";
 import { useRealtimeChannel } from "@/src/realtime";
+import { activeQuery, applyMention, segment } from "@/src/mentions";
 
 const QUICK_REACTIONS = ["💪", "🔥", "👏", "🎯", "😂"];
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -24,6 +25,7 @@ export default function ChannelScreen() {
   const [editing, setEditing] = useState<CommunityMessage | null>(null);
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [pinsOpen, setPinsOpen] = useState(false);
+  const [roster, setRoster] = useState<MentionedUser[]>([]);
   const revision = useRef(0);
   const sendingRef = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,14 @@ export default function ChannelScreen() {
       const [meta, rows] = await Promise.all([api.channel(id), api.channelMessages(id)]);
       if (requestRevision !== revision.current) return;
       setChannel(meta); setMessages(rows); setError("");
+      // Roster powers @ suggestions; a failure here must not break the channel.
+      api.communityMembers(meta.community_id)
+        .then((members: Membership[]) => {
+          if (requestRevision === revision.current) {
+            setRoster(members.filter(m => m.status === "active" && m.user).map(m => m.user as MentionedUser));
+          }
+        })
+        .catch(() => undefined);
     } catch (cause) {
       if (requestRevision === revision.current) setError(cause instanceof Error ? cause.message : t("Could not load messages"));
     } finally {
@@ -106,6 +116,14 @@ export default function ChannelScreen() {
   const startEdit = (message: CommunityMessage) => { setEditing(message); setReplyTo(null); setDraft(message.content); setActionsFor(null); };
   const canEdit = (message: CommunityMessage) => message.author_id === user?.id && Date.now() - new Date(message.created_at).getTime() < EDIT_WINDOW_MS;
   const canDelete = (message: CommunityMessage) => message.author_id === user?.id || can(mask, MANAGE_MESSAGES);
+  // Suggestions open only while the caret sits in an unbroken run after "@",
+  // so an email address in a message never pops the picker.
+  const query = readOnly ? null : activeQuery(draft);
+  const suggestions = query === null ? [] : roster
+    .filter(candidate => candidate.id !== user?.id)
+    .filter(candidate => (candidate.full_name ?? "").toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 5);
+  const pickMention = (candidate: MentionedUser) => setDraft(current => applyMention(current, candidate));
 
   const renderMessage = ({ item }: { item: CommunityMessage }) => {
     const own = item.author_id === user?.id;
@@ -115,7 +133,10 @@ export default function ChannelScreen() {
       {item.reply_to ? <View style={styles.replyQuote}><Text numberOfLines={1} style={styles.replyQuoteText}>{item.reply_to.content}</Text></View> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={t("Message actions")} testID={`message-actions-${item.id}`} onLongPress={() => setActionsFor(open ? null : item.id)} delayLongPress={250}>
         <View style={styles.messageHead}><Text style={styles.author}>{own ? t("You") : item.author?.full_name || t("Member")}</Text><Text style={styles.time}>{formatDate(item.created_at, { hour: "2-digit", minute: "2-digit" })}</Text>{item.edited_at ? <Text style={styles.time}>{t("edited")}</Text> : null}</View>
-        <Text style={styles.messageText}>{item.content}</Text>
+        <Text style={styles.messageText}>{segment(item.content, item.mentions ?? []).map((part, index) =>
+          part.mention
+            ? <Text key={index} style={styles.mention}>{part.text}</Text>
+            : <Text key={index}>{part.text}</Text>)}</Text>
       </Pressable>
       {item.reactions?.length ? <View style={styles.reactionRow}>{item.reactions.map(row => {
         const mine = row.user_ids.includes(user?.id ?? "");
@@ -143,9 +164,15 @@ export default function ChannelScreen() {
     <FlatList data={messages} keyExtractor={item => item.id} contentContainerStyle={styles.list} ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="chatbubbles-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{t("Start the conversation")}</Text></View> : null} renderItem={renderMessage} />
     {replyTo ? <View style={styles.contextBar} testID="reply-bar"><Ionicons name="return-down-back" size={14} color={colors.brand} /><Text numberOfLines={1} style={styles.contextText}>{replyTo.content}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel")} testID="cancel-reply" onPress={() => setReplyTo(null)}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable></View> : null}
     {editing ? <View style={styles.contextBar} testID="edit-bar"><Ionicons name="pencil" size={14} color={colors.brand} /><Text numberOfLines={1} style={styles.contextText}>{t("Editing message")}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel")} testID="cancel-edit" onPress={() => { setEditing(null); setDraft(""); }}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable></View> : null}
+    {suggestions.length ? <View style={styles.suggestions} testID="mention-suggestions">
+      {suggestions.map(candidate => <Pressable key={candidate.id} accessibilityRole="button" testID={`mention-${candidate.id}`} onPress={() => pickMention(candidate)} style={styles.suggestion}>
+        <Ionicons name="at" size={13} color={colors.brand} />
+        <Text style={styles.suggestionText}>{candidate.full_name || t("Member")}</Text>
+      </Pressable>)}
+    </View> : null}
     {readOnly
       ? <View style={styles.readOnly} testID="composer-read-only"><Ionicons name="lock-closed-outline" size={14} color={colors.textDim} /><Text style={styles.readOnlyText}>{t("Only channel managers can post here.")}</Text></View>
       : <View style={styles.composer}><TextInput value={draft} onChangeText={setDraft} editable={!sending} maxLength={4000} multiline placeholder={t("Message the channel...")} placeholderTextColor={colors.textDim} style={styles.input} testID="composer-input" /><Pressable accessibilityRole="button" disabled={!draft.trim() || sending || loading} onPress={send} accessibilityLabel={t("Send message")} testID="composer-send" style={[styles.send, (!draft.trim() || sending || loading) && styles.disabled]}><Ionicons name={editing ? "checkmark" : "send"} size={17} color={colors.brandOn} /></Pressable></View>}
   </KeyboardAvoidingView></SafeAreaView>;
 }
-const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.bg }, header: { height: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, headerTitle: { ...type.section, color: colors.text }, live: { color: colors.brand, fontSize: 9, fontWeight: "900", marginTop: 3 }, list: { padding: spacing.lg, paddingBottom: spacing.xl }, message: { maxWidth: "86%", alignSelf: "flex-start", backgroundColor: colors.surface2, borderLeftWidth: 2, borderLeftColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm }, messageOwn: { alignSelf: "flex-end", borderLeftColor: colors.brand }, messageHead: { flexDirection: "row", gap: spacing.md, alignItems: "center" }, author: { color: colors.brand, fontSize: 11, fontWeight: "900" }, time: { color: colors.textDim, fontSize: 10 }, messageText: { color: colors.text, lineHeight: 20, marginTop: 5 }, composer: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface }, input: { flex: 1, minHeight: 44, maxHeight: 110, paddingHorizontal: spacing.md, paddingVertical: 11, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, color: colors.text, backgroundColor: colors.bg }, send: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" }, disabled: { opacity: 0.4 }, error: { color: colors.error, paddingHorizontal: spacing.lg, paddingTop: spacing.sm }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted }, reactionRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 }, pill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg }, pillMine: { borderColor: colors.brand }, pillText: { color: colors.text, fontSize: 11 }, actions: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: colors.border }, action: { minWidth: 32, height: 32, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, backgroundColor: colors.bg }, actionEmoji: { fontSize: 15 }, replyQuote: { borderLeftWidth: 2, borderLeftColor: colors.brand, paddingLeft: spacing.sm, marginBottom: 5 }, replyQuoteText: { color: colors.textDim, fontSize: 11, fontStyle: "italic" }, pinnedTag: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 4 }, pinnedText: { color: colors.brand, fontSize: 9, fontWeight: "900" }, pinsDrawer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface }, pinsItem: { color: colors.textMuted, fontSize: 12 }, contextBar: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface2 }, contextText: { flex: 1, color: colors.textMuted, fontSize: 12 }, readOnly: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface }, readOnlyText: { color: colors.textDim, fontSize: 12 } });
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.bg }, header: { height: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, headerTitle: { ...type.section, color: colors.text }, live: { color: colors.brand, fontSize: 9, fontWeight: "900", marginTop: 3 }, list: { padding: spacing.lg, paddingBottom: spacing.xl }, message: { maxWidth: "86%", alignSelf: "flex-start", backgroundColor: colors.surface2, borderLeftWidth: 2, borderLeftColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm }, messageOwn: { alignSelf: "flex-end", borderLeftColor: colors.brand }, messageHead: { flexDirection: "row", gap: spacing.md, alignItems: "center" }, author: { color: colors.brand, fontSize: 11, fontWeight: "900" }, time: { color: colors.textDim, fontSize: 10 }, messageText: { color: colors.text, lineHeight: 20, marginTop: 5 }, composer: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface }, input: { flex: 1, minHeight: 44, maxHeight: 110, paddingHorizontal: spacing.md, paddingVertical: 11, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, color: colors.text, backgroundColor: colors.bg }, send: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" }, disabled: { opacity: 0.4 }, error: { color: colors.error, paddingHorizontal: spacing.lg, paddingTop: spacing.sm }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted }, reactionRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 }, pill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.bg }, pillMine: { borderColor: colors.brand }, pillText: { color: colors.text, fontSize: 11 }, actions: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: colors.border }, action: { minWidth: 32, height: 32, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, backgroundColor: colors.bg }, actionEmoji: { fontSize: 15 }, replyQuote: { borderLeftWidth: 2, borderLeftColor: colors.brand, paddingLeft: spacing.sm, marginBottom: 5 }, replyQuoteText: { color: colors.textDim, fontSize: 11, fontStyle: "italic" }, pinnedTag: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 4 }, pinnedText: { color: colors.brand, fontSize: 9, fontWeight: "900" }, pinsDrawer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface }, pinsItem: { color: colors.textMuted, fontSize: 12 }, contextBar: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface2 }, contextText: { flex: 1, color: colors.textMuted, fontSize: 12 }, readOnly: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface }, readOnlyText: { color: colors.textDim, fontSize: 12 }, mention: { color: colors.brand, fontWeight: "800" }, suggestions: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface2, paddingVertical: 4 }, suggestion: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg }, suggestionText: { color: colors.text, fontSize: 13 } });

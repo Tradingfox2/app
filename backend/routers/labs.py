@@ -630,14 +630,7 @@ async def biomarkers_grouped(user: dict = Depends(current_user), owner_id: Optio
     return sorted(groups.values(), key=lambda g: g["name"])
 
 
-@router.get("/notifications")
-async def list_notifications(user: dict = Depends(current_user)):
-    return [
-        clean(n)
-        async for n in db.notifications.find({"user_id": user["id"]}, {"_id": 0})
-        .sort("created_at", -1)
-        .limit(20)
-    ]
+# Notifications moved to routers/notifications.py so the collection has one owner.
 
 
 class N8nCallback(BaseModel):

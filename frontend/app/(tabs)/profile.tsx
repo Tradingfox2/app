@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { api, type SupportedLocale } from "@/src/api";
 import { card, colors, radius, spacing, type } from "@/src/theme";
@@ -45,6 +45,16 @@ export default function Profile() {
   const [rankingError, setRankingError] = useState("");
   const [rankingOptIn, setRankingOptIn] = useState(user?.activity_ranking_opt_in ?? false);
   useEffect(() => setRankingOptIn(user?.activity_ranking_opt_in ?? false), [user?.activity_ranking_opt_in]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  // Refreshed on focus so the badge is current after reading the centre.
+  // A failure just leaves the badge hidden — it must never break Profile.
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    api.unreadNotificationCount()
+      .then(result => { if (!cancelled) setUnreadCount(result.count); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []));
   const saveRanking = async (value: boolean) => {
     if (rankingBusy.current) return;
     rankingBusy.current = true; setSavingRanking(true); setRankingError("");
@@ -147,7 +157,7 @@ export default function Profile() {
           <Text style={styles.sectionTitle}>{t("COACH & COMMUNITY")}</Text>
           <Pressable
             style={styles.refCard}
-            onPress={() => router.push(user?.role === "coach" ? "/partner/index" : "/coach/onboarding")}
+            onPress={() => router.push((user?.role === "coach" ? "/partner" : "/coach/onboarding") as Href)}
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t(user?.role === "coach" ? "PARTNER DASHBOARD" : "BECOME A COACH")}</Text>
@@ -155,8 +165,16 @@ export default function Profile() {
             </View>
             <Ionicons name={user?.role === "coach" ? "analytics" : "ribbon"} size={28} color={colors.brand} />
           </Pressable>
+          <Pressable testID="open-notifications" style={styles.refCard} onPress={() => router.push("/notifications")}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refLabel}>{t("NOTIFICATIONS")}</Text>
+              <Text style={styles.refMeta}>{t("Mentions, moderation decisions and lab results.")}</Text>
+            </View>
+            {unreadCount > 0 ? <View testID="notification-badge" style={styles.badge}><Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text></View> : null}
+            <Ionicons name="notifications" size={28} color={colors.brand} />
+          </Pressable>
           {user?.staff_role ? (
-            <Pressable testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin/index")}>
+            <Pressable testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.refLabel}>{t("STAFF CONSOLE")}</Text>
                 <Text style={styles.refMeta}>{t("Moderation queue, accounts and audit log.")}</Text>
@@ -367,6 +385,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  badge: { minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: colors.brandOn, fontSize: 11, fontWeight: "900" },
   refLabel: { color: colors.textMuted, fontSize: 10, letterSpacing: 1.5, fontWeight: "800" },
   refCode: { color: colors.brand, fontSize: 22, fontWeight: "900", letterSpacing: 3, marginTop: 4 },
   refMeta: { color: colors.textMuted, fontSize: 12, marginTop: 4 },

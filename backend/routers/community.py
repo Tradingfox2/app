@@ -751,6 +751,7 @@ async def list_messages(
         message.setdefault("reply_to_id", None)
         message.setdefault("pinned_at", None)
         message.setdefault("edited_at", None)
+        message["mentions"] = await notifications.resolve_mentions(message.get("content", ""))
         if message["reply_to_id"]:
             parent = await db.messages.find_one(
                 {"id": message["reply_to_id"]},
@@ -827,6 +828,7 @@ async def create_message(
     await db.messages.insert_one(dict(message))
     message["author"] = {key: user.get(key) for key in ("id", "full_name", "avatar_url")}
     message["reply_to"] = reply_to
+    message["mentions"] = await notifications.resolve_mentions(content)
     published = clean(message)
     # After the write commits: a dropped publish costs a nudge, never the message.
     await realtime.publish(

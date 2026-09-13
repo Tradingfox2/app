@@ -335,6 +335,12 @@ async def lifespan(app: FastAPI):
     await db.audit_log.create_index([("created_at", -1)])
     await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
     await db.user_notes.create_index([("user_id", 1), ("created_at", -1)])
+    # Read by _roles() on every permission resolve — the hot path for each
+    # channel read and message write, so it must never be a collection scan.
+    await db.community_roles.create_index([("community_id", 1), ("rank", 1)])
+    await db.community_roles.create_index("id", unique=True)
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("read_at", 1)])
     # Terra webhooks are acknowledged after being persisted. Replay unfinished
     # inbox entries on restart so an interrupted background task is not lost.
     from routers.labs import process_claimed_terra_lab_event
@@ -870,6 +876,7 @@ from routers.program import router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
+from routers.notifications import router as notifications_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
 
 api.include_router(program_router)
@@ -877,6 +884,7 @@ api.include_router(community_router)
 api.include_router(social_router)
 api.include_router(admin_router)
 api.include_router(labs_router)
+api.include_router(notifications_router)
 api.include_router(wearables_router)
 api.include_router(muscles_router)
 api.include_router(tips_router)

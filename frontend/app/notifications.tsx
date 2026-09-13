@@ -1,0 +1,89 @@
+import { useCallback, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
+import { api, AppNotification } from "@/src/api";
+import { colors, radius, spacing, type } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
+
+/** Icon per notification kind; anything unrecognised still renders sensibly. */
+const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  mention: "at",
+  moderation: "shield-checkmark-outline",
+  lab_report: "flask-outline",
+  community: "people-outline",
+};
+
+export default function NotificationsScreen() {
+  const router = useRouter(); const { t, formatDate } = useI18n();
+  const [rows, setRows] = useState<AppNotification[]>([]);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const busy = useRef(false);
+  const revision = useRef(0);
+  const load = useCallback(async (only: boolean) => {
+    const current = ++revision.current;
+    try {
+      const data = await api.notifications(only);
+      if (current === revision.current) { setRows(data); setError(""); }
+    } catch (cause) {
+      if (current === revision.current) setError(cause instanceof Error ? cause.message : t("Could not load notifications"));
+    } finally { if (current === revision.current) setLoading(false); }
+  }, [t]);
+  useFocusEffect(useCallback(() => {
+    busy.current = false; setLoading(true); setError(""); void load(unreadOnly);
+    return () => { revision.current += 1; };
+  }, [load, unreadOnly]));
+
+  const unread = rows.filter(row => !row.read_at).length;
+  const markAll = async () => {
+    if (busy.current || !unread) return;
+    busy.current = true;
+    try { await api.markAllNotificationsRead(); await load(unreadOnly); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { busy.current = false; }
+  };
+  // Opening marks read and navigates; the read write must not block the jump.
+  const open = async (row: AppNotification) => {
+    if (!row.read_at) {
+      setRows(current => current.map(item => item.id === row.id ? { ...item, read_at: new Date().toISOString() } : item));
+      api.markNotificationRead(row.id).catch(() => void load(unreadOnly));
+    }
+    const channelId = row.metadata?.channel_id;
+    if (typeof channelId === "string") router.push({ pathname: "/channel/[id]", params: { id: channelId } });
+  };
+
+  return <SafeAreaView style={styles.safe}>
+    <View style={styles.header}>
+      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <View style={{ flex: 1 }}><Text style={styles.headerTitle}>{t("NOTIFICATIONS")}</Text>{unread ? <Text style={styles.live}>{t("{count} unread").replace("{count}", String(unread))}</Text> : null}</View>
+      {unread ? <Pressable accessibilityRole="button" testID="mark-all-read" onPress={() => void markAll()} style={styles.icon}><Ionicons name="checkmark-done" size={20} color={colors.brand} /></Pressable> : null}
+    </View>
+    <View style={styles.tabs}>
+      {([["all", t("ALL")], ["unread", t("UNREAD")]] as const).map(([key, label]) => {
+        const on = (key === "unread") === unreadOnly;
+        return <Pressable key={key} accessibilityRole="button" testID={`notifications-tab-${key}`} onPress={() => { setUnreadOnly(key === "unread"); setLoading(true); }} style={[styles.tab, on && styles.tabOn]}><Text style={[styles.tabText, on && styles.tabTextOn]}>{label}</Text></Pressable>;
+      })}
+    </View>
+    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load(unreadOnly)} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+    {loading ? <ActivityIndicator accessibilityLabel={t("Loading...")} color={colors.brand} /> : null}
+    <FlatList
+      data={rows}
+      keyExtractor={item => item.id}
+      contentContainerStyle={styles.list}
+      ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="notifications-off-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{unreadOnly ? t("Nothing unread.") : t("No notifications yet.")}</Text></View> : null}
+      renderItem={({ item }) => <Pressable accessibilityRole="button" testID={`notification-${item.id}`} onPress={() => void open(item)} style={[styles.row, !item.read_at && styles.rowUnread]}>
+        <Ionicons name={ICONS[item.type] ?? "notifications-outline"} size={18} color={item.read_at ? colors.textDim : colors.brand} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{item.title}</Text>
+          {item.body ? <Text numberOfLines={2} style={styles.body}>{item.body}</Text> : null}
+          <Text style={styles.time}>{formatDate(item.created_at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
+        </View>
+        {!item.read_at ? <View testID={`unread-dot-${item.id}`} style={styles.dot} /> : null}
+      </Pressable>}
+    />
+  </SafeAreaView>;
+}
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.bg }, header: { height: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, headerTitle: { ...type.section, color: colors.text }, live: { color: colors.brand, fontSize: 9, fontWeight: "900", marginTop: 3 }, tabs: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm }, tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong }, tabOn: { borderColor: colors.brand, backgroundColor: colors.surface2 }, tabText: { color: colors.textMuted, fontSize: 11, fontWeight: "900" }, tabTextOn: { color: colors.brand }, list: { padding: spacing.lg, paddingBottom: spacing.xxxl }, row: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, rowUnread: { backgroundColor: colors.surface2, paddingHorizontal: spacing.sm }, title: { color: colors.text, fontWeight: "800", fontSize: 13 }, body: { color: colors.textMuted, fontSize: 12, marginTop: 2 }, time: { color: colors.textDim, fontSize: 10, marginTop: 3 }, dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted }, error: { color: colors.error, paddingHorizontal: spacing.lg }, retry: { color: colors.brand, fontSize: 11, fontWeight: "900" } });

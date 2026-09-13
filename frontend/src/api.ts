@@ -134,6 +134,19 @@ export type CommunityRole = {
 
 export type MessageReaction = { emoji: string; user_ids: string[] };
 
+export type MentionedUser = Pick<User, "id" | "full_name" | "avatar_url">;
+
+export type AppNotification = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+};
+
 export type CommunityMessage = {
   id: string;
   channel_id: string;
@@ -146,6 +159,8 @@ export type CommunityMessage = {
   reply_to?: { id: string; author_id: string; content: string } | null;
   pinned_at?: string | null;
   edited_at?: string | null;
+  /** Display names for the <@id> tokens in `content`, resolved server-side. */
+  mentions?: MentionedUser[];
 };
 
 export type CoachApplication = {
@@ -467,6 +482,13 @@ export const api = {
   pinMessage: (messageId: string) => request<CommunityMessage>(`/messages/${messageId}/pin`, { method: "POST" }),
   unpinMessage: (messageId: string) => request<void>(`/messages/${messageId}/pin`, { method: "DELETE" }),
   channelPins: (channelId: string) => request<CommunityMessage[]>(`/channels/${channelId}/pins`),
+  notifications: (unreadOnly = false) =>
+    request<AppNotification[]>(`/notifications${unreadOnly ? "?unread_only=true" : ""}`),
+  unreadNotificationCount: () => request<{ count: number }>("/notifications/unread-count"),
+  markNotificationRead: (id: string) =>
+    request<AppNotification>(`/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () =>
+    request<{ updated: number }>("/notifications/read-all", { method: "POST" }),
   realtimeToken: () => request<{ enabled: boolean; token: string | null; url: string | null }>("/realtime/token"),
 
   createChannelMessage: (id: string, content: string, reply_to_id?: string | null) =>

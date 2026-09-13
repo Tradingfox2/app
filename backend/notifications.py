@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from server import db, new_id, now
+from server import clean, db, new_id, now
 
 #: `<@a1b2c3d4-...>` — what the composer emits when a member picks a suggestion.
 #: Deliberately permissive about the id charset: membership is what decides who
@@ -38,6 +38,23 @@ def mentions_everyone(content: str) -> bool:
 def strip_everyone(content: str) -> str:
     """Remove the everyone token from content the author may not broadcast."""
     return (content or "").replace(EVERYONE_TOKEN, "").strip()
+
+
+async def resolve_mentions(content: str) -> list[dict]:
+    """Display names for the ids mentioned in `content`.
+
+    The client renders `<@id>` from this list, so a message stays readable even
+    after a member changes their name — the token is the id, never the label.
+    """
+    ids = parse_mentions(content)
+    if not ids:
+        return []
+    return [
+        clean(row)
+        async for row in db.users.find(
+            {"id": {"$in": ids}}, {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
+        )
+    ]
 
 
 async def create(
