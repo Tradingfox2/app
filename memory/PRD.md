@@ -108,3 +108,39 @@ referrals — RLS enabled on every health/user table.
   `routers/wearables.py`, `ai.py` (LLM helpers), `storage.py` (object storage).
 - `.env`: EMERGENT_LLM_KEY set; optional TERRA_API_KEY/TERRA_DEV_ID/
   N8N_WEBHOOK_SECRET activate real integrations.
+
+## Delivered (Sept 2026, local runtime)
+
+### AI coach — real providers, no vendor SDK
+- `ai.py` rewritten on plain httpx: `LLM_PROVIDER=anthropic|ollama|openrouter|auto`.
+  Claude Messages API (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, default
+  `claude-sonnet-5`), Ollama `/api/chat` (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`,
+  `OLLAMA_VISION_MODEL` for lab OCR), OpenRouter chat completions. `auto` picks
+  Anthropic → OpenRouter → Ollama. `<think>` blocks from reasoning models stripped.
+- `POST /api/coach/muscle-circuit` now calls the LLM (strict JSON, validated
+  against the allowed slugs) and falls back to a rule-based circuit only when no
+  provider is reachable (`source` field tells which).
+- `GET /api/coach/status` (provider, model, connected, installed Ollama models),
+  `GET /api/coach/models/ollama`. Home "Coach tip" card shows a live AI badge.
+
+### Add exercises to a workout from the Muscle Explorer
+- Workouts carry `planned_exercise_slugs`; `GET /api/workouts/{id}` resolves them;
+  `POST /api/workouts/{id}/plan` appends (409 once finished).
+- Detail sheet: `+` on every exercise card, "Add N exercises to workout" on each
+  circuit (deterministic + AI). Reuses the open session or creates one; toast with
+  OPEN → logger. Logger shows a PLANNED queue (chips, ✓ when sets logged) and
+  preselects the next unlogged planned exercise; reloads on focus.
+
+### Home dashboard
+- `/api/dashboard` adds `training` (sets, tonnage, minutes, muscles, streak),
+  `resting_hr`, `wearable_connected`, `active_workout`.
+- New TRAINING · 7 DAYS card, "Connect a source" CTA when rings are empty,
+  START WORKOUT creates a session directly / RESUME SESSION when one is open.
+- Did-you-know banner: `GET /api/tips/daily?count=5..10` (60-tip curated
+  library, stable per user per day), swipeable carousel with auto-advance
+  (respects reduced motion).
+
+### Navigation fixes
+- `/muscles` opts back into the Stack header (root hides headers) with a brand
+  back button; tab bar inactive colour raised to `textMuted` on a solid surface.
+- Motor client is `tz_aware=True` (fixes naive/aware datetime crash in heatmap).
