@@ -3,12 +3,12 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { AdminAccount, AdminOverview, api, AuditEntry, ModerationReport, StaffRole } from "@/src/api";
+import { AdminAccount, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
-type Tab = "overview" | "reports" | "users" | "audit";
+type Tab = "overview" | "reports" | "coaches" | "users" | "audit";
 type Status = "all" | "active" | "suspended" | "staff";
 
 const RESOLUTIONS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -22,6 +22,8 @@ export default function AdminConsole() {
   const { t, formatDate, formatNumber } = useI18n();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
+  const [applications, setApplications] = useState<CoachApplicationReview[]>([]);
+  const [note, setNote] = useState("");
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [reports, setReports] = useState<ModerationReport[]>([]);
   const [users, setUsers] = useState<AdminAccount[]>([]);
@@ -45,13 +47,14 @@ export default function AdminConsole() {
       const summary = await api.adminOverview();
       if (current !== revision.current) return;
       setOverview(summary);
-      const [reportRows, userRows, auditRows] = await Promise.all([
+      const [reportRows, userRows, auditRows, applicationRows] = await Promise.all([
         summary.permissions.includes("reports.read") ? api.adminReports("open") : Promise.resolve([]),
         api.adminUsers("", "all"),
         summary.permissions.includes("audit.read") ? api.adminAuditLog() : Promise.resolve([]),
+        summary.permissions.includes("coaches.review") ? api.coachApplications("pending") : Promise.resolve([]),
       ]);
       if (current !== revision.current) return;
-      setReports(reportRows); setUsers(userRows.users); setAudit(auditRows);
+      setReports(reportRows); setUsers(userRows.users); setAudit(auditRows); setApplications(applicationRows);
     } catch (cause) {
       if (current === revision.current) setError(cause instanceof Error ? cause.message : t("Something went wrong"));
     } finally {
@@ -77,6 +80,17 @@ export default function AdminConsole() {
     await api.adminReviewReport(report.id, resolution, reason.trim());
     setReports(rows => rows.filter(row => row.id !== report.id)); setReason("");
     setAudit(await api.adminAuditLog());
+  });
+  const reviewApplication = (application: CoachApplicationReview, status: "approved" | "rejected") => act(async () => {
+    await api.reviewCoachApplication(application.id, status, reason.trim() || undefined);
+    setApplications(rows => rows.filter(row => row.id !== application.id));
+    setReason("");
+    setAudit(await api.adminAuditLog());
+  });
+  const addNote = (account: AdminAccount) => act(async () => {
+    await api.adminAddNote(account.id, note.trim());
+    setSelected(await api.adminUser(account.id));
+    setNote("");
   });
   const suspend = (account: AdminAccount) => act(async () => {
     const updated = account.suspended_at
@@ -114,10 +128,11 @@ export default function AdminConsole() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-        {(["overview", "reports", "users", "audit"] as Tab[]).map(item => (
+        {(["overview", "reports", "coaches", "users", "audit"] as Tab[]).map(item => (
           <Pressable key={item} testID={`admin-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabActive]}>
             <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{t(item.toUpperCase())}</Text>
             {item === "reports" && reports.length ? <View style={styles.badge}><Text style={styles.badgeText}>{reports.length}</Text></View> : null}
+            {item === "coaches" && applications.length ? <View style={styles.badge}><Text style={styles.badgeText}>{applications.length}</Text></View> : null}
           </Pressable>
         ))}
       </ScrollView>
@@ -174,6 +189,34 @@ export default function AdminConsole() {
           ))}
         </> : null}
 
+        {tab === "coaches" ? <>
+          {applications.length === 0 && !loading ? <Text style={styles.hint}>{t("No coach applications waiting.")}</Text> : null}
+          {applications.length ? <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Review note (sent to the applicant)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
+          {applications.map(application => (
+            <View key={application.id} style={styles.card} testID={`application-${application.id}`}>
+              <View style={styles.cardHead}>
+                <Text style={styles.tag}>{t("COACH APPLICATION")}</Text>
+                <Text style={styles.time}>{formatDate(application.created_at, { day: "numeric", month: "short" })}</Text>
+              </View>
+              <Text style={styles.meta}>{application.applicant?.full_name || application.applicant?.email || t("Unknown")}</Text>
+              <Text style={styles.snapshot}>{application.bio}</Text>
+              {application.specialties?.length ? <Text style={styles.meta}>{t("SPECIALTIES")}: {application.specialties.join(", ")}</Text> : null}
+              {application.credentials?.length ? <Text style={styles.meta}>{t("CREDENTIALS · ONE PER LINE")}: {application.credentials.join(", ")}</Text> : null}
+              {can("coaches.review") ? <View style={styles.actions}>
+                <Pressable accessibilityRole="button" testID={`reject-application-${application.id}`} disabled={working} onPress={() => void reviewApplication(application, "rejected")} style={[styles.action, working && styles.disabled]}>
+                  <Ionicons name="close" size={15} color={colors.error} />
+                  <Text style={styles.actionText}>{t("Reject")}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" testID={`approve-application-${application.id}`} disabled={working} onPress={() => void reviewApplication(application, "approved")} style={[styles.action, working && styles.disabled]}>
+                  <Ionicons name="checkmark" size={15} color={colors.brand} />
+                  <Text style={styles.actionText}>{t("Approve")}</Text>
+                </Pressable>
+              </View> : <Text style={styles.hint}>{t("Read-only: reviewing coaches needs the admin role.")}</Text>}
+              <Pressable accessibilityRole="button" onPress={() => void openUser(application.user_id)}><Text style={styles.link}>{t("Open account")}</Text></Pressable>
+            </View>
+          ))}
+        </> : null}
+
         {tab === "users" ? <>
           <View style={styles.searchRow}>
             <TextInput value={query} onChangeText={setQuery} onSubmitEditing={() => void search()} maxLength={80} placeholder={t("Search by name, email or ID")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-user-search" />
@@ -218,10 +261,15 @@ export default function AdminConsole() {
                 </Pressable>
               )) : null}
             </View>
-            {selected.notes?.length ? <>
-              <Text style={styles.section}>{t("STAFF NOTES")}</Text>
-              {selected.notes.map(note => <View key={note.id} style={styles.note}><Text style={styles.meta}>{note.author_email} · {formatDate(note.created_at, { dateStyle: "short" })}</Text><Text style={styles.noteText}>{note.note}</Text></View>)}
-            </> : null}
+            <Text style={styles.section}>{t("STAFF NOTES")}</Text>
+            {selected.notes?.length
+              ? selected.notes.map(note => <View key={note.id} style={styles.note}><Text style={styles.meta}>{note.author_email} · {formatDate(note.created_at, { dateStyle: "short" })}</Text><Text style={styles.noteText}>{note.note}</Text></View>)
+              : <Text style={styles.hint}>{t("No notes on this account yet.")}</Text>}
+            <TextInput value={note} onChangeText={setNote} maxLength={1000} placeholder={t("Add a note for the team")} placeholderTextColor={colors.textDim} style={styles.input} testID="admin-note" />
+            <Pressable accessibilityRole="button" testID="admin-add-note" disabled={working || note.trim().length < 3} onPress={() => void addNote(selected)} style={[styles.action, (working || note.trim().length < 3) && styles.disabled]}>
+              <Ionicons name="create-outline" size={15} color={colors.text} />
+              <Text style={styles.actionText}>{t("Save note")}</Text>
+            </Pressable>
           </View> : null}
         </> : null}
 

@@ -172,6 +172,18 @@ export type CoachApplication = {
   review_note?: string | null;
 };
 
+export type CoachApplicationReview = {
+  id: string;
+  user_id: string;
+  bio: string;
+  specialties: string[];
+  credentials: string[];
+  status: "pending" | "approved" | "rejected";
+  review_note: string | null;
+  created_at: string;
+  applicant: (Pick<User, "id" | "full_name" | "avatar_url"> & { email?: string }) | null;
+};
+
 export type PartnerDashboard = {
   community_count: number;
   active_members: number;
@@ -450,6 +462,19 @@ export const api = {
     request<CommunityMessage[]>(`/channels/${id}/messages${before ? `?before=${before}` : ""}`),
   updateChannelRanking: (id: string, ranking_opt_in: boolean) =>
     request<CommunityChannel>(`/channels/${id}/ranking`, { method: "PATCH", body: JSON.stringify({ ranking_opt_in }) }),
+  updateCommunity: (id: string, body: Partial<Pick<Community, "name" | "description" | "is_public" | "join_policy" | "price_cents" | "currency">>) =>
+    request<Community>(`/communities/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  archiveCommunity: (id: string) => request<void>(`/communities/${id}`, { method: "DELETE" }),
+  updateChannel: (channelId: string, body: { name?: string; description?: string }) =>
+    request<CommunityChannel>(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  archiveChannel: (channelId: string) => request<void>(`/channels/${channelId}`, { method: "DELETE" }),
+  coachApplications: (status: "pending" | "approved" | "rejected" = "pending") =>
+    request<CoachApplicationReview[]>(`/admin/coach-applications?status=${status}`),
+  reviewCoachApplication: (id: string, status: "approved" | "rejected", review_note?: string) =>
+    request<CoachApplicationReview>(`/admin/coach-applications/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, review_note: review_note ?? null }),
+    }),
   communityRoles: (id: string) => request<CommunityRole[]>(`/communities/${id}/roles`),
   createRole: (id: string, body: { name: string; color?: string; rank?: number; permissions?: number }) =>
     request<CommunityRole>(`/communities/${id}/roles`, { method: "POST", body: JSON.stringify(body) }),

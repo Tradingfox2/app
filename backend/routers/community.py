@@ -114,6 +114,23 @@ class ChannelRankingIn(BaseModel):
     ranking_opt_in: bool
 
 
+class ChannelUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=50)
+    description: str | None = Field(default=None, max_length=300)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        # Same normalisation as creation, or a rename could produce a channel
+        # whose slug could never have been created in the first place.
+        if value is None:
+            return None
+        slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+        if len(slug) < 2:
+            raise ValueError("Channel name must contain at least two letters or numbers")
+        return slug
+
+
 class MessageIn(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     reply_to_id: str | None = None
@@ -476,7 +493,12 @@ async def review_membership(
     body: MembershipReviewIn,
     user: dict = Depends(current_user),
 ):
-    await _manager(community_id, user["id"])
+    # Reviewing a join request is channel management; removing someone already
+    # inside is a separate power, which is what KICK_MEMBER exists to express.
+    if body.status == "banned":
+        await _require(community_id, user["id"], permissions.KICK_MEMBER)
+    else:
+        await _manager(community_id, user["id"])
     member = await db.community_members.find_one({"id": member_id, "community_id": community_id})
     if not member:
         raise HTTPException(404, "Membership not found")
@@ -490,6 +512,26 @@ async def review_membership(
         updates["joined_at"] = now()
     await db.community_members.update_one({"id": member_id}, {"$set": updates})
     return clean(await db.community_members.find_one({"id": member_id}, {"_id": 0}))
+
+
+@router.delete("/communities/{community_id}", status_code=204)
+async def archive_community(community_id: str, user: dict = Depends(current_user)):
+    """Archive a community. Owner only — closing someone's community is not a
+    power a moderator should hold, however much else they can manage.
+
+    `_community_or_404` already refuses anything not `active`, so every read
+    path honours this with no further change.
+    """
+    community = await _community_or_404(community_id)
+    if community["owner_id"] != user["id"]:
+        raise HTTPException(403, "Only the owner can archive a community")
+    await db.communities.update_one(
+        {"id": community_id}, {"$set": {"status": "archived", "archived_at": now()}}
+    )
+    await staff.audit(
+        user, "community.archived", target_type="community", target_id=community_id,
+        reason=None, metadata={"name": community.get("name")},
+    )
 
 
 @router.delete("/communities/{community_id}/membership", status_code=204)
@@ -706,6 +748,41 @@ async def get_channel(channel_id: str, user: dict = Depends(current_user)):
     if not permissions.has(mask, permissions.VIEW_CHANNEL):
         raise HTTPException(403, "Insufficient community permissions")
     return clean({**channel, "permissions": mask})
+
+
+@router.patch("/channels/{channel_id}")
+async def update_channel(channel_id: str, body: ChannelUpdateIn, user: dict = Depends(current_user)):
+    channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+    await _require(channel["community_id"], user["id"], permissions.MANAGE_CHANNEL, channel)
+    updates = {key: value for key, value in body.model_dump().items() if value is not None}
+    if not updates:
+        return clean(channel)
+    try:
+        await db.channels.update_one({"id": channel_id}, {"$set": updates})
+    except DuplicateKeyError as exc:
+        raise HTTPException(409, "A channel with that name already exists") from exc
+    return clean({**channel, **updates})
+
+
+@router.delete("/channels/{channel_id}", status_code=204)
+async def archive_channel(channel_id: str, user: dict = Depends(current_user)):
+    """Archive a channel. Messages are kept — this hides the room, not its history."""
+    channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+    community_id = channel["community_id"]
+    await _require(community_id, user["id"], permissions.MANAGE_CHANNEL, channel)
+    if channel.get("is_default"):
+        raise HTTPException(409, "The default channel cannot be archived")
+    await db.channels.update_one(
+        {"id": channel_id}, {"$set": {"status": "archived", "archived_at": now()}}
+    )
+    await staff.audit(
+        user, "community.channel_archived", target_type="channel", target_id=channel_id,
+        reason=None, metadata={"community_id": community_id, "name": channel.get("name")},
+    )
 
 
 @router.patch("/channels/{channel_id}/ranking")
