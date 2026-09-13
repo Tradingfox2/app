@@ -23,7 +23,10 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.workoutstack.amt12d",
-      "permissions": ["android.permission.CAMERA", "android.permission.READ_MEDIA_IMAGES"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -40,7 +43,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

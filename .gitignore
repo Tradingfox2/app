@@ -18,6 +18,8 @@ node_modules/
 
 # Testing
 /coverage
+frontend/test-results/
+frontend/playwright-report/
 
 # Next.js
 /.next/
@@ -31,6 +33,11 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
 
 *token.json*
 *credentials.json*
@@ -82,3 +89,7 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+backend/media/
+
+# Local screenshot scratch
+frontend/.tmp-*
