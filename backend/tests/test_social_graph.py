@@ -354,3 +354,80 @@ def test_blocking_stops_direct_messages(monkeypatch):
                 "bob", social.DirectMessageIn(content="hi"), people["alice"])
         assert denied.value.status_code == 403
     run_isolated(scenario)
+
+
+# --- Post visibility for private accounts ---
+
+async def _post(db, pid, author, community_id=None, repost_of=None):
+    doc = {"id": pid, "author_id": author, "content": f"post {pid}", "community_id": community_id,
+           "workout_id": None, "media": [], "repost_of": repost_of, "status": "active",
+           "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": server.now()}
+    await db.posts.insert_one(dict(doc))
+    return doc
+
+
+def test_a_private_authors_posts_are_hidden_from_non_followers(monkeypatch):
+    """Regression: the Profile switch promised privacy the feed did not keep."""
+    async def scenario(db):
+        people = await seed_people(db, monkeypatch, private=("bob",))
+        await _post(db, "p-bob", "bob")
+        feed = await social.feed("all", None, 20, people["alice"])
+        assert "p-bob" not in [post["id"] for post in feed]
+        with pytest.raises(HTTPException) as hidden:
+            await social.like_post("p-bob", people["alice"])
+        assert hidden.value.status_code == 404  # not 403: do not confirm it exists
+    run_isolated(scenario)
+
+
+def test_an_accepted_follower_sees_a_private_authors_posts(monkeypatch):
+    async def scenario(db):
+        people = await seed_people(db, monkeypatch, private=("bob",))
+        await _post(db, "p-bob", "bob")
+        await social.follow("bob", people["alice"])
+        # Still only a request — nothing visible yet.
+        assert "p-bob" not in [p["id"] for p in await social.feed("all", None, 20, people["alice"])]
+        await social.approve_follow_request("alice", people["bob"])
+        assert "p-bob" in [p["id"] for p in await social.feed("all", None, 20, people["alice"])]
+    run_isolated(scenario)
+
+
+def test_a_repost_cannot_launder_a_private_post(monkeypatch):
+    async def scenario(db):
+        people = await seed_people(db, monkeypatch, private=("bob",))
+        await _post(db, "p-bob", "bob")
+        # carol is an accepted follower and reposts it publicly.
+        await social.follow("bob", people["carol"])
+        await social.approve_follow_request("carol", people["bob"])
+        repost = await social.repost("p-bob", people["carol"])
+        assert repost["original"]["content"] == "post p-bob"  # carol may see it
+
+        # alice follows no one: she may see carol's repost row, never bob's content.
+        feed = await social.feed("all", None, 20, people["alice"])
+        shared = [p for p in feed if p.get("repost_of") == "p-bob"]
+        assert shared and shared[0]["original"].get("unavailable") is True
+        assert shared[0]["original"]["content"] == ""
+    run_isolated(scenario)
+
+
+def test_a_community_post_stays_visible_to_members_whatever_the_authors_setting(monkeypatch):
+    async def scenario(db):
+        people = await seed_people(db, monkeypatch, private=("bob",))
+        for uid in ("alice", "bob"):
+            await db.community_members.insert_one(
+                {"id": f"m-{uid}", "community_id": "c-1", "user_id": uid, "role": "member", "status": "active"})
+        await _post(db, "p-group", "bob", community_id="c-1")
+        feed = await social.feed("all", None, 20, people["alice"])
+        assert "p-group" in [p["id"] for p in feed]
+        # ...and invisible to someone outside the community.
+        assert "p-group" not in [p["id"] for p in await social.feed("all", None, 20, people["carol"])]
+    run_isolated(scenario)
+
+
+def test_flipping_to_private_hides_existing_posts_immediately(monkeypatch):
+    async def scenario(db):
+        people = await seed_people(db, monkeypatch)
+        await _post(db, "p-old", "bob")
+        assert "p-old" in [p["id"] for p in await social.feed("all", None, 20, people["alice"])]
+        await db.users.update_one({"id": "bob"}, {"$set": {"is_private": True}})
+        assert "p-old" not in [p["id"] for p in await social.feed("all", None, 20, people["alice"])]
+    run_isolated(scenario)

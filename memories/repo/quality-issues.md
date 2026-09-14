@@ -65,6 +65,21 @@ until the SQL side catches up. Verified 2026-09-14.
 Any authenticated token can drive message creation, reactions, follows and
 likes without throttling. Verified 2026-09-14.
 
+### Findings from the 2026-09-14 community-batch map (open unless marked)
+- **(authorization)** `community.py::list_messages`, `create_message`, `edit_message` do not check `VIEW_CHANNEL`; a channel hidden by a `deny: VIEW_CHANNEL` overwrite is readable and postable by id. `list_channels`, `get_channel`, `list_pins` do check it.
+- **(privacy)** `social.py::feed(scope="all")` and `_post_or_404` ignore `users.is_private`, while the Profile privacy switch promises only approved followers see posts.
+- `social.py::create_post` stores `workout_id` unvalidated — any id, including another user's workout.
+- `community.py::PostIn` is a legacy duplicate with no references; the live model is `social.py::PostIn`.
+- `api.createCommunityChannel` never sends `kind`, so non-text channel kinds cannot be created from the UI at all.
+- Check-in guard (`create_message`, kind `checkin`): count-then-insert race, UTC day, and deleting a check-in frees the day. No streak is computed anywhere. Name collision: `checkin` also means gym QR check-in (`/gyms/checkin`, `app/checkin.tsx`).
+- `api.channelPins` and `api.channelMessages(before)` have no callers — pins older than the last 50 messages are invisible; no "load older".
+- The channel mention roster uses manager-only `list_members`, so @-suggestions are empty for plain members (swallowed 403).
+- `app/community/[id].tsx::isManager` uses legacy role strings, not the permission mask, so custom-role managers get no settings gear.
+- `list_communities(scope="mine")` includes archived communities.
+- Feed cursor silently ignores an unknown `before` id and returns page 1 (`list_messages` 404s instead).
+- `INVITE_MEMBER` is in `DEFAULT_MEMBER` — any invite mechanism that bypasses approval must not gate on it alone.
+- Realtime: the client subscribes without a subscription token and the connection token carries no channel claims; `user:{id}` mention publishes have no subscriber. A real Centrifugo deployment must not allow unrestricted client-side subscribe.
+
 ## Fixed — kept as precedent
 
 ### Pending follows unlocked direct messages (authorization)

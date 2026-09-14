@@ -92,3 +92,11 @@ already-closed event loop. Encoded in
 `backend/tests/test_social_and_sources.py::patch_social_db`. The same applies
 to `routers/admin.py` and `routers/labs.py`, which now write notifications
 through the shared module.
+
+## Added 2026-09-14 (community-batch map)
+
+- **Search:** no Mongo text index exists. Regex precedents: `admin.py::list_users` (`re.escape`, 80-char cap) and `wearables.py::_resolve_exercise` (anchored prefix). Exercise search is client-side in `(tabs)/workouts.tsx`. Public user search must match `full_name` only, never email.
+- **Workout doc:** `{id, user_id, title, notes, started_at, ended_at, duration_sec, perceived_effort, planned_exercise_slugs[], created_at}`. Only imported sets carry `user_id` — never query `workout_sets` by user. Owner-only precedent: `wearables.py::gym_checkin`; `server.py::_load_workout_for` also admits active coaches, so do not reuse it for sharing.
+- **Feed cursor:** post id -> `created_at <` that post's time; no tiebreak, no `has_more`.
+- **Test/CI shape:** harness tests call router functions directly and monkeypatch module `db`, so middleware never runs in them. CI runs one uvicorn process; live-server tests sign in as the seeded demo user under `-n 2 --dist loadscope`.
+- **Routing qualifier:** `community/[id].tsx` coexists with `community/[id]/manage.tsx`, so the "no sibling directory" rule applies to `user/[id]` specifically, not Expo Router generally.

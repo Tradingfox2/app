@@ -328,3 +328,46 @@ def test_checkin_channels_accept_one_message_per_day(monkeypatch):
         assert (await community.create_message(
             channel["id"], community.MessageIn(content="today"), mem))["content"] == "today"
     run_isolated(scenario)
+
+
+def test_a_hidden_channel_cannot_be_read_or_posted_to_by_id(monkeypatch):
+    """Regression: VIEW_CHANNEL once gated only the channel *list*, so a member
+    who knew a hidden channel's id could read and post into it."""
+    async def scenario(db):
+        await seed(db, monkeypatch)
+        owner, mem = account("owner"), account("mem")
+        default = await community._ensure_default_role("c-1")
+        await community.set_channel_overwrites(
+            "ch-1", [community.OverwriteIn(role_id=default["id"], deny=p.VIEW_CHANNEL)], owner)
+
+        for attempt in (
+            lambda: community.list_messages("ch-1", None, 50, mem),
+            lambda: community.create_message("ch-1", community.MessageIn(content="sneak"), mem),
+        ):
+            with pytest.raises(HTTPException) as denied:
+                await attempt()
+            assert denied.value.status_code == 403
+
+        # The owner still reads it: the deny cannot lock out the owner.
+        assert await community.list_messages("ch-1", None, 50, owner) == []
+    run_isolated(scenario)
+
+
+def test_hiding_a_channel_also_freezes_actions_on_its_old_messages(monkeypatch):
+    async def scenario(db):
+        await seed(db, monkeypatch)
+        owner, mem = account("owner"), account("mem")
+        message = await community.create_message("ch-1", community.MessageIn(content="mine"), mem)
+        default = await community._ensure_default_role("c-1")
+        await community.set_channel_overwrites(
+            "ch-1", [community.OverwriteIn(role_id=default["id"], deny=p.VIEW_CHANNEL)], owner)
+
+        for attempt in (
+            lambda: community.edit_message(message["id"], community.MessageEditIn(content="edit"), mem),
+            lambda: community.add_reaction(message["id"], community.ReactionIn(emoji="A"), mem),
+            lambda: community.remove_reaction(message["id"], "A", mem),
+        ):
+            with pytest.raises(HTTPException) as denied:
+                await attempt()
+            assert denied.value.status_code == 403
+    run_isolated(scenario)

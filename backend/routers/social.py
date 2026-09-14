@@ -47,9 +47,46 @@ async def _member_community_ids(user_id: str) -> list[str]:
 
 
 async def _can_view_post(post: dict, user_id: str) -> bool:
-    if not post.get("community_id"):
+    """One visibility rule for every path that returns a post.
+
+    A community post belongs to the community: its members see it whatever
+    the author's account setting, because the community is its own audience.
+    A post on the public feed follows the author's account: a private author
+    is visible only to accepted followers. Blocking hides both ways, always.
+    """
+    author_id = post.get("author_id")
+    if author_id == user_id:
         return True
-    return post["community_id"] in await _member_community_ids(user_id)
+    if author_id and await social_graph.blocked_between(user_id, author_id):
+        return False
+    if post.get("community_id"):
+        return post["community_id"] in await _member_community_ids(user_id)
+    return await social_graph.can_view_profile(user_id, author_id)
+
+
+async def _private_hidden_author_ids(viewer_id: str) -> list[str]:
+    """Private authors whose public-feed posts this viewer may not see.
+
+    Scans private users rather than denormalising privacy onto posts, so
+    flipping the switch takes effect on old posts immediately. Fine at beta
+    scale; revisit with a denormalised flag when private users number in the
+    tens of thousands.
+    """
+    private = {
+        row["id"] async for row in db.users.find({"is_private": True}, {"_id": 0, "id": 1})
+    }
+    private.discard(viewer_id)
+    if not private:
+        return []
+    followed = {
+        row["followee_id"]
+        async for row in db.follows.find(
+            {"follower_id": viewer_id, "followee_id": {"$in": list(private)},
+             "status": social_graph.ACTIVE},
+            {"_id": 0, "followee_id": 1},
+        )
+    }
+    return list(private - followed)
 
 
 async def _post_or_404(post_id: str, user_id: str) -> dict:
@@ -82,13 +119,17 @@ async def _decorate(posts: list[dict], viewer_id: str) -> list[dict]:
     return output
 
 
-async def _with_originals(posts: list[dict]) -> list[dict]:
+async def _with_originals(posts: list[dict], viewer_id: str) -> list[dict]:
     original_ids = [post["repost_of"] for post in posts if post.get("repost_of")]
     originals = {row["id"]: row async for row in db.posts.find({"id": {"$in": original_ids}}, {"_id": 0})} if original_ids else {}
     for post in posts:
         if post.get("repost_of"):
             original = originals.get(post["repost_of"])
-            post["original"] = original if original and original.get("status") != "deleted" else {"id": post["repost_of"], "author_id": post["author_id"], "content": "", "media": [], "unavailable": True}
+            # A repost must not launder a private post to the reposter's
+            # audience: the original is shown only to viewers who could see it.
+            visible = (original and original.get("status") != "deleted"
+                       and await _can_view_post(original, viewer_id))
+            post["original"] = original if visible else {"id": post["repost_of"], "author_id": post["author_id"], "content": "", "media": [], "unavailable": True}
     return posts
 
 
@@ -131,7 +172,11 @@ async def feed(
 ):
     query: dict = {"status": {"$ne": "deleted"}}
     community_ids = await _member_community_ids(user["id"])
-    visibility = {"$or": [{"community_id": None}, {"community_id": {"$in": community_ids}}]}
+    hidden_private = await _private_hidden_author_ids(user["id"])
+    public_posts: dict = {"community_id": None}
+    if hidden_private:
+        public_posts["author_id"] = {"$nin": hidden_private}
+    visibility = {"$or": [public_posts, {"community_id": {"$in": community_ids}}]}
     if scope == "mine":
         query["author_id"] = user["id"]
     elif scope == "following":
@@ -154,7 +199,7 @@ async def feed(
         if cursor:
             query["created_at"] = {"$lt": cursor["created_at"]}
     posts = [row async for row in db.posts.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)]
-    return await _decorate(await _with_originals(posts), user["id"])
+    return await _decorate(await _with_originals(posts, user["id"]), user["id"])
 
 
 @router.post("/posts", status_code=201)
@@ -239,7 +284,7 @@ async def repost(post_id: str, user: dict = Depends(current_user)):
         original = await _post_or_404(original["repost_of"], user["id"])
     existing = await db.posts.find_one({"repost_of": original["id"], "author_id": user["id"], "status": {"$ne": "deleted"}}, {"_id": 0})
     if existing:
-        return (await _decorate(await _with_originals([existing]), user["id"]))[0]
+        return (await _decorate(await _with_originals([existing], user["id"]), user["id"]))[0]
     post = {
         "id": new_id(), "author_id": user["id"], "content": "", "community_id": original.get("community_id"),
         "workout_id": None, "media": [], "repost_of": original["id"], "status": "active",
@@ -249,7 +294,7 @@ async def repost(post_id: str, user: dict = Depends(current_user)):
     await db.posts.update_one({"id": original["id"]}, {"$inc": {"repost_count": 1}})
     name = user.get("full_name") or "Someone"
     await _notify_post_author(original, user, notifications.POST_REPOST, f"{name} reposted your post")
-    return (await _decorate(await _with_originals([post]), user["id"]))[0]
+    return (await _decorate(await _with_originals([post], user["id"]), user["id"]))[0]
 
 
 @router.get("/posts/{post_id}/comments")

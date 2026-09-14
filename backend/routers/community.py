@@ -193,6 +193,10 @@ async def _require(
     permission: int,
     channel: dict | None = None,
 ) -> dict:
+    if channel is not None:
+        # Nothing may be done inside a channel the caller cannot see. Enforced
+        # here once, rather than trusted to every call site to remember.
+        permission |= permissions.VIEW_CHANNEL
     mask, member = await _mask(community_id, user_id, channel)
     if not permissions.has(mask, permission):
         raise HTTPException(403, "Insufficient community permissions")
@@ -824,7 +828,7 @@ async def list_messages(
     channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
     if not channel:
         raise HTTPException(404, "Channel not found")
-    await _active_member(channel["community_id"], user["id"])
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
     query: dict = {"channel_id": channel_id, "status": "active"}
     if before:
         cursor = await db.messages.find_one({"id": before, "channel_id": channel_id}, {"_id": 0})
@@ -990,7 +994,7 @@ async def add_reaction(message_id: str, body: ReactionIn, user: dict = Depends(c
 @router.delete("/messages/{message_id}/reactions")
 async def remove_reaction(message_id: str, emoji: str = Query(...), user: dict = Depends(current_user)):
     message, channel = await _message_or_404(message_id)
-    await _active_member(channel["community_id"], user["id"])
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
     await db.messages.update_one(
         {"id": message_id, "reactions.emoji": emoji},
         {"$pull": {"reactions.$.user_ids": user["id"]}},
@@ -1007,7 +1011,7 @@ async def edit_message(message_id: str, body: MessageEditIn, user: dict = Depend
     message, channel = await _message_or_404(message_id)
     if message["author_id"] != user["id"]:
         raise HTTPException(403, "Only the author can edit a message")
-    await _active_member(channel["community_id"], user["id"])
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
     if (now() - message["created_at"]).total_seconds() > EDIT_WINDOW_SECONDS:
         raise HTTPException(409, "The edit window for this message has closed")
     updates = {"content": body.content.strip(), "edited_at": now()}
@@ -1027,7 +1031,7 @@ async def delete_message(message_id: str, user: dict = Depends(current_user)):
             metadata={"community_id": community_id, "author_id": message["author_id"]},
         )
     else:
-        await _active_member(community_id, user["id"])
+        await _require(community_id, user["id"], permissions.VIEW_CHANNEL, channel)
     # Soft delete: the row survives for moderation review and the audit trail.
     await db.messages.update_one(
         {"id": message_id}, {"$set": {"status": "deleted", "deleted_at": now()}}
