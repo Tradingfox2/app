@@ -342,6 +342,13 @@ async def lifespan(app: FastAPI):
     # One read marker per member per channel; $max upserts rely on the key.
     await db.channel_reads.create_index([("channel_id", 1), ("user_id", 1)], unique=True)
     await db.channel_reads.create_index([("user_id", 1), ("channel_id", 1)])
+    # One check-in per member per channel per UTC day. Partial on active rows,
+    # so deleting a mistaken check-in frees the day again.
+    await db.messages.create_index(
+        [("channel_id", 1), ("author_id", 1), ("checkin_day", 1)], unique=True,
+        partialFilterExpression={"checkin_day": {"$exists": True}, "status": "active"},
+    )
+    await db.challenge_participants.create_index([("channel_id", 1), ("user_id", 1)], unique=True)
     await db.community_invites.create_index("code", unique=True)
     await db.community_invites.create_index([("community_id", 1), ("revoked_at", 1), ("created_at", -1)])
     await db.rate_limits.create_index("key", unique=True)

@@ -10,6 +10,7 @@ import { useI18n } from "@/src/i18n";
 import { ADD_REACTION, DEFAULT_MEMBER, MANAGE_MESSAGES, PIN_MESSAGE, SEND_MESSAGE, can } from "@/src/permissions";
 import { useRealtimeChannel } from "@/src/realtime";
 import { activeQuery, applyMention, segment } from "@/src/mentions";
+import { FitnessPanel } from "@/src/components/community/fitness-panel";
 
 const QUICK_REACTIONS = ["💪", "🔥", "👏", "🎯", "😂"];
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -183,6 +184,7 @@ export default function ChannelScreen() {
       {pins.length ? <Pressable accessibilityRole="button" testID="toggle-pins" onPress={() => setPinsOpen(open => !open)} style={styles.icon}><Ionicons name="pin" size={18} color={pinsOpen ? colors.brand : colors.text} /></Pressable> : null}
     </View>
     {pinsOpen && pins.length ? <View style={styles.pinsDrawer} testID="pins-drawer">{pins.map(item => <Text key={item.id} numberOfLines={1} style={styles.pinsItem}>{item.content}</Text>)}</View> : null}
+    {id && channel?.kind ? <FitnessPanel channelId={id} kind={channel.kind} refreshKey={messages.length} /> : null}
     {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} style={styles.icon}><Text style={styles.author}>{t("Retry")}</Text></Pressable></View> : null}
     {loading ? <ActivityIndicator accessibilityLabel={t("Loading...")} color={colors.brand} /> : null}
     <FlatList data={messages} keyExtractor={item => item.id} contentContainerStyle={styles.list} ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="chatbubbles-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{t("Start the conversation")}</Text></View> : null} renderItem={renderMessage} />

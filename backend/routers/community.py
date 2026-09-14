@@ -3,20 +3,22 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pymongo.errors import DuplicateKeyError
 
 from server import clean, current_user, db, new_id, now, optional_user
 from community_rankings import build_rankings
+import challenges
 import moderation
 import notifications
 import permissions
 import ratelimit
 import realtime
+import social_graph
 import staff
 
 router = APIRouter()
@@ -99,10 +101,36 @@ class OverwriteIn(BaseModel):
     deny: int = Field(default=0, ge=0, le=permissions.ALL)
 
 
+class ChallengeIn(BaseModel):
+    metric: challenges.ChallengeMetric = "workouts"
+    starts_at: datetime
+    ends_at: datetime
+    #: Optional collective target, the Strava "group goal": everyone's total
+    #: counts toward it.
+    goal: float | None = Field(default=None, gt=0, le=1_000_000)
+
+    @model_validator(mode="after")
+    def check_window(self):
+        starts = self.starts_at if self.starts_at.tzinfo else self.starts_at.replace(tzinfo=timezone.utc)
+        ends = self.ends_at if self.ends_at.tzinfo else self.ends_at.replace(tzinfo=timezone.utc)
+        challenges.validate_window(starts, ends)
+        self.starts_at, self.ends_at = starts, ends
+        return self
+
+
 class ChannelIn(BaseModel):
     name: str = Field(min_length=2, max_length=50)
     description: str = Field(default="", max_length=300)
     kind: ChannelKind = "text"
+    challenge: ChallengeIn | None = None
+
+    @model_validator(mode="after")
+    def challenge_matches_kind(self):
+        if self.kind == "challenge" and self.challenge is None:
+            raise ValueError("A challenge channel needs a metric and a date window")
+        if self.kind != "challenge" and self.challenge is not None:
+            raise ValueError("Only a challenge channel takes challenge settings")
+        return self
 
     @field_validator("name")
     @classmethod
@@ -469,7 +497,7 @@ async def _activate(
 ) -> tuple[dict, bool]:
     """The single door into a community. Returns (membership, changed).
 
-    Every way in — joining directly, redeeming an invite — goes through here,
+    Every way in â€” joining directly, redeeming an invite â€” goes through here,
     so the two rules that matter cannot be routed around:
     - a banned member stays banned, whatever link they arrive with;
     - a paid community needs verified billing, whatever link they arrive with.
@@ -562,7 +590,7 @@ async def review_membership(
 
 @router.delete("/communities/{community_id}", status_code=204)
 async def archive_community(community_id: str, user: dict = Depends(current_user)):
-    """Archive a community. Owner only — closing someone's community is not a
+    """Archive a community. Owner only â€” closing someone's community is not a
     power a moderator should hold, however much else they can manage.
 
     `_community_or_404` already refuses anything not `active`, so every read
@@ -844,7 +872,7 @@ async def update_channel(channel_id: str, body: ChannelUpdateIn, user: dict = De
 
 @router.delete("/channels/{channel_id}", status_code=204)
 async def archive_channel(channel_id: str, user: dict = Depends(current_user)):
-    """Archive a channel. Messages are kept — this hides the room, not its history."""
+    """Archive a channel. Messages are kept â€” this hides the room, not its history."""
     channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
     if not channel:
         raise HTTPException(404, "Channel not found")
@@ -930,8 +958,8 @@ async def create_message(
     community_id = channel["community_id"]
     # An announcement channel is broadcast-only: everyone reads, only members who
     # can manage messages may post. Expressed as a permission rather than an
-    # @everyone deny, so legacy moderators — who have no role document to grant
-    # an exception to — keep working without a migration.
+    # @everyone deny, so legacy moderators â€” who have no role document to grant
+    # an exception to â€” keep working without a migration.
     needed = (
         permissions.MANAGE_MESSAGES
         if channel.get("kind") == "announcement"
@@ -939,13 +967,12 @@ async def create_message(
     )
     await _require(community_id, user["id"], needed, channel)
 
-    if channel.get("kind") == "checkin":
-        start = now().replace(hour=0, minute=0, second=0, microsecond=0)
-        if await db.messages.count_documents({
-            "channel_id": channel_id, "author_id": user["id"],
-            "status": "active", "created_at": {"$gte": start},
-        }):
-            raise HTTPException(409, "You have already checked in today")
+    checkin_day = challenges.day_key(now()) if channel.get("kind") == "checkin" else None
+    if checkin_day and await db.messages.find_one({
+        "channel_id": channel_id, "author_id": user["id"],
+        "status": "active", "checkin_day": checkin_day,
+    }, {"_id": 1}):
+        raise HTTPException(409, "You have already checked in today")
 
     reply_to = None
     if body.reply_to_id:
@@ -979,7 +1006,15 @@ async def create_message(
         "status": "active",
         "created_at": now(),
     }
-    await db.messages.insert_one(dict(message))
+    if checkin_day:
+        message["checkin_day"] = checkin_day
+    try:
+        await db.messages.insert_one(dict(message))
+    except DuplicateKeyError as exc:
+        # The find above is the fast path; the unique partial index on
+        # (channel_id, author_id, checkin_day) is what actually stops two
+        # concurrent check-ins from both landing.
+        raise HTTPException(409, "You have already checked in today") from exc
     message["author"] = {key: user.get(key) for key in ("id", "full_name", "avatar_url")}
     message["reply_to"] = reply_to
     message["mentions"] = await notifications.resolve_mentions(content)
@@ -1328,6 +1363,137 @@ async def redeem_invite(code: str, user: dict = Depends(current_user)):
     if not changed:
         await db.community_invites.update_one({"code": code}, {"$inc": {"uses": -1}})
     return membership
+
+
+async def _kind_channel_or_404(channel_id: str, kind: str) -> dict:
+    channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
+    if not channel or channel.get("kind") != kind:
+        raise HTTPException(404, f"No {kind} channel with that id")
+    return channel
+
+
+async def _people(ids: list[str]) -> dict[str, dict]:
+    return {
+        row["id"]: clean(row)
+        async for row in db.users.find(
+            {"id": {"$in": ids}}, {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1})
+    }
+
+
+@router.get("/channels/{channel_id}/checkins")
+async def checkin_board(channel_id: str, user: dict = Depends(current_user)):
+    """Your streak, and who is on a live streak in this check-in channel.
+
+    One rest day never breaks a streak; two in a row do â€” see challenges.py for
+    why a training streak must not punish rest.
+    """
+    channel = await _kind_channel_or_404(channel_id, "checkin")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    today = now().date()
+    by_author: dict[str, set[str]] = {}
+    async for row in db.messages.find(
+        {"channel_id": channel_id, "status": "active", "checkin_day": {"$exists": True}},
+        {"_id": 0, "author_id": 1, "checkin_day": 1},
+    ):
+        by_author.setdefault(row["author_id"], set()).add(row["checkin_day"])
+
+    hidden = set(await social_graph.blocked_ids(user["id"]))
+    leaders = [
+        {"user_id": author, **challenges.streaks(days, today)}
+        for author, days in by_author.items() if author not in hidden
+    ]
+    leaders = sorted((row for row in leaders if row["current"] > 0),
+                     key=lambda row: (-row["current"], -row["longest"], row["user_id"]))[:20]
+    people = await _people([row["user_id"] for row in leaders])
+    for row in leaders:
+        row["user"] = people.get(row["user_id"])
+    return {
+        "channel_id": channel_id,
+        "today": today.isoformat(),
+        "me": challenges.streaks(by_author.get(user["id"], set()), today),
+        "leaders": leaders,
+    }
+
+
+@router.post("/channels/{channel_id}/challenge/participants", status_code=201)
+async def join_challenge(channel_id: str, user: dict = Depends(current_user)):
+    """Opt in. Joining is the consent to have your training counted here."""
+    channel = await _kind_channel_or_404(channel_id, "challenge")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    config = channel["challenge"]
+    if challenges.challenge_status(config["starts_at"], config["ends_at"], now()) == "ended":
+        raise HTTPException(409, "This challenge has ended")
+    # Upsert keeps a double tap idempotent even where the unique index is absent.
+    await db.challenge_participants.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$setOnInsert": {"id": new_id(), "joined_at": now()}},
+        upsert=True,
+    )
+    return {"channel_id": channel_id, "joined": True}
+
+
+@router.delete("/channels/{channel_id}/challenge/participants", status_code=204)
+async def leave_challenge(channel_id: str, user: dict = Depends(current_user)):
+    """Leaving withdraws consent: you disappear from the board immediately."""
+    channel = await _kind_channel_or_404(channel_id, "challenge")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    await db.challenge_participants.delete_one({"channel_id": channel_id, "user_id": user["id"]})
+
+
+@router.get("/channels/{channel_id}/challenge")
+async def challenge_board(channel_id: str, user: dict = Depends(current_user)):
+    """The scoreboard. Only participants are scored, only from finished
+    workouts inside the window, and only training aggregates are used â€”
+    never biomarkers, lab results or wearable health data."""
+    channel = await _kind_channel_or_404(channel_id, "challenge")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    config = channel["challenge"]
+    starts, ends, metric = config["starts_at"], config["ends_at"], config["metric"]
+    moment = now()
+    participants = [
+        row["user_id"]
+        async for row in db.challenge_participants.find(
+            {"channel_id": channel_id}, {"_id": 0, "user_id": 1}).limit(1000)
+    ]
+
+    workouts: dict[str, list[dict]] = {person: [] for person in participants}
+    if participants and moment >= starts:
+        async for row in db.workouts.find(
+            {"user_id": {"$in": participants}, "ended_at": {"$gte": starts, "$lt": min(ends, moment)}},
+            {"_id": 0, "id": 1, "user_id": 1, "ended_at": 1, "duration_sec": 1},
+        ):
+            workouts[row["user_id"]].append(row)
+
+    tonnage: dict[str, float] = {}
+    if metric == "tonnage":
+        ids = [w["id"] for rows in workouts.values() for w in rows]
+        async for row in db.workout_sets.find(
+            {"workout_id": {"$in": ids}}, {"_id": 0, "workout_id": 1, "weight_kg": 1, "reps": 1}
+        ):
+            tonnage[row["workout_id"]] = tonnage.get(row["workout_id"], 0.0) + \
+                float(row.get("weight_kg") or 0) * int(row.get("reps") or 0)
+
+    scores = {person: challenges.score_workouts(metric, rows, tonnage) for person, rows in workouts.items()}
+    ranked = challenges.rank(scores)
+    hidden = set(await social_graph.blocked_ids(user["id"]))
+    shown = [(place, person, score) for place, person, score in ranked if person not in hidden][:50]
+    people = await _people([person for _, person, _ in shown])
+    mine = next(({"place": place, "score": score} for place, person, score in ranked
+                 if person == user["id"]), None)
+    total = round(sum(scores.values()), 1)
+    goal = config.get("goal")
+    return {
+        "channel_id": channel_id,
+        "challenge": {"metric": metric, "starts_at": starts, "ends_at": ends, "goal": goal},
+        "status": challenges.challenge_status(starts, ends, moment),
+        "participant_count": len(participants),
+        "joined": user["id"] in participants,
+        "me": mine,
+        "leaders": [{"place": place, "user_id": person, "score": score, "user": people.get(person)}
+                    for place, person, score in shown],
+        "group_total": total,
+        "goal_progress": round(min(1.0, total / goal), 4) if goal else None,
+    }
 
 
 @router.get("/partner/dashboard")

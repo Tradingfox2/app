@@ -324,7 +324,9 @@ def test_checkin_channels_accept_one_message_per_day(monkeypatch):
         # Yesterday's check-in must not block today's.
         await db.messages.update_one(
             {"channel_id": channel["id"], "author_id": "mem"},
-            {"$set": {"created_at": server.now() - timedelta(days=1)}})
+            # The day lives in checkin_day now; created_at alone no longer decides it.
+            {"$set": {"created_at": server.now() - timedelta(days=1),
+                      "checkin_day": (server.now() - timedelta(days=1)).date().isoformat()}})
         assert (await community.create_message(
             channel["id"], community.MessageIn(content="today"), mem))["content"] == "today"
     run_isolated(scenario)

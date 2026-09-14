@@ -129,3 +129,26 @@ through the shared module.
   `message.updated`, `message.deleted` (id only) and `message.pinned`.
 - **Workout sharing.** `create_post` snapshots `workout_summary` from an owned,
   finished workout — not `_load_workout_for`, which admits coaches.
+
+## Added 2026-09-14 (community batch, slice 3 — fitness channels)
+
+- **`backend/challenges.py`** — pure mechanics, unit-tested without a database.
+  - **Streaks count check-in days, not calendar days. One rest day never breaks
+    a streak; two in a row do** (`MAX_GAP_DAYS = 2`). A training streak must not
+    punish rest, or it rewards overtraining. Current streak is alive while
+    `today - last_checkin <= 2`.
+  - Challenges follow Strava: a metric (`workouts` / `active_days` / `minutes` /
+    `tonnage`), a window of at most 92 days, an optional group goal, and
+    competition ranking ("1, 2, 2, 4").
+- **Check-in day** is stored on the message as `checkin_day` (UTC `YYYY-MM-DD`).
+  A unique partial index on `(channel_id, author_id, checkin_day)` over active
+  rows is the real race guard; deleting a mistaken check-in frees the day. Name
+  collision to remember: `checkin` also means gym QR check-in (`/gyms/checkin`).
+- **Challenges are opt-in.** `challenge_participants`; joining is the consent to
+  be scored. Only participants' finished workouts inside the window count, and
+  only training aggregates — never biomarkers, labs or wearable health data.
+  Blocked people are hidden from the viewer's board but still count toward the
+  group total.
+- **UI:** `frontend/src/components/community/fitness-panel.tsx` renders the
+  streak strip or scoreboard at the top of the channel; the kind picker and
+  challenge settings are in `community/[id]/manage.tsx`.

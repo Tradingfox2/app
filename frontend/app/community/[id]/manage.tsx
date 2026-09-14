@@ -3,11 +3,15 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, Tex
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { api, ChannelOverwrite, Community, CommunityChannel, CommunityInvite, CommunityRole, Membership } from "@/src/api";
+import { api, ChallengeMetric, ChannelKind, ChannelOverwrite, Community, CommunityChannel, CommunityInvite, CommunityRole, Membership } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { PERMISSION_LIST, can, toggle as togglePermission } from "@/src/permissions";
 import * as Linking from "expo-linking";
+
+const METRIC_LABELS: Record<ChallengeMetric, string> = {
+  workouts: "WORKOUTS", active_days: "ACTIVE DAYS", minutes: "MINUTES", tonnage: "VOLUME",
+};
 
 /** inherit -> allow -> deny -> inherit */
 type Tri = "inherit" | "allow" | "deny";
@@ -26,6 +30,10 @@ export default function ManageCommunity() {
   const [renameTo, setRenameTo] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [invites, setInvites] = useState<CommunityInvite[]>([]);
+  const [channelKind, setChannelKind] = useState<ChannelKind>("text");
+  const [metric, setMetric] = useState<ChallengeMetric>("workouts");
+  const [lengthDays, setLengthDays] = useState(14);
+  const [goal, setGoal] = useState("");
   const generation = useRef(0);
   const busy = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -78,7 +86,17 @@ export default function ManageCommunity() {
   });
   const addChannel = () => run(async () => {
     if (!id || channelName.trim().length < 2) return;
-    await api.createCommunityChannel(id, channelName.trim()); setChannelName(""); await load();
+    // A challenge starts now and runs for the chosen length; the server
+    // rejects anything backwards or longer than 92 days.
+    const starts = new Date();
+    const challenge = channelKind === "challenge" ? {
+      metric,
+      starts_at: starts.toISOString(),
+      ends_at: new Date(starts.getTime() + lengthDays * 86_400_000).toISOString(),
+      goal: goal.trim() ? Number(goal) : null,
+    } : undefined;
+    await api.createCommunityChannel(id, channelName.trim(), "", { kind: channelKind, challenge });
+    setChannelName(""); setGoal(""); setChannelKind("text"); await load();
   }, "Could not create channel");
   const publishChannel = (channel: CommunityChannel, value: boolean) => run(async () => {
     const updated = await api.updateChannelRanking(channel.id, value);
@@ -249,6 +267,27 @@ export default function ManageCommunity() {
         }) : null}
       </View> : null}
     </View>)}
+    <Text style={styles.meta}>{t("Channel type")}</Text>
+    <View style={styles.chipRow}>{(["text", "announcement", "checkin", "challenge"] as ChannelKind[]).map(kind => (
+      <Pressable key={kind} accessibilityRole="button" testID={`channel-kind-${kind}`} onPress={() => setChannelKind(kind)} style={[styles.chip, channelKind === kind && styles.chipOn]}>
+        <Text style={styles.chipText}>{t(kind.toUpperCase())}</Text>
+      </Pressable>))}
+    </View>
+    {channelKind === "checkin" ? <Text style={styles.meta}>{t("One check-in per member per day. One rest day never breaks a streak; two in a row do.")}</Text> : null}
+    {channelKind === "challenge" ? <View style={styles.panel} testID="challenge-settings">
+      <Text style={styles.meta}>{t("Only members who join are scored, from their finished workouts.")}</Text>
+      <View style={styles.chipRow}>{(["workouts", "active_days", "minutes", "tonnage"] as ChallengeMetric[]).map(item => (
+        <Pressable key={item} accessibilityRole="button" testID={`challenge-metric-${item}`} onPress={() => setMetric(item)} style={[styles.chip, metric === item && styles.chipOn]}>
+          <Text style={styles.chipText}>{t(METRIC_LABELS[item])}</Text>
+        </Pressable>))}
+      </View>
+      <View style={styles.chipRow}>{[7, 14, 30].map(days => (
+        <Pressable key={days} accessibilityRole="button" testID={`challenge-length-${days}`} onPress={() => setLengthDays(days)} style={[styles.chip, lengthDays === days && styles.chipOn]}>
+          <Text style={styles.chipText}>{t("{count} days").replace("{count}", String(days))}</Text>
+        </Pressable>))}
+      </View>
+      <TextInput value={goal} onChangeText={value => setGoal(value.replace(/[^0-9]/g, ""))} keyboardType="number-pad" maxLength={7} placeholder={t("Group goal (optional)")} placeholderTextColor={colors.textDim} style={styles.input} testID="challenge-goal" />
+    </View> : null}
     <View style={styles.addRow}><TextInput value={channelName} onChangeText={setChannelName} maxLength={50} editable={!disabled} placeholder={t("new-channel")} placeholderTextColor={colors.textDim} style={styles.input} /><Pressable accessibilityRole="button" disabled={disabled || channelName.trim().length < 2} accessibilityLabel={t("Create channel")} onPress={() => void addChannel()} style={[styles.approve, { opacity: disabled || channelName.trim().length < 2 ? 0.4 : 1 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View>
 
     <Text style={styles.section}>{t("ALL MEMBERS")}</Text>

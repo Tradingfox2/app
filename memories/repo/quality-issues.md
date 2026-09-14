@@ -35,10 +35,11 @@ aggregation, no block suppression) while post and comment mentions use
 - **Community-scoped posting from the feed composer.** `PostIn.community_id`
   and its membership guard exist; the composer sends only `content` and
   `media_ids`.
-- **Channel kinds.** `program` / `challenge` / `checkin` / `live` are enforced
-  backend-side but render as a label with no dedicated UI.
+- **Channel kinds `program` and `live`.** Accepted by the model but have no
+  behaviour or UI. `challenge` and `checkin` are done (2026-09-14).
 - **Permission bits `POST_PROGRAM` and `START_LIVE_SESSION`** are defined and
-  checkable but attached to no feature.
+  checkable but attached to no feature — they belong to the unbuilt `program`
+  and `live` channel kinds.
 
 Verified 2026-09-14.
 
@@ -59,8 +60,6 @@ until the SQL side catches up. Verified 2026-09-14.
 
 ### Findings from the 2026-09-14 community-batch map (open unless marked)
 - `community.py::PostIn` is a legacy duplicate with no references; the live model is `social.py::PostIn`.
-- `api.createCommunityChannel` never sends `kind`, so non-text channel kinds cannot be created from the UI at all.
-- Check-in guard (`create_message`, kind `checkin`): count-then-insert race, UTC day, and deleting a check-in frees the day. No streak is computed anywhere. Name collision: `checkin` also means gym QR check-in (`/gyms/checkin`, `app/checkin.tsx`).
 - `api.channelPins` and `api.channelMessages(before)` have no callers — pins older than the last 50 messages are invisible; no "load older".
 - `list_communities(scope="mine")` includes archived communities.
 - Feed cursor silently ignores an unknown `before` id and returns page 1 (`list_messages` 404s instead).

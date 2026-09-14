@@ -118,6 +118,7 @@ export type CommunityChannel = {
   ranking_opt_in?: boolean;
   kind?: ChannelKind;
   overwrites?: ChannelOverwrite[];
+  challenge?: ChallengeSettings | null;
   /** Caller's effective mask for this channel, resolved server-side. */
   permissions?: number;
   /** Other people's messages since the caller last read it, capped at 100. */
@@ -153,6 +154,27 @@ export type SearchPerson = MentionedUser & { is_private: boolean; follow_state: 
 export type SearchKind = "users" | "communities" | "posts";
 
 export type ChannelOverwrite = { role_id: string; allow: number; deny: number };
+
+export type ChallengeMetric = "workouts" | "active_days" | "minutes" | "tonnage";
+export type ChallengeSettings = { metric: ChallengeMetric; starts_at: string; ends_at: string; goal?: number | null };
+
+export type Streak = { current: number; longest: number; total: number; checked_in_today: boolean; last_day: string | null };
+export type CheckinBoard = {
+  channel_id: string; today: string; me: Streak;
+  leaders: (Streak & { user_id: string; user: MentionedUser | null })[];
+};
+
+export type ChallengeBoard = {
+  channel_id: string;
+  challenge: ChallengeSettings;
+  status: "upcoming" | "active" | "ended";
+  participant_count: number;
+  joined: boolean;
+  me: { place: number; score: number } | null;
+  leaders: { place: number; user_id: string; score: number; user: MentionedUser | null }[];
+  group_total: number;
+  goal_progress: number | null;
+};
 
 export type CommunityRole = {
   id: string;
@@ -535,11 +557,22 @@ export const api = {
     }),
   communityChannels: (id: string) =>
     request<CommunityChannel[]>(`/communities/${id}/channels`),
-  createCommunityChannel: (communityId: string, name: string, description = "") =>
+  /** `kind` and `challenge` are only sent when set, so a plain text channel's body is unchanged. */
+  createCommunityChannel: (communityId: string, name: string, description = "", options: { kind?: ChannelKind; challenge?: ChallengeSettings } = {}) =>
     request<CommunityChannel>(`/communities/${communityId}/channels`, {
       method: "POST",
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({
+        name, description,
+        ...(options.kind && options.kind !== "text" ? { kind: options.kind } : {}),
+        ...(options.challenge ? { challenge: options.challenge } : {}),
+      }),
     }),
+  checkinBoard: (channelId: string) => request<CheckinBoard>(`/channels/${channelId}/checkins`),
+  challengeBoard: (channelId: string) => request<ChallengeBoard>(`/channels/${channelId}/challenge`),
+  joinChallenge: (channelId: string) =>
+    request<{ joined: boolean }>(`/channels/${channelId}/challenge/participants`, { method: "POST" }),
+  leaveChallenge: (channelId: string) =>
+    request<void>(`/channels/${channelId}/challenge/participants`, { method: "DELETE" }),
   channel: (id: string) => request<CommunityChannel>(`/channels/${id}`),
   channelMessages: (id: string, before?: string) =>
     request<CommunityMessage[]>(`/channels/${id}/messages${before ? `?before=${before}` : ""}`),
