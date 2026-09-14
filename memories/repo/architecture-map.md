@@ -100,3 +100,32 @@ through the shared module.
 - **Feed cursor:** post id -> `created_at <` that post's time; no tiebreak, no `has_more`.
 - **Test/CI shape:** harness tests call router functions directly and monkeypatch module `db`, so middleware never runs in them. CI runs one uvicorn process; live-server tests sign in as the seeded demo user under `-n 2 --dist loadscope`.
 - **Routing qualifier:** `community/[id].tsx` coexists with `community/[id]/manage.tsx`, so the "no sibling directory" rule applies to `user/[id]` specifically, not Expo Router generally.
+
+## Added 2026-09-14 (community batch, slices 1-2)
+
+- **Rate limiting — `backend/ratelimit.py`.** Fixed-window counter in MongoDB
+  (`$inc` upsert, TTL on `expires_at`), keyed by action and subject, called
+  inside handlers. `RATE_LIMITS=off` disables it. It reads `server.db` at call
+  time, so the test harness's `server.db` patch covers it — prefer that pattern
+  for new modules over binding `db` at import.
+- **The single door into a community — `community.py::_activate`.** Direct joins
+  and invite redemption both go through it, so "banned stays banned" and "paid
+  needs verified billing" cannot be routed around.
+- **Invites.** `community_invites`, unique `code`. A plain invite needs
+  `INVITE_MEMBER` (a default-member bit) and grants only what joining would; a
+  direct invite that skips approval needs `MANAGE_CHANNEL`. Redemption claims a
+  use atomically before joining and refunds it if the join changes nothing.
+- **Unread.** `channel_reads {channel_id, user_id, last_read_at}`, advanced with
+  `$max` so it never moves backwards. Baseline with no marker is `joined_at`.
+  `list_channels` returns `unread_count`, capped at 100.
+- **Member directory.** `GET /communities/{id}/directory` — public fields of
+  active members, for any active member. The mention roster uses it; `/members`
+  stays manager-only.
+- **Search — `backend/routers/search.py`.** Escaped, capped regex. People by
+  `full_name` only, excluding blocked and suspended; communities public and not
+  archived; posts via `_visible_post_query`. Muted authors still appear —
+  muting is feed-only.
+- **Realtime publishes** now cover `message.created`, `message.reactions`,
+  `message.updated`, `message.deleted` (id only) and `message.pinned`.
+- **Workout sharing.** `create_post` snapshots `workout_summary` from an owned,
+  finished workout — not `_load_workout_for`, which admits coaches.

@@ -64,7 +64,7 @@ test("opening a mention marks it read and jumps to the channel", async ({ page }
   await page.getByTestId("notification-n-1").click();
 
   await expect(page).toHaveURL(/\/channel\/fixture-channel/);
-  expect(reads).toEqual(["/notifications/n-1/read"]);
+  await expect.poll(() => reads).toEqual(["/notifications/n-1/read"]);
 });
 
 test("mark all read clears every unread badge", async ({ page }) => {
@@ -81,7 +81,7 @@ test("mark all read clears every unread badge", async ({ page }) => {
   });
   await page.goto("/notifications");
   await page.getByTestId("mark-all-read").click();
-  expect(cleared).toBe(true);
+  await expect.poll(() => cleared).toBe(true);
   await expect(page.getByTestId("unread-dot-n-1")).toHaveCount(0);
   await expect(page.getByTestId("mark-all-read")).toHaveCount(0);
 });
@@ -111,11 +111,9 @@ async function channelFixtures(page: Page, override?: (route: Route, path: strin
     if (path === "/realtime/token") return route.fulfill({ json: { enabled: false, token: null, url: null } });
     if (path === "/channels/fixture-channel") return route.fulfill({ json: channel });
     if (path === "/channels/fixture-channel/messages") return route.fulfill({ json: [mentionMessage] });
-    if (path === "/communities/c-1/members") {
-      return route.fulfill({ json: [
-        { id: "m-1", community_id: "c-1", user_id: me.id, role: "member", status: "active", user: { id: me.id, full_name: me.full_name, avatar_url: null } },
-        { id: "m-2", community_id: "c-1", user_id: coach.id, role: "moderator", status: "active", user: coach },
-      ] });
+    // The roster comes from the member directory, open to every active member.
+    if (path === "/communities/c-1/directory") {
+      return route.fulfill({ json: [{ id: me.id, full_name: me.full_name, avatar_url: null }, coach] });
     }
     await route.fulfill({ json: [] });
   });
@@ -149,7 +147,7 @@ test("typing @ suggests members and picking one sends an id token", async ({ pag
   await expect(page.getByTestId("composer-input")).toHaveValue("<@u-2> ");
   await page.getByTestId("composer-input").fill("<@u-2> ready?");
   await page.getByTestId("composer-send").click();
-  expect(sent).toEqual([{ content: "<@u-2> ready?", reply_to_id: null }]);
+  await expect.poll(() => sent).toEqual([{ content: "<@u-2> ready?", reply_to_id: null }]);
 });
 
 test("an email address in a draft never opens the mention picker", async ({ page }) => {

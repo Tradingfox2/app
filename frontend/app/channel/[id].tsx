@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { api, CommunityChannel, CommunityMessage, MentionedUser, Membership } from "@/src/api";
+import { api, CommunityChannel, CommunityMessage, MentionedUser } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
@@ -42,12 +42,10 @@ export default function ChannelScreen() {
       if (requestRevision !== revision.current) return;
       setChannel(meta); setMessages(rows); setError("");
       // Roster powers @ suggestions; a failure here must not break the channel.
-      api.communityMembers(meta.community_id)
-        .then((members: Membership[]) => {
-          if (requestRevision === revision.current) {
-            setRoster(members.filter(m => m.status === "active" && m.user).map(m => m.user as MentionedUser));
-          }
-        })
+      // The member directory, not /members: that one is manager-only, which
+      // left suggestions silently empty for everyone else.
+      api.memberDirectory(meta.community_id)
+        .then(people => { if (requestRevision === revision.current) setRoster(people); })
         .catch(() => undefined);
     } catch (cause) {
       if (requestRevision === revision.current) setError(cause instanceof Error ? cause.message : t("Could not load messages"));
@@ -85,6 +83,15 @@ export default function ChannelScreen() {
     setMessages([]); setDraft(""); setLoading(true); setError(""); setReplyTo(null); setEditing(null); setActionsFor(null); setPinsOpen(false); void load();
     return () => { revision.current += 1; };
   }, [load]));
+  // Advance the read marker whenever the newest message on screen changes.
+  // The server keeps it monotonic, so a stale call can never un-read anything.
+  const newestId = messages[messages.length - 1]?.id;
+  const lastMarked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!id || !newestId || lastMarked.current === newestId) return;
+    lastMarked.current = newestId;
+    api.markChannelRead(id, newestId).catch(() => { lastMarked.current = null; });
+  }, [id, newestId]);
   // The timer never fully stops: with realtime up it drops to a slow reconcile,
   // so a missed publication cannot leave the channel permanently stale.
   useFocusEffect(useCallback(() => {

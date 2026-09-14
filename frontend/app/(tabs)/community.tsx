@@ -73,7 +73,7 @@ export default function CommunityScreen() {
           <Pressable accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
             <Ionicons name="chatbubbles-outline" size={20} color={colors.brand} />
           </Pressable>
-          <Pressable accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}><Ionicons name="search" size={20} color={colors.brand} /></Pressable><Pressable accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
             <Ionicons name={isCoach ? "analytics" : "ribbon"} size={20} color={colors.brand} />
           </Pressable>
         </View>

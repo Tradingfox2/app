@@ -32,10 +32,6 @@ aggregation, no block suppression) while post and comment mentions use
 `notify()`. Verified 2026-09-14.
 
 ### Dormant backend capabilities
-- **Feed pagination.** `social.py::feed(before=...)` is implemented and typed in
-  `api.ts`, but `frontend/src/components/social/feed.tsx` never passes a cursor.
-  The feed is capped at 20 posts with no way to load more.
-- **`PostIn.workout_id`.** Accepted and persisted; no client sends it.
 - **Community-scoped posting from the feed composer.** `PostIn.community_id`
   and its membership guard exist; the composer sends only `content` and
   `media_ids`.
@@ -61,20 +57,11 @@ twice that — `channels`, `messages`, `community_roles`, `follows`, `blocks`,
 schema and lists migration to Supabase as a next step; that path is blocked
 until the SQL side catches up. Verified 2026-09-14.
 
-### No rate limiting
-Any authenticated token can drive message creation, reactions, follows and
-likes without throttling. Verified 2026-09-14.
-
 ### Findings from the 2026-09-14 community-batch map (open unless marked)
-- **(authorization)** `community.py::list_messages`, `create_message`, `edit_message` do not check `VIEW_CHANNEL`; a channel hidden by a `deny: VIEW_CHANNEL` overwrite is readable and postable by id. `list_channels`, `get_channel`, `list_pins` do check it.
-- **(privacy)** `social.py::feed(scope="all")` and `_post_or_404` ignore `users.is_private`, while the Profile privacy switch promises only approved followers see posts.
-- `social.py::create_post` stores `workout_id` unvalidated — any id, including another user's workout.
 - `community.py::PostIn` is a legacy duplicate with no references; the live model is `social.py::PostIn`.
 - `api.createCommunityChannel` never sends `kind`, so non-text channel kinds cannot be created from the UI at all.
 - Check-in guard (`create_message`, kind `checkin`): count-then-insert race, UTC day, and deleting a check-in frees the day. No streak is computed anywhere. Name collision: `checkin` also means gym QR check-in (`/gyms/checkin`, `app/checkin.tsx`).
 - `api.channelPins` and `api.channelMessages(before)` have no callers — pins older than the last 50 messages are invisible; no "load older".
-- The channel mention roster uses manager-only `list_members`, so @-suggestions are empty for plain members (swallowed 403).
-- `app/community/[id].tsx::isManager` uses legacy role strings, not the permission mask, so custom-role managers get no settings gear.
 - `list_communities(scope="mine")` includes archived communities.
 - Feed cursor silently ignores an unknown `before` id and returns page 1 (`list_messages` 404s instead).
 - `INVITE_MEMBER` is in `DEFAULT_MEMBER` — any invite mechanism that bypasses approval must not gate on it alone.
@@ -121,6 +108,34 @@ Nothing called it, so notification aggregation could report a count but never a
 name. Wired into `routers/notifications.py::list_notifications`.
 Fixed 2026-09-14.
 
+
+### Hidden channels readable by id; private posts visible to all
+Fixed 2026-09-14. `_require` now adds `VIEW_CHANNEL` whenever a channel is in
+play, so nothing can be done inside a channel the caller cannot see.
+`social._can_view_post` is the single post-visibility rule and
+`_visible_post_query` its Mongo form, shared by the feed and search.
+`_with_originals` applies it to repost originals — otherwise an approved
+follower's repost would launder a private post to their whole audience.
+
+### Code inserted above a function inherited its decorator
+Found 2026-09-14: a helper inserted directly above `create_post` landed under
+`@router.post("/posts")`, which would have registered the helper as the
+endpoint. **Precedent:** when inserting before a function, anchor on its
+decorator line, not its `def`.
+
+### A hook placed after an early return
+Found 2026-09-14 in `app/community/[id].tsx`: two `useState` calls sat after the
+loading-state `return`, crashing with "Rendered more hooks than during the
+previous render". `react-hooks/rules-of-hooks` is enabled and flags this.
+**Precedent:** run ESLint, not just `tsc`, after every frontend edit — it is two
+seconds against a failed browser run.
+
+### Asserting a captured request synchronously after a click
+Found 2026-09-14: `expect(captured).toEqual(...)` straight after `.click()`
+races the route handler and flakes under load. It surfaced in
+`management.spec.ts` when a new request shifted timing; nine instances across
+five specs were fixed. **Precedent:** use `await expect.poll(() => captured)`.
+Assert absence only after the UI proves the action settled.
 
 ## Frontend reachability — closed 2026-09-14
 

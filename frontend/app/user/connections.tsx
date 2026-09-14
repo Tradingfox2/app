@@ -47,7 +47,7 @@ export default function Connections() {
     busy.current = true;
     // Optimistic: this list can be long and a full refetch would lose scroll.
     setRows(current => current.map(row => row.id === person.id ? { ...row, followed_by_me: !row.followed_by_me } : row));
-    try { person.followed_by_me ? await api.unfollow(person.id) : await api.follow(person.id); }
+    try { if (person.followed_by_me) await api.unfollow(person.id); else await api.follow(person.id); }
     catch (cause) {
       setRows(current => current.map(row => row.id === person.id ? { ...row, followed_by_me: person.followed_by_me } : row));
       setError(cause instanceof Error ? cause.message : t("Something went wrong"));

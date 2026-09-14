@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import secrets
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -458,15 +460,31 @@ async def update_community(
     return await _community_view(updated, user["id"])
 
 
-@router.post("/communities/{community_id}/join")
-async def join_community(community_id: str, user: dict = Depends(current_user)):
-    community = await _community_or_404(community_id)
+async def _activate(
+    community: dict,
+    user: dict,
+    *,
+    bypass_approval: bool = False,
+    source: str = "free",
+) -> tuple[dict, bool]:
+    """The single door into a community. Returns (membership, changed).
+
+    Every way in — joining directly, redeeming an invite — goes through here,
+    so the two rules that matter cannot be routed around:
+    - a banned member stays banned, whatever link they arrive with;
+    - a paid community needs verified billing, whatever link they arrive with.
+    """
+    community_id = community["id"]
     existing = await _membership(community_id, user["id"])
-    if existing and existing.get("status") in {"active", "pending", "banned"}:
-        return clean(existing)
+    status_now = (existing or {}).get("status")
+    if status_now in {"active", "banned"}:
+        return clean(existing), False
+    if status_now == "pending" and not bypass_approval:
+        return clean(existing), False
     policy = community.get("join_policy", "open")
     if policy == "paid":
         raise HTTPException(402, "Verified payment is required before membership activation")
+    activate = policy == "open" or bypass_approval
     timestamp = now()
     membership = {
         "id": existing["id"] if existing else new_id(),
@@ -474,16 +492,23 @@ async def join_community(community_id: str, user: dict = Depends(current_user)):
         "user_id": user["id"],
         "owner_id": community["owner_id"],
         "role": "member",
-        "status": "active" if policy == "open" else "pending",
-        "entitlement_source": "free",
-        "joined_at": timestamp if policy == "open" else None,
+        "status": "active" if activate else "pending",
+        "entitlement_source": source,
+        "joined_at": timestamp if activate else None,
         "created_at": existing.get("created_at", timestamp) if existing else timestamp,
         "updated_at": timestamp,
     }
     await db.community_members.replace_one(
         {"community_id": community_id, "user_id": user["id"]}, membership, upsert=True
     )
-    return clean(membership)
+    return clean(membership), True
+
+
+@router.post("/communities/{community_id}/join")
+async def join_community(community_id: str, user: dict = Depends(current_user)):
+    community = await _community_or_404(community_id)
+    membership, _ = await _activate(community, user)
+    return membership
 
 
 @router.get("/communities/{community_id}/members")
@@ -732,7 +757,37 @@ async def list_channels(community_id: str, user: dict = Depends(current_user)):
         if not permissions.has(mask, permissions.VIEW_CHANNEL):
             continue  # a denied channel should not even reveal that it exists
         visible.append(clean({**channel, "permissions": mask}))
+    await _attach_unread(visible, member, user["id"])
     return visible
+
+
+#: Badges read "99+" beyond this; counting further would cost a scan for no gain.
+UNREAD_CAP = 100
+
+
+async def _attach_unread(channels: list[dict], member: dict, user_id: str) -> None:
+    """Add `unread_count` to each channel: other people's messages since the
+    caller last read it.
+
+    With no read marker, the baseline is when they joined, so a new member does
+    not open the app to a thousand-message backlog marked unread. Own messages
+    never count. Uses the existing (channel_id, created_at) index.
+    """
+    ids = [channel["id"] for channel in channels]
+    reads = {
+        row["channel_id"]: row["last_read_at"]
+        async for row in db.channel_reads.find(
+            {"user_id": user_id, "channel_id": {"$in": ids}}, {"_id": 0}
+        )
+    }
+    joined = member.get("joined_at")
+    for channel in channels:
+        query: dict = {"channel_id": channel["id"], "status": "active",
+                       "author_id": {"$ne": user_id}}
+        since = reads.get(channel["id"]) or joined
+        if since:
+            query["created_at"] = {"$gt": since}
+        channel["unread_count"] = await db.messages.count_documents(query, limit=UNREAD_CAP)
 
 
 @router.post("/communities/{community_id}/channels", status_code=201)
@@ -1094,6 +1149,185 @@ async def list_pins(channel_id: str, user: dict = Depends(current_user)):
             {"_id": 0},
         ).sort("pinned_at", -1)
     ]
+
+
+class ReadIn(BaseModel):
+    message_id: str
+
+
+class InviteIn(BaseModel):
+    max_uses: int | None = Field(default=None, ge=1, le=1000)
+    expires_in_hours: int | None = Field(default=168, ge=1, le=24 * 30)
+    #: Admit straight to active membership, skipping approval. Manager-only.
+    skip_approval: bool = False
+
+
+@router.post("/channels/{channel_id}/read")
+async def mark_channel_read(channel_id: str, body: ReadIn, user: dict = Depends(current_user)):
+    channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    message = await db.messages.find_one(
+        {"id": body.message_id, "channel_id": channel_id}, {"_id": 0, "created_at": 1})
+    if not message:
+        raise HTTPException(404, "Message not found")
+    # $max: the marker only moves forward, so reading an old message on a
+    # second device can never resurrect messages already seen.
+    await db.channel_reads.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$max": {"last_read_at": message["created_at"]},
+         "$setOnInsert": {"id": new_id()}},
+        upsert=True,
+    )
+    row = await db.channel_reads.find_one(
+        {"channel_id": channel_id, "user_id": user["id"]}, {"_id": 0})
+    return {"channel_id": channel_id, "last_read_at": row["last_read_at"]}
+
+
+@router.get("/communities/{community_id}/directory")
+async def member_directory(community_id: str, user: dict = Depends(current_user)):
+    """Active members' public fields, for any active member.
+
+    Distinct from `/members`, which is manager-only because it exposes pending
+    requests and statuses. Without this, @-mention suggestions were silently
+    empty for everyone who was not a manager.
+    """
+    await _community_or_404(community_id)
+    await _active_member(community_id, user["id"])
+    user_ids = [
+        row["user_id"]
+        async for row in db.community_members.find(
+            {"community_id": community_id, "status": "active"}, {"_id": 0, "user_id": 1}
+        ).limit(1000)
+    ]
+    return [
+        clean(row)
+        async for row in db.users.find(
+            {"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
+        ).sort("full_name", 1)
+    ]
+
+
+def _invite_state(invite: dict) -> str | None:
+    """Why an invite cannot be used, or None when it can."""
+    if invite.get("revoked_at"):
+        return "revoked"
+    expires = invite.get("expires_at")
+    if expires and expires <= now():
+        return "expired"
+    max_uses = invite.get("max_uses")
+    if max_uses is not None and invite.get("uses", 0) >= max_uses:
+        return "exhausted"
+    return None
+
+
+def _invite_view(invite: dict) -> dict:
+    view = clean(dict(invite)) or {}
+    view["unusable_reason"] = _invite_state(invite)
+    return view
+
+
+@router.post("/communities/{community_id}/invites", status_code=201)
+async def create_invite(community_id: str, body: InviteIn, user: dict = Depends(current_user)):
+    await ratelimit.hit("invite_create", user["id"])
+    # INVITE_MEMBER is a default-member bit, so a plain invite may only grant
+    # what a normal join would. Skipping approval is a manager's decision.
+    needed = permissions.MANAGE_CHANNEL if body.skip_approval else permissions.INVITE_MEMBER
+    await _require(community_id, user["id"], needed)
+    timestamp = now()
+    invite = {
+        "id": new_id(),
+        "code": secrets.token_urlsafe(9),
+        "community_id": community_id,
+        "created_by": user["id"],
+        "max_uses": body.max_uses,
+        "uses": 0,
+        "expires_at": (timestamp + timedelta(hours=body.expires_in_hours)) if body.expires_in_hours else None,
+        "skip_approval": body.skip_approval,
+        "revoked_at": None,
+        "created_at": timestamp,
+    }
+    await db.community_invites.insert_one(dict(invite))
+    return _invite_view(invite)
+
+
+@router.get("/communities/{community_id}/invites")
+async def list_invites(community_id: str, user: dict = Depends(current_user)):
+    await _manager(community_id, user["id"])
+    return [
+        _invite_view(row)
+        async for row in db.community_invites.find(
+            {"community_id": community_id, "revoked_at": None}, {"_id": 0}
+        ).sort("created_at", -1).limit(100)
+    ]
+
+
+@router.delete("/invites/{code}", status_code=204)
+async def revoke_invite(code: str, user: dict = Depends(current_user)):
+    invite = await db.community_invites.find_one({"code": code}, {"_id": 0})
+    if not invite:
+        raise HTTPException(404, "Invite not found")
+    if invite["created_by"] != user["id"]:
+        await _manager(invite["community_id"], user["id"])
+    await db.community_invites.update_one({"code": code}, {"$set": {"revoked_at": now()}})
+
+
+@router.get("/invites/{code}")
+async def preview_invite(code: str, user: dict | None = Depends(optional_user)):
+    """What the link leads to. Readable before joining, including for a
+    private community, since holding the link is the point of an invite."""
+    invite = await db.community_invites.find_one({"code": code}, {"_id": 0})
+    community = await db.communities.find_one(
+        {"id": invite["community_id"]}, {"_id": 0}) if invite else None
+    if not invite or not community or community.get("status", "active") != "active":
+        raise HTTPException(404, "Invite not found")
+    member_count = await db.community_members.count_documents(
+        {"community_id": community["id"], "status": "active"})
+    membership = await _membership(community["id"], user["id"]) if user else None
+    return {
+        "code": code,
+        "unusable_reason": _invite_state(invite),
+        "skip_approval": invite.get("skip_approval", False),
+        "membership_status": (membership or {}).get("status"),
+        "community": {
+            "id": community["id"], "name": community["name"],
+            "description": community.get("description", ""),
+            "join_policy": community.get("join_policy", "open"),
+            "is_public": community.get("is_public", True),
+            "member_count": member_count,
+        },
+    }
+
+
+@router.post("/invites/{code}/redeem")
+async def redeem_invite(code: str, user: dict = Depends(current_user)):
+    await ratelimit.hit("invite_redeem", user["id"])
+    invite = await db.community_invites.find_one({"code": code}, {"_id": 0})
+    if not invite:
+        raise HTTPException(404, "Invite not found")
+    reason = _invite_state(invite)
+    if reason:
+        raise HTTPException(410, f"This invite is {reason}")
+    community = await _community_or_404(invite["community_id"])
+
+    # Claim a use atomically *before* joining, so two people racing for the
+    # last seat cannot both get in; refund it if the join changes nothing.
+    claim: dict = {"code": code, "revoked_at": None}
+    if invite.get("max_uses") is not None:
+        claim["uses"] = {"$lt": invite["max_uses"]}
+    claimed = await db.community_invites.find_one_and_update(claim, {"$inc": {"uses": 1}})
+    if not claimed:
+        raise HTTPException(410, "This invite is exhausted")
+    try:
+        membership, changed = await _activate(
+            community, user, bypass_approval=invite.get("skip_approval", False), source="invite")
+    except HTTPException:
+        await db.community_invites.update_one({"code": code}, {"$inc": {"uses": -1}})
+        raise
+    if not changed:
+        await db.community_invites.update_one({"code": code}, {"$inc": {"uses": -1}})
+    return membership
 
 
 @router.get("/partner/dashboard")

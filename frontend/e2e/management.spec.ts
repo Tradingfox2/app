@@ -48,7 +48,7 @@ test("community settings can be edited", async ({ page }) => {
   await expect(page.getByTestId("settings-name")).toHaveValue("Iron Club");
   await page.getByTestId("settings-name").fill("Iron Club Reloaded");
   await page.getByTestId("save-settings").click();
-  expect(saved).toEqual([{ name: "Iron Club Reloaded", description: "Strength" }]);
+  await expect.poll(() => saved).toEqual([{ name: "Iron Club Reloaded", description: "Strength" }]);
 });
 
 test("a channel can be renamed and archived, except the default one", async ({ page }) => {
@@ -76,11 +76,11 @@ test("a channel can be renamed and archived, except the default one", async ({ p
   await page.getByTestId("channel-ch-2").click();
   await page.getByTestId("rename-input-ch-2").fill("Legends");
   await page.getByTestId("rename-ch-2").click();
-  expect(renames).toEqual([{ name: "Legends" }]);
+  await expect.poll(() => renames).toEqual([{ name: "Legends" }]);
 
   // The panel stays open across a rename, so no second tap to re-expand.
   await page.getByTestId("archive-channel-ch-2").click();
-  expect(archived).toEqual(["ch-2"]);
+  await expect.poll(() => archived).toEqual(["ch-2"]);
 });
 
 test("an active member can be removed, but never the owner", async ({ page }) => {
@@ -101,7 +101,7 @@ test("an active member can be removed, but never the owner", async ({ page }) =>
 
   await page.getByTestId("member-m-2").click();
   await page.getByTestId("remove-member-m-2").click();
-  expect(removed).toEqual([{ status: "banned" }]);
+  await expect.poll(() => removed).toEqual([{ status: "banned" }]);
 });
 
 test("archiving a community asks for confirmation first", async ({ page }) => {
@@ -117,13 +117,15 @@ test("archiving a community asks for confirmation first", async ({ page }) => {
   await page.goto("/community/c-1/manage");
 
   await page.getByTestId("archive-community").click();
+  // One tap opens the confirmation; only then check nothing was sent.
+  await expect(page.getByTestId("confirm-archive-community")).toBeVisible();
   expect(archived).toBe(false);  // one tap alone must not close a community
   await page.getByTestId("cancel-archive").click();
   await expect(page.getByTestId("confirm-archive-community")).toHaveCount(0);
 
   await page.getByTestId("archive-community").click();
   await page.getByTestId("confirm-archive-community").click();
-  expect(archived).toBe(true);
+  await expect.poll(() => archived).toBe(true);
 });
 
 test("a member can leave, an owner cannot", async ({ page }) => {
@@ -146,7 +148,7 @@ test("a member can leave, an owner cannot", async ({ page }) => {
   });
   await page.goto("/community/c-1");
   await page.getByTestId("leave-community").click();
-  expect(left).toEqual(["c-1"]);
+  await expect.poll(() => left).toEqual(["c-1"]);
 });
 
 test("an owner is never offered Leave in their own community", async ({ page }) => {
@@ -201,7 +203,7 @@ test("a pending coach application can be approved from the console", async ({ pa
   await page.getByPlaceholder("Review note (sent to the applicant)").fill("Credentials verified");
   await page.getByTestId("approve-application-app-1").click();
 
-  expect(reviews).toEqual([{ status: "approved", review_note: "Credentials verified" }]);
+  await expect.poll(() => reviews).toEqual([{ status: "approved", review_note: "Credentials verified" }]);
   await expect(page.getByText("No coach applications waiting.", { exact: true })).toBeVisible();
 });
 

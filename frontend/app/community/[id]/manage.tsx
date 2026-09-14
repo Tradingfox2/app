@@ -3,10 +3,11 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, Tex
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { api, ChannelOverwrite, Community, CommunityChannel, CommunityRole, Membership } from "@/src/api";
+import { api, ChannelOverwrite, Community, CommunityChannel, CommunityInvite, CommunityRole, Membership } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { PERMISSION_LIST, can, toggle as togglePermission } from "@/src/permissions";
+import * as Linking from "expo-linking";
 
 /** inherit -> allow -> deny -> inherit */
 type Tri = "inherit" | "allow" | "deny";
@@ -24,6 +25,7 @@ export default function ManageCommunity() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameTo, setRenameTo] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [invites, setInvites] = useState<CommunityInvite[]>([]);
   const generation = useRef(0);
   const busy = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,10 @@ export default function ManageCommunity() {
       // Defaulted, not trusted: the form reads these straight into .trim(), so a
       // payload missing either field would take the whole screen down.
       setSettings({ name: detail?.name ?? "", description: detail?.description ?? "" });
+      // Separate and non-fatal: a failure here must not blank the whole screen.
+      api.communityInvites(id)
+        .then(rows => { if (current === generation.current) setInvites(rows); })
+        .catch(() => undefined);
     } catch (cause) {
       if (current === generation.current) setError(cause instanceof Error ? cause.message : t("Could not load management tools"));
     } finally { if (current === generation.current) setLoading(false); }
@@ -141,6 +147,16 @@ export default function ManageCommunity() {
     router.replace("/community");
   }, "Could not archive the community");
 
+  const createInvite = (skipApproval: boolean) => run(async () => {
+    if (!id) return;
+    await api.createInvite(id, { skip_approval: skipApproval });
+    setInvites(await api.communityInvites(id));
+  }, "Could not create invite");
+  const revokeInvite = (code: string) => run(async () => {
+    await api.revokeInvite(code);
+    setInvites(rows => rows.filter(row => row.code !== code));
+  }, "Could not revoke invite");
+
   const pending = members.filter(member => member.status === "pending");
   const active = members.filter(member => member.status === "active");
   const disabled = reviewing || loading;
@@ -162,6 +178,20 @@ export default function ManageCommunity() {
     </Pressable>
 
     <Text style={styles.section}>{t("JOIN REQUESTS")}</Text>{pending.length ? pending.map(member => <View key={member.id} style={styles.row}><View style={{ flex: 1 }}><Text style={styles.name}>{member.user?.full_name || t("Member")}</Text><Text style={styles.meta}>{t("Awaiting review")}</Text></View><Pressable accessibilityRole="button" disabled={reviewing} accessibilityLabel={t("Reject")} onPress={() => void review(member.id, "rejected")} style={[styles.icon, { opacity: reviewing ? 0.4 : 1 }]}><Ionicons name="close" size={20} color={colors.error} /></Pressable><Pressable accessibilityRole="button" disabled={reviewing} accessibilityLabel={t("Approve")} onPress={() => void review(member.id, "active")} style={[styles.approve, { opacity: reviewing ? 0.4 : 1 }]}><Ionicons name="checkmark" size={20} color={colors.brandOn} /></Pressable></View>) : !loading && !error ? <Text style={styles.empty}>{t("No pending requests")}</Text> : null}
+
+    <Text style={styles.section}>{t("INVITE LINKS")}</Text>
+    <Text style={styles.meta}>{t("A standard link still goes through approval. A direct link admits people straight in.")}</Text>
+    {invites.map(invite => <View key={invite.code} style={styles.row} testID={`invite-${invite.code}`}>
+      <View style={{ flex: 1 }}>
+        <Text selectable numberOfLines={1} style={styles.name}>{Linking.createURL(`/invite/${invite.code}`)}</Text>
+        <Text style={styles.meta}>{t(invite.skip_approval ? "Direct" : "Standard")} · {t("{count} used").replace("{count}", String(invite.uses))}{invite.max_uses ? ` / ${invite.max_uses}` : ""}{invite.unusable_reason ? ` · ${t(invite.unusable_reason)}` : ""}</Text>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Revoke")} testID={`revoke-${invite.code}`} disabled={disabled} onPress={() => void revokeInvite(invite.code)} style={styles.icon}><Ionicons name="close-circle-outline" size={20} color={colors.error} /></Pressable>
+    </View>)}
+    <View style={styles.addRow}>
+      <Pressable accessibilityRole="button" testID="create-invite-standard" disabled={disabled} onPress={() => void createInvite(false)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("NEW LINK")}</Text></Pressable>
+      <Pressable accessibilityRole="button" testID="create-invite-direct" disabled={disabled} onPress={() => void createInvite(true)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("NEW DIRECT LINK")}</Text></Pressable>
+    </View>
 
     <Text style={styles.section}>{t("ROLES")}</Text>
     <Text style={styles.meta}>{t("Roles grant baseline powers. Channels can override them below.")}</Text>

@@ -80,7 +80,7 @@ test("reacting sends the emoji and renders the returned count", async ({ page })
   await page.getByTestId("message-actions-msg-1").click({ delay: 400 });
   await page.getByTestId("react-msg-1-💪").click();
 
-  expect(reactions).toEqual([{ emoji: "💪" }]);
+  await expect.poll(() => reactions).toEqual([{ emoji: "💪" }]);
   await expect(page.getByTestId("reaction-msg-1-💪")).toContainText("1");
   await expect(page.getByTestId("actions-msg-1")).toHaveCount(0);
 });
@@ -102,7 +102,7 @@ test("replying threads the parent and the bar can be dismissed", async ({ page }
 
   await page.getByTestId("composer-input").fill("I am in");
   await page.getByTestId("composer-send").click();
-  expect(sent).toEqual([{ content: "I am in", reply_to_id: "msg-1" }]);
+  await expect.poll(() => sent).toEqual([{ content: "I am in", reply_to_id: "msg-1" }]);
   await expect(page.getByTestId("reply-bar")).toHaveCount(0);
   await expect(page.getByTestId("message-msg-2")).toContainText("Leg day at 18:00");
 });

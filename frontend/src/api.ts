@@ -120,7 +120,37 @@ export type CommunityChannel = {
   overwrites?: ChannelOverwrite[];
   /** Caller's effective mask for this channel, resolved server-side. */
   permissions?: number;
+  /** Other people's messages since the caller last read it, capped at 100. */
+  unread_count?: number;
 };
+
+export type CommunityInvite = {
+  id: string;
+  code: string;
+  community_id: string;
+  created_by: string;
+  max_uses: number | null;
+  uses: number;
+  expires_at: string | null;
+  skip_approval: boolean;
+  revoked_at: string | null;
+  created_at: string;
+  unusable_reason: "revoked" | "expired" | "exhausted" | null;
+};
+
+export type InvitePreview = {
+  code: string;
+  unusable_reason: CommunityInvite["unusable_reason"];
+  skip_approval: boolean;
+  membership_status: Membership["status"] | null;
+  community: {
+    id: string; name: string; description: string;
+    join_policy: Community["join_policy"]; is_public: boolean; member_count: number;
+  };
+};
+
+export type SearchPerson = MentionedUser & { is_private: boolean; follow_state: FollowState };
+export type SearchKind = "users" | "communities" | "posts";
 
 export type ChannelOverwrite = { role_id: string; allow: number; deny: number };
 
@@ -528,6 +558,23 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status, review_note: review_note ?? null }),
     }),
+  memberDirectory: (communityId: string) => request<MentionedUser[]>(`/communities/${communityId}/directory`),
+  markChannelRead: (channelId: string, messageId: string) =>
+    request<{ channel_id: string; last_read_at: string }>(`/channels/${channelId}/read`, {
+      method: "POST", body: JSON.stringify({ message_id: messageId }),
+    }),
+  createInvite: (communityId: string, body: { max_uses?: number | null; expires_in_hours?: number | null; skip_approval?: boolean }) =>
+    request<CommunityInvite>(`/communities/${communityId}/invites`, { method: "POST", body: JSON.stringify(body) }),
+  communityInvites: (communityId: string) => request<CommunityInvite[]>(`/communities/${communityId}/invites`),
+  revokeInvite: (code: string) => request<void>(`/invites/${code}`, { method: "DELETE" }),
+  previewInvite: (code: string) => request<InvitePreview>(`/invites/${code}`),
+  redeemInvite: (code: string) => request<Membership>(`/invites/${code}/redeem`, { method: "POST" }),
+  searchUsers: (q: string) =>
+    request<{ type: "users"; results: SearchPerson[] }>(`/search?type=users&q=${encodeURIComponent(q)}`),
+  searchCommunities: (q: string) =>
+    request<{ type: "communities"; results: Community[] }>(`/search?type=communities&q=${encodeURIComponent(q)}`),
+  searchPosts: (q: string) =>
+    request<{ type: "posts"; results: Post[] }>(`/search?type=posts&q=${encodeURIComponent(q)}`),
   communityRoles: (id: string) => request<CommunityRole[]>(`/communities/${id}/roles`),
   createRole: (id: string, body: { name: string; color?: string; rank?: number; permissions?: number }) =>
     request<CommunityRole>(`/communities/${id}/roles`, { method: "POST", body: JSON.stringify(body) }),

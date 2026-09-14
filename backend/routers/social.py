@@ -65,6 +65,29 @@ async def _can_view_post(post: dict, user_id: str) -> bool:
     return await social_graph.can_view_profile(user_id, author_id)
 
 
+async def _visible_post_query(viewer_id: str) -> dict:
+    """Every post this viewer may see — the base both the feed and search use.
+
+    The Mongo form of `_can_view_post`: community posts for members only,
+    public posts minus private authors the viewer does not follow, and nothing
+    from anyone blocked in either direction. Feed-only narrowing (muting,
+    scope) is layered on by the caller.
+    """
+    community_ids = await _member_community_ids(viewer_id)
+    hidden_private = await _private_hidden_author_ids(viewer_id)
+    public_posts: dict = {"community_id": None}
+    if hidden_private:
+        public_posts["author_id"] = {"$nin": hidden_private}
+    query: dict = {
+        "status": {"$ne": "deleted"},
+        "$or": [public_posts, {"community_id": {"$in": community_ids}}],
+    }
+    blocked = await social_graph.blocked_ids(viewer_id)
+    if blocked:
+        query["author_id"] = {"$nin": blocked}
+    return query
+
+
 async def _private_hidden_author_ids(viewer_id: str) -> list[str]:
     """Private authors whose public-feed posts this viewer may not see.
 
@@ -171,30 +194,29 @@ async def feed(
     limit: int = Query(default=20, ge=1, le=50),
     user: dict = Depends(current_user),
 ):
-    query: dict = {"status": {"$ne": "deleted"}}
-    community_ids = await _member_community_ids(user["id"])
-    hidden_private = await _private_hidden_author_ids(user["id"])
-    public_posts: dict = {"community_id": None}
-    if hidden_private:
-        public_posts["author_id"] = {"$nin": hidden_private}
-    visibility = {"$or": [public_posts, {"community_id": {"$in": community_ids}}]}
+    query = await _visible_post_query(user["id"])
     if scope == "mine":
         query["author_id"] = user["id"]
-    elif scope == "following":
-        following = [
-            row["followee_id"]
-            async for row in db.follows.find(
-                {"follower_id": user["id"], "status": social_graph.ACTIVE},
-                {"_id": 0, "followee_id": 1},
-            )
-        ]
-        query["author_id"] = {"$in": [*following, user["id"]]}
-    query.update(visibility)
-    # Blocked people disappear both ways; muted people only leave the feed.
-    hidden = [a for a in await social_graph.hidden_author_ids(user["id"]) if a != user["id"]]
-    if hidden and scope != "mine":
-        existing = query.get("author_id")
-        query["author_id"] = {**existing, "$nin": hidden} if isinstance(existing, dict) else {"$nin": hidden}
+    else:
+        # Blocked people are already excluded; muted people leave the feed too.
+        # (Muting is feed-only — search still finds them, as on X.)
+        excluded = set(query.get("author_id", {}).get("$nin", []))
+        excluded |= set(await social_graph.muted_ids(user["id"]))
+        excluded.discard(user["id"])
+        author_filter: dict = {"$nin": list(excluded)} if excluded else {}
+        if scope == "following":
+            following = [
+                row["followee_id"]
+                async for row in db.follows.find(
+                    {"follower_id": user["id"], "status": social_graph.ACTIVE},
+                    {"_id": 0, "followee_id": 1},
+                )
+            ]
+            author_filter["$in"] = [*following, user["id"]]
+        if author_filter:
+            query["author_id"] = author_filter
+        else:
+            query.pop("author_id", None)
     if before:
         cursor = await db.posts.find_one({"id": before}, {"_id": 0, "created_at": 1})
         if cursor:

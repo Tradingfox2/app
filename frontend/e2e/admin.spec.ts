@@ -86,7 +86,7 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
   await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
   await expect(suspend).toBeEnabled();
   await suspend.click();
-  expect(suspensions).toEqual([{ reason: "Repeated dangerous advice" }]);
+  await expect.poll(() => suspensions).toEqual([{ reason: "Repeated dangerous advice" }]);
   await expect(page.getByText(/Suspended:/)).toBeVisible();
 });
 

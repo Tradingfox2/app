@@ -39,7 +39,7 @@ test("a public account shows FOLLOW and follows immediately", async ({ page }) =
   await page.goto(`/user/${peer.id}`);
   await expect(page.getByTestId("follow-toggle")).toContainText("FOLLOW");
   await page.getByTestId("follow-toggle").click();
-  expect(calls).toEqual(["follow"]);
+  await expect.poll(() => calls).toEqual(["follow"]);
 });
 
 test("a private account answers a follow with REQUESTED, not FOLLOWING", async ({ page }) => {
@@ -78,7 +78,7 @@ test("the overflow menu offers mute and block with their consequences spelled ou
   await expect(page.getByTestId("toggle-mute")).toContainText("Mute");
   await expect(page.getByText("Muting hides their posts. Blocking also removes the follow both ways.", { exact: true })).toBeVisible();
   await page.getByTestId("toggle-block").click();
-  expect(calls).toEqual(["block"]);
+  await expect.poll(() => calls).toEqual(["block"]);
 });
 
 test("an already-blocked account offers Unblock", async ({ page }) => {
@@ -144,7 +144,7 @@ test("a follow request can be approved", async ({ page }) => {
   await page.goto("/follow-requests");
   await expect(page.getByTestId("request-u-5")).toContainText("Hopeful Five");
   await page.getByTestId("approve-u-5").click();
-  expect(decisions).toEqual(["approve"]);
+  await expect.poll(() => decisions).toEqual(["approve"]);
   await expect(page.getByTestId("request-u-5")).toHaveCount(0);
 });
 
@@ -160,7 +160,7 @@ test("denying a request removes it without announcing anything", async ({ page }
   });
   await page.goto("/follow-requests");
   await page.getByTestId("deny-u-5").click();
-  expect(denied).toBe(true);
+  await expect.poll(() => denied).toBe(true);
   await expect(page.getByTestId("request-u-5")).toHaveCount(0);
 });
 
@@ -188,5 +188,5 @@ test("the private-account switch is what makes requests possible", async ({ page
   });
   await page.goto("/profile");
   await page.getByTestId("private-account-toggle").click();
-  expect(writes).toEqual([{ is_private: true }]);
+  await expect.poll(() => writes).toEqual([{ is_private: true }]);
 });

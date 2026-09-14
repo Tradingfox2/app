@@ -339,6 +339,11 @@ async def lifespan(app: FastAPI):
     await db.mutes.create_index([("muter_id", 1), ("muted_id", 1)], unique=True)
     # Aggregation looks up an unread row for the same target before inserting.
     await db.notifications.create_index([("user_id", 1), ("type", 1), ("metadata.target_id", 1), ("read_at", 1)])
+    # One read marker per member per channel; $max upserts rely on the key.
+    await db.channel_reads.create_index([("channel_id", 1), ("user_id", 1)], unique=True)
+    await db.channel_reads.create_index([("user_id", 1), ("channel_id", 1)])
+    await db.community_invites.create_index("code", unique=True)
+    await db.community_invites.create_index([("community_id", 1), ("revoked_at", 1), ("created_at", -1)])
     await db.rate_limits.create_index("key", unique=True)
     # TTL: a window's counter deletes itself once the window has passed.
     await db.rate_limits.create_index("expires_at", expireAfterSeconds=0)
@@ -897,6 +902,7 @@ from routers.wearables import router as wearables_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
 from routers.notifications import router as notifications_router  # noqa: E402
+from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
 
 api.include_router(program_router)
@@ -905,6 +911,7 @@ api.include_router(social_router)
 api.include_router(admin_router)
 api.include_router(labs_router)
 api.include_router(notifications_router)
+api.include_router(search_router)
 api.include_router(wearables_router)
 api.include_router(muscles_router)
 api.include_router(tips_router)

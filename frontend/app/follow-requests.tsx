@@ -39,8 +39,8 @@ export default function FollowRequests() {
     if (busy.current) return;
     busy.current = true;
     try {
-      approve ? await api.approveFollowRequest(request.follower_id)
-              : await api.denyFollowRequest(request.follower_id);
+      if (approve) await api.approveFollowRequest(request.follower_id);
+      else await api.denyFollowRequest(request.follower_id);
       setRows(current => current.filter(row => row.follower_id !== request.follower_id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("Something went wrong"));
