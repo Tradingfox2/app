@@ -10,6 +10,7 @@ from pymongo.errors import DuplicateKeyError
 import media_storage
 import staff
 import notifications
+import ratelimit
 import social_graph
 from server import clean, current_user, db, new_id, now
 
@@ -202,10 +203,46 @@ async def feed(
     return await _decorate(await _with_originals(posts, user["id"]), user["id"])
 
 
+async def _workout_summary(workout_id: str, user: dict) -> dict:
+    """Snapshot a finished workout for a feed card.
+
+    Owner-only, the `gym_checkin` precedent — deliberately not
+    `_load_workout_for`, which also admits active coaches: a coach may read a
+    client's session but must never be able to publish it. The numbers are
+    frozen at share time so the card neither costs a query per render nor
+    changes if the log is edited afterwards.
+    """
+    workout = await db.workouts.find_one({"id": workout_id, "user_id": user["id"]}, {"_id": 0})
+    if not workout:
+        raise HTTPException(404, "Workout not found")  # yours or nothing — never confirm others'
+    if not workout.get("ended_at"):
+        raise HTTPException(422, "Finish the workout before sharing it")
+    sets = [row async for row in db.workout_sets.find({"workout_id": workout_id}, {"_id": 0})]
+    exercise_ids = list(dict.fromkeys(row["exercise_id"] for row in sets if row.get("exercise_id")))
+    names = {
+        row["id"]: row.get("name") or row.get("slug")
+        async for row in db.exercises.find({"id": {"$in": exercise_ids}}, {"_id": 0, "id": 1, "name": 1, "slug": 1})
+    }
+    tonnage = sum(float(row.get("weight_kg") or 0) * int(row.get("reps") or 0) for row in sets)
+    return {
+        "workout_id": workout_id,
+        "title": workout.get("title") or "Workout",
+        "duration_sec": workout.get("duration_sec"),
+        "sets": len(sets),
+        "tonnage_kg": round(tonnage, 1),
+        "exercises": [names[e] for e in exercise_ids if names.get(e)][:6],
+        "exercise_count": len(exercise_ids),
+        "perceived_effort": workout.get("perceived_effort"),
+        "ended_at": workout.get("ended_at"),
+    }
+
+
 @router.post("/posts", status_code=201)
 async def create_post(body: PostIn, user: dict = Depends(current_user)):
-    if not body.content.strip() and not body.media_ids:
-        raise HTTPException(422, "A post needs text or media")
+    await ratelimit.hit("post", user["id"])
+    if not body.content.strip() and not body.media_ids and not body.workout_id:
+        raise HTTPException(422, "A post needs text, media or a workout")
+    workout_summary = await _workout_summary(body.workout_id, user) if body.workout_id else None
     if body.community_id:
         if body.community_id not in await _member_community_ids(user["id"]):
             raise HTTPException(403, "Active community membership required")
@@ -220,6 +257,7 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         "id": new_id(), "author_id": user["id"], "content": body.content.strip(),
         "community_id": body.community_id, "workout_id": body.workout_id,
         "media": media, "repost_of": None, "status": "active",
+        "workout_summary": workout_summary,
         "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": now(),
     }
     await db.posts.insert_one(post)
@@ -257,6 +295,7 @@ async def _notify_post_author(post: dict, actor: dict, kind: str, title: str, bo
 
 @router.post("/posts/{post_id}/like")
 async def like_post(post_id: str, user: dict = Depends(current_user)):
+    await ratelimit.hit("like", user["id"])
     post = await _post_or_404(post_id, user["id"])
     try:
         await db.post_likes.insert_one({"post_id": post_id, "user_id": user["id"], "created_at": now()})
@@ -308,6 +347,7 @@ async def list_comments(post_id: str, user: dict = Depends(current_user)):
 
 @router.post("/posts/{post_id}/comments", status_code=201)
 async def add_comment(post_id: str, body: CommentIn, user: dict = Depends(current_user)):
+    await ratelimit.hit("comment", user["id"])
     await _post_or_404(post_id, user["id"])
     comment = {"id": new_id(), "post_id": post_id, "author_id": user["id"], "content": body.content.strip(), "status": "active", "created_at": now()}
     await db.post_comments.insert_one(comment)
@@ -336,6 +376,7 @@ async def add_comment(post_id: str, body: CommentIn, user: dict = Depends(curren
 # --------------------------------------------------------------------------- #
 @router.post("/users/{user_id}/follow")
 async def follow(user_id: str, user: dict = Depends(current_user)):
+    await ratelimit.hit("follow", user["id"])
     if user_id == user["id"]:
         raise HTTPException(409, "You cannot follow yourself")
     if not await db.users.find_one({"id": user_id}, {"_id": 1}):
@@ -538,6 +579,7 @@ async def thread_messages(peer_id: str, limit: int = Query(default=50, ge=1, le=
 
 @router.post("/dm/{peer_id}/messages", status_code=201)
 async def send_direct_message(peer_id: str, body: DirectMessageIn, user: dict = Depends(current_user)):
+    await ratelimit.hit("direct_message", user["id"])
     if not await db.users.find_one({"id": peer_id}, {"_id": 1}):
         raise HTTPException(404, "User not found")
     if await social_graph.blocked_between(user["id"], peer_id):

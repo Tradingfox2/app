@@ -339,6 +339,9 @@ async def lifespan(app: FastAPI):
     await db.mutes.create_index([("muter_id", 1), ("muted_id", 1)], unique=True)
     # Aggregation looks up an unread row for the same target before inserting.
     await db.notifications.create_index([("user_id", 1), ("type", 1), ("metadata.target_id", 1), ("read_at", 1)])
+    await db.rate_limits.create_index("key", unique=True)
+    # TTL: a window's counter deletes itself once the window has passed.
+    await db.rate_limits.create_index("expires_at", expireAfterSeconds=0)
     await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
     await db.direct_messages.create_index([("recipient_id", 1), ("read_at", 1)])
     await db.media.create_index([("user_id", 1), ("created_at", -1)])
@@ -399,7 +402,12 @@ async def register(body: RegisterIn):
 
 @api.post("/auth/login", response_model=TokenOut)
 async def login(body: LoginIn):
+    import ratelimit  # lazy: ratelimit imports this module
+
     email = body.email.lower()
+    # Keyed by the submitted email, so guessing one account's password is
+    # capped whether or not that account exists.
+    await ratelimit.hit("login", email)
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(401, "Invalid email or password")

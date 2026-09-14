@@ -243,8 +243,22 @@ export type Post = {
   liked_by_me: boolean;
   reposted_by_me: boolean;
   workout_id?: string | null;
+  /** Frozen at share time — editing the log later does not change the card. */
+  workout_summary?: WorkoutSummary | null;
   status?: string;
   created_at: string;
+};
+
+export type WorkoutSummary = {
+  workout_id: string;
+  title: string;
+  duration_sec: number | null;
+  sets: number;
+  tonnage_kg: number;
+  exercises: string[];
+  exercise_count: number;
+  perceived_effort: number | null;
+  ended_at: string;
 };
 
 export type PostComment = {
@@ -583,7 +597,8 @@ export const api = {
   // Social feed
   feed: (scope: "all" | "following" | "mine" = "all", before?: string) =>
     request<Post[]>(`/feed?scope=${scope}${before ? `&before=${before}` : ""}`),
-  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null }) =>
+  /** Omit `workout_id` entirely when unset: the publish body is asserted exactly in e2e. */
+  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string }) =>
     request<Post>("/posts", { method: "POST", body: JSON.stringify(payload) }),
   deletePost: (id: string) => request<void>(`/posts/${id}`, { method: "DELETE" }),
   likePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "POST" }),

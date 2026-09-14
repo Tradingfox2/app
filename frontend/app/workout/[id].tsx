@@ -137,10 +137,23 @@ export default function WorkoutLogger() {
     return out;
   }, [sets]);
 
+  const [finished, setFinished] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState("");
   const finish = async () => {
     if (!id) return;
+    // Flush first: the share card snapshots the sets the server holds, so an
+    // offline-queued set must land before the session is closed.
+    await flushQueue().catch(() => {});
     await api.finishWorkout(id).catch(() => {});
-    router.back();
+    setFinished(true);
+  };
+  const share = async () => {
+    if (!id || sharing) return;
+    setSharing(true); setShareError("");
+    try { await api.publish({ content: "", workout_id: id }); router.replace("/community"); }
+    catch (cause) { setShareError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { setSharing(false); }
   };
 
   return (
@@ -352,6 +365,15 @@ export default function WorkoutLogger() {
           </View>
         </View>
       </Modal>
+      {finished ? <View style={styles.sharePanel} testID="share-panel">
+        <Text style={styles.shareTitle}>{t("SESSION COMPLETE")}</Text>
+        <Text style={styles.shareCopy}>{t("Share it with the people you train with?")}</Text>
+        {shareError ? <Text style={styles.shareError}>{shareError}</Text> : null}
+        <View style={styles.shareRow}>
+          <Pressable accessibilityRole="button" testID="share-done" onPress={() => router.back()} style={styles.shareSecondary}><Text style={styles.shareSecondaryText}>{t("DONE")}</Text></Pressable>
+          <Pressable accessibilityRole="button" testID="share-workout" disabled={sharing} onPress={() => void share()} style={[styles.sharePrimary, sharing && { opacity: 0.5 }]}><Text style={styles.sharePrimaryText}>{t("SHARE TO FEED")}</Text></Pressable>
+        </View>
+      </View> : null}
     </SafeAreaView>
   );
 }
@@ -394,6 +416,15 @@ function PickerChip({ label, active, onPress }: { label: string; active: boolean
 }
 
 const styles = StyleSheet.create({
+  sharePanel: { position: "absolute", left: 16, right: 16, bottom: 32, padding: 20, borderRadius: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.brand, gap: 8 },
+  shareTitle: { color: colors.brand, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
+  shareCopy: { color: colors.text, fontSize: 15 },
+  shareError: { color: colors.error, fontSize: 12 },
+  shareRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  shareSecondary: { flex: 1, minHeight: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  shareSecondaryText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+  sharePrimary: { flex: 1.4, minHeight: 48, borderRadius: 8, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  sharePrimaryText: { color: colors.brandOn, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: "row",

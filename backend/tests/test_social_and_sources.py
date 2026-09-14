@@ -21,6 +21,8 @@ def patch_social_db(monkeypatch, db):
     the global client bound to an already-closed event loop."""
     for module in (social, notifications, social_graph):
         monkeypatch.setattr(module, "db", db)
+    # ratelimit reads server.db at call time, so it follows this patch.
+    monkeypatch.setattr(server, "db", db)
 
 
 def run_isolated(scenario):

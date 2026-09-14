@@ -3,20 +3,28 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { api, mediaUrl, MediaItem, Post, PostComment } from "@/src/api";
+import { api, mediaUrl, MediaItem, Post, PostComment, WorkoutSummary } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
 type Scope = "all" | "following" | "mine";
 
+/** Must match the backend default page size for `GET /feed`. */
+const PAGE_SIZE = 20;
+
 export function useFeed() {
   const { t } = useI18n();
   const [scope, setScope] = useState<Scope>("all");
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // The API returns no has_more flag, so a full page is the only signal that
+  // another one might exist.
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState("");
   const revision = useRef(0);
+  const moreBusy = useRef(false);
 
   const load = useCallback(async (nextScope: Scope = scope) => {
     const current = ++revision.current;
@@ -25,6 +33,7 @@ export function useFeed() {
       const rows = await api.feed(nextScope);
       if (current !== revision.current) return;
       setPosts(rows);
+      setHasMore(rows.length === PAGE_SIZE);
     } catch {
       if (current === revision.current) setError(t("Something went wrong"));
     } finally {
@@ -32,12 +41,32 @@ export function useFeed() {
     }
   }, [scope, t]);
 
+  // Reads the revision without bumping it: a refresh or scope change that
+  // lands mid-request invalidates this append instead of racing it.
+  const loadMore = useCallback(async () => {
+    const oldest = posts[posts.length - 1];
+    if (!oldest || moreBusy.current || !hasMore) return;
+    moreBusy.current = true; setLoadingMore(true);
+    const current = revision.current;
+    try {
+      const rows = await api.feed(scope, oldest.id);
+      if (current !== revision.current) return;
+      setPosts(existing => {
+        const seen = new Set(existing.map(row => row.id));
+        return [...existing, ...rows.filter(row => !seen.has(row.id))];
+      });
+      setHasMore(rows.length === PAGE_SIZE);
+    } catch {
+      if (current === revision.current) setError(t("Something went wrong"));
+    } finally { moreBusy.current = false; setLoadingMore(false); }
+  }, [posts, scope, hasMore, t]);
+
   const changeScope = (next: Scope) => { setScope(next); setLoading(true); void load(next); };
   const patch = (id: string, updater: (post: Post) => Post) => setPosts(rows => rows.map(row => row.id === id ? updater(row) : row));
   const prepend = (post: Post) => setPosts(rows => [post, ...rows.filter(row => row.id !== post.id)]);
   const remove = (id: string) => setPosts(rows => rows.filter(row => row.id !== id));
   const stop = () => { revision.current += 1; };
-  return { scope, changeScope, posts, loading, error, load, patch, prepend, remove, stop };
+  return { scope, changeScope, posts, loading, loadingMore, hasMore, error, load, loadMore, patch, prepend, remove, stop };
 }
 
 export function Composer({ onPublished }: { onPublished: (post: Post) => void }) {
@@ -151,6 +180,7 @@ export function PostCard({ post, onChange, onRemoved, onReposted }: { post: Post
       </View>
       {post.original?.unavailable ? <Text style={styles.unavailable}>{t("This post is no longer available.")}</Text> : null}
       {shown.content ? <Text style={styles.content}>{shown.content}</Text> : null}
+      {shown.workout_summary ? <WorkoutCard summary={shown.workout_summary} /> : null}
       {shown.media?.length ? <View style={styles.mediaGrid}>{shown.media.map(item => item.kind === "image" ? <Image key={item.id} source={{ uri: mediaUrl(item.url) }} style={[styles.media, shown.media.length === 1 && styles.mediaSingle]} accessibilityIgnoresInvertColors /> : <View key={item.id} style={[styles.media, styles.videoThumb, shown.media.length === 1 && styles.mediaSingle]}><Ionicons name="play-circle" size={44} color={colors.brand} /><Text style={styles.videoLabel}>{t("VIDEO")}</Text></View>)}</View> : null}
       <View style={styles.actions}>
         <Pressable accessibilityRole="button" accessibilityLabel={post.liked_by_me ? t("Unlike") : t("Like")} accessibilityState={{ selected: post.liked_by_me }} disabled={busy} onPress={() => void toggleLike()} style={styles.action}><Ionicons name={post.liked_by_me ? "heart" : "heart-outline"} size={20} color={post.liked_by_me ? colors.brand : colors.textMuted} /><Text style={[styles.actionText, post.liked_by_me && styles.actionActive]}>{formatNumber(post.like_count)}</Text></Pressable>
@@ -165,7 +195,26 @@ export function PostCard({ post, onChange, onRemoved, onReposted }: { post: Post
   );
 }
 
-const styles = StyleSheet.create({
+
+/** A shared session. Numbers are the snapshot taken when it was posted. */
+function WorkoutCard({ summary }: { summary: WorkoutSummary }) {
+  const { t, formatNumber } = useI18n();
+  const minutes = summary.duration_sec ? Math.round(summary.duration_sec / 60) : null;
+  const stats: [string, string][] = [
+    [String(summary.sets), t("SETS")],
+    [`${formatNumber(Math.round(summary.tonnage_kg))} kg`, t("VOLUME")],
+    ...(minutes ? [[`${minutes} min`, t("TIME")] as [string, string]] : []),
+    ...(summary.perceived_effort ? [[`${summary.perceived_effort}/10`, t("EFFORT")] as [string, string]] : []),
+  ];
+  const more = summary.exercise_count - summary.exercises.length;
+  return <View style={styles.workoutCard} testID={`workout-card-${summary.workout_id}`}>
+    <View style={styles.workoutHead}><Ionicons name="barbell" size={16} color={colors.brand} /><Text style={styles.workoutTitle}>{summary.title}</Text></View>
+    <View style={styles.workoutStats}>{stats.map(([value, label]) => <View key={label} style={styles.workoutStat}><Text style={styles.workoutValue}>{value}</Text><Text style={styles.workoutLabel}>{label}</Text></View>)}</View>
+    {summary.exercises.length ? <Text style={styles.workoutExercises} numberOfLines={2}>{summary.exercises.join(" · ")}{more > 0 ? ` +${more}` : ""}</Text> : null}
+  </View>;
+}
+
+const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface2, gap: spacing.sm }, workoutHead: { flexDirection: "row", alignItems: "center", gap: 6 }, workoutTitle: { color: colors.text, fontWeight: "900", fontSize: 14 }, workoutStats: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg }, workoutStat: { minWidth: 56 }, workoutValue: { color: colors.text, fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] }, workoutLabel: { color: colors.textDim, fontSize: 9, fontWeight: "800", letterSpacing: 1 }, workoutExercises: { color: colors.textMuted, fontSize: 12 },
   composer: { padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
   input: { minHeight: 56, maxHeight: 160, color: colors.text, fontSize: 15, lineHeight: 21 },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, thumbWrap: { position: "relative" },

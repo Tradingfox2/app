@@ -111,6 +111,9 @@ export default function CommunityScreen() {
             {feed.error ? <View accessibilityRole="alert" style={styles.list}><Text style={styles.emptyText}>{feed.error}</Text><Pressable accessibilityRole="button" onPress={() => void feed.load()} style={styles.primaryAction}><Text style={styles.primaryActionText}>{t("Retry")}</Text></Pressable></View> : null}
             {!feed.loading && !feed.error && feed.posts.length === 0 ? <Empty icon="newspaper-outline" text={t(feed.scope === "following" ? "Follow athletes and coaches to build your feed" : "No posts yet. Share your first session.")} /> : null}
             {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={feed.prepend} />)}
+            {feed.hasMore ? <Pressable accessibilityRole="button" testID="feed-load-more" disabled={feed.loadingMore} onPress={() => void feed.loadMore()} style={[styles.loadMore, feed.loadingMore && { opacity: 0.5 }]}>
+              {feed.loadingMore ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text>}
+            </Pressable> : null}
           </View>
         ) : null}
 
@@ -213,7 +216,7 @@ function Empty({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: str
   return <View style={styles.empty}><Ionicons name={icon} size={36} color={colors.textDim} /><Text style={styles.emptyText}>{text}</Text></View>;
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" }, loadMoreText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   safe: { flex: 1, backgroundColor: colors.bg }, scroll: { paddingBottom: 120 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: "row", alignItems: "center" },
   headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.brand }, title: { ...type.screenTitle, marginTop: 2 },

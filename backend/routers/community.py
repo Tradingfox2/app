@@ -13,6 +13,7 @@ from community_rankings import build_rankings
 import moderation
 import notifications
 import permissions
+import ratelimit
 import realtime
 import staff
 
@@ -867,6 +868,7 @@ async def create_message(
     body: MessageIn,
     user: dict = Depends(current_user),
 ):
+    await ratelimit.hit("message", user["id"])
     channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
     if not channel:
         raise HTTPException(404, "Channel not found")
@@ -972,8 +974,18 @@ async def _message_or_404(message_id: str) -> tuple[dict, dict]:
     return message, channel
 
 
+async def _publish_change(channel_id: str, kind: str, payload: dict) -> None:
+    """Broadcast a committed message mutation to everyone watching the channel.
+
+    Only the changed fields travel. A deletion carries the id and nothing else,
+    so a removed message's content never reaches a client after removal.
+    """
+    await realtime.publish(realtime.chat_channel(channel_id), {"type": kind, **payload})
+
+
 @router.post("/messages/{message_id}/reactions")
 async def add_reaction(message_id: str, body: ReactionIn, user: dict = Depends(current_user)):
+    await ratelimit.hit("reaction", user["id"])
     message, channel = await _message_or_404(message_id)
     await _require(channel["community_id"], user["id"], permissions.ADD_REACTION, channel)
     # $addToSet keeps a double-tap idempotent under concurrent reactions.
@@ -988,6 +1000,8 @@ async def add_reaction(message_id: str, body: ReactionIn, user: dict = Depends(c
             {"$push": {"reactions": {"emoji": body.emoji, "user_ids": [user["id"]]}}},
         )
         updated = await db.messages.find_one({"id": message_id}, {"_id": 0})
+    await _publish_change(channel["id"], "message.reactions",
+                          {"id": message_id, "reactions": updated.get("reactions", [])})
     return clean(updated)
 
 
@@ -1003,7 +1017,10 @@ async def remove_reaction(message_id: str, emoji: str = Query(...), user: dict =
     await db.messages.update_one(
         {"id": message_id}, {"$pull": {"reactions": {"user_ids": {"$size": 0}}}}
     )
-    return clean(await db.messages.find_one({"id": message_id}, {"_id": 0}))
+    updated = await db.messages.find_one({"id": message_id}, {"_id": 0})
+    await _publish_change(channel["id"], "message.reactions",
+                          {"id": message_id, "reactions": updated.get("reactions", [])})
+    return clean(updated)
 
 
 @router.patch("/messages/{message_id}")
@@ -1016,7 +1033,11 @@ async def edit_message(message_id: str, body: MessageEditIn, user: dict = Depend
         raise HTTPException(409, "The edit window for this message has closed")
     updates = {"content": body.content.strip(), "edited_at": now()}
     await db.messages.update_one({"id": message_id}, {"$set": updates})
-    return clean({**message, **updates})
+    mentions = await notifications.resolve_mentions(updates["content"])
+    await _publish_change(channel["id"], "message.updated",
+                          {"id": message_id, "content": updates["content"],
+                           "edited_at": updates["edited_at"].isoformat(), "mentions": mentions})
+    return clean({**message, **updates, "mentions": mentions})
 
 
 @router.delete("/messages/{message_id}", status_code=204)
@@ -1036,6 +1057,7 @@ async def delete_message(message_id: str, user: dict = Depends(current_user)):
     await db.messages.update_one(
         {"id": message_id}, {"$set": {"status": "deleted", "deleted_at": now()}}
     )
+    await _publish_change(channel["id"], "message.deleted", {"id": message_id})
 
 
 @router.post("/messages/{message_id}/pin")
@@ -1044,6 +1066,8 @@ async def pin_message(message_id: str, user: dict = Depends(current_user)):
     await _require(channel["community_id"], user["id"], permissions.PIN_MESSAGE, channel)
     updates = {"pinned_at": now(), "pinned_by": user["id"]}
     await db.messages.update_one({"id": message_id}, {"$set": updates})
+    await _publish_change(channel["id"], "message.pinned",
+                          {"id": message_id, "pinned_at": updates["pinned_at"].isoformat()})
     return clean({**message, **updates})
 
 
@@ -1054,6 +1078,7 @@ async def unpin_message(message_id: str, user: dict = Depends(current_user)):
     await db.messages.update_one(
         {"id": message_id}, {"$set": {"pinned_at": None, "pinned_by": None}}
     )
+    await _publish_change(channel["id"], "message.pinned", {"id": message_id, "pinned_at": None})
 
 
 @router.get("/channels/{channel_id}/pins")

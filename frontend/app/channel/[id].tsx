@@ -58,10 +58,27 @@ export default function ChannelScreen() {
   // Realtime is additive: a publication appends only what we do not already
   // have, so it can never duplicate or clobber an optimistic row.
   const { connected } = useRealtimeChannel(id ? `channel:${id}` : null, event => {
-    if (event.type !== "message.created") return;
-    const incoming = event.message as CommunityMessage | undefined;
-    if (!incoming?.id || incoming.channel_id !== id) return;
-    setMessages(current => current.some(item => item.id === incoming.id) ? current : [...current, incoming]);
+    if (event.type === "message.created") {
+      const incoming = event.message as CommunityMessage | undefined;
+      if (!incoming?.id || incoming.channel_id !== id) return;
+      setMessages(current => current.some(item => item.id === incoming.id) ? current : [...current, incoming]);
+      return;
+    }
+    // Every other event mutates a row we already hold. It must never append:
+    // an update for an unseen id belongs to history outside the loaded page.
+    const targetId = typeof event.id === "string" ? event.id : null;
+    if (!targetId) return;
+    if (event.type === "message.deleted") {
+      setMessages(current => current.filter(item => item.id !== targetId));
+      return;
+    }
+    const changes: Partial<CommunityMessage> =
+      event.type === "message.reactions" ? { reactions: event.reactions as CommunityMessage["reactions"] }
+      : event.type === "message.updated" ? { content: event.content as string, edited_at: event.edited_at as string, mentions: event.mentions as CommunityMessage["mentions"] }
+      : event.type === "message.pinned" ? { pinned_at: (event.pinned_at as string | null) ?? null }
+      : {};
+    if (!Object.keys(changes).length) return;
+    setMessages(current => current.map(item => item.id === targetId ? { ...item, ...changes } : item));
   });
   useFocusEffect(useCallback(() => {
     sendingRef.current = false; setSending(false);
