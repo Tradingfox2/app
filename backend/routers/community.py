@@ -1728,6 +1728,31 @@ async def list_pins(channel_id: str, user: dict = Depends(current_user)):
     return await _decorate_messages(pins, channel["community_id"])
 
 
+@router.get("/channels/{channel_id}/search")
+async def search_channel(
+    channel_id: str,
+    q: str = Query(..., min_length=2, max_length=80),
+    user: dict = Depends(current_user),
+):
+    """Messages in one channel containing `q`, newest first.
+
+    Escaped and capped like the global search: a member's query is data, never
+    a pattern, and the same VIEW_CHANNEL rule as reading the channel applies.
+    """
+    channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    rows = [
+        row async for row in db.messages.find(
+            {"channel_id": channel_id, "status": "active",
+             "content": {"$regex": re.escape(q.strip()), "$options": "i"}},
+            {"_id": 0},
+        ).sort("created_at", -1).limit(30)
+    ]
+    return await _decorate_messages(rows, channel["community_id"])
+
+
 @router.post("/channels/{channel_id}/typing", status_code=204)
 async def channel_typing(channel_id: str, user: dict = Depends(current_user)):
     """A "typing…" nudge for everyone watching the channel. Nothing is stored."""

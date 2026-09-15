@@ -346,3 +346,36 @@ def test_live_sessions_schedule_gather_and_notify(monkeypatch):
         with pytest.raises(ValueError):
             community.LiveSessionIn(title="bad link", starts_at=when, join_url="http://insecure.example")
     run_isolated(scenario)
+
+
+# --- Channel search ---
+
+def test_channel_search_treats_the_query_as_text_and_respects_visibility(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await say("Squat 5x5 (heavy) today", "mem")
+        await say("rest day", "mod")
+        hits = await community.search_channel("ch-1", "5x5 (heavy", account("owner"))
+        assert [row["content"] for row in hits] == ["Squat 5x5 (heavy) today"]
+        await expect(403, community.search_channel("ch-1", "squat", account("out")))
+    run_isolated(scenario)
+
+
+# --- Profile editing ---
+
+def test_a_profile_takes_a_name_bio_and_only_your_own_photo(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await db.media.insert_many([
+            {"id": "mine", "user_id": "mem", "kind": "image", "url": "https://cdn/me.jpg"},
+            {"id": "theirs", "user_id": "mod", "kind": "image", "url": "https://cdn/mod.jpg"},
+        ])
+        # PublicUser validates the address, and ".invalid" is a reserved TLD.
+        await db.users.update_one({"id": "mem"}, {"$set": {"email": "mem@example.com"}})
+        member = await db.users.find_one({"id": "mem"}, {"_id": 0})
+        updated = await server.update_me(server.ProfileUpdateIn(full_name="  Mem Ber ", bio=" Lifter ", avatar_media_id="mine"), member)
+        assert (updated.full_name, updated.bio, updated.avatar_url) == ("Mem Ber", "Lifter", "https://cdn/me.jpg")
+        await expect(422, server.update_me(server.ProfileUpdateIn(avatar_media_id="theirs"), member))
+        cleared = await server.update_me(server.ProfileUpdateIn(remove_avatar=True), member)
+        assert cleared.avatar_url is None
+    run_isolated(scenario)
