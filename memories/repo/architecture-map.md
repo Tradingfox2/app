@@ -110,7 +110,17 @@ through the shared module.
   for new modules over binding `db` at import.
 - **The single door into a community — `community.py::_activate`.** Direct joins
   and invite redemption both go through it, so "banned stays banned" and "paid
-  needs verified billing" cannot be routed around.
+  needs verified billing" cannot be routed around. Only the signed Stripe
+  webhook passes `source="payment"`.
+- **Billing — `backend/billing.py`.** Stripe REST over httpx, no SDK. Checkout
+  (`community_checkouts`) grants nothing. `stripe_webhook` verifies the
+  signature, records event ids in `billing_events`, activates on
+  `checkout.session.completed`, and lapses on cancelled/unpaid subscriptions
+  (`ended_reason: billing`). Leave, ban, removal and ownership transfer cancel
+  the member's `stripe_subscription_id`.
+- **Outbound TLS — `backend/tls.py`.** `client_context()` uses the OS trust store
+  with `VERIFY_X509_STRICT` relaxed. It is shared by link previews, push,
+  realtime and billing.
 - **Invites.** `community_invites`, unique `code`. A plain invite needs
   `INVITE_MEMBER` (a default-member bit) and grants only what joining would; a
   direct invite that skips approval needs `MANAGE_CHANNEL`. Redemption claims a
@@ -179,8 +189,9 @@ through the shared module.
   `notify()`; `MANDATORY` kinds (membership, coach decision, moderation, lab)
   always record. Push goes through `push.py` (Expo HTTP API, background task,
   prunes `DeviceNotRegistered`).
-- **Link previews:** `link_preview.py` — https only, public IPs only per hop,
-  256 KB, 3 s. Tests monkeypatch `link_preview.fetch`.
+- **Link previews:** `link_preview.py`: https only, public IPs only per hop,
+  connections pinned to the vetted IPs (`_PinnedBackend`), reads up to `</head>`
+  or 1.5 MB. Tests monkeypatch `link_preview.fetch`.
 - **Frontend shared social components** in `src/components/social/`:
   `avatar`, `rich-text` (mentions, #tags, links), `media` (grid, full-screen
   viewer, expo-video player), `report-sheet`, `action-sheet`,

@@ -4,7 +4,7 @@
 > decorators on 2026-09-15 (branch `feature/interactive-muscle-explorer`).
 > All paths are under `/api`. Regenerate rather than hand-edit.
 
-**186 routes.**
+**188 routes.**
 
 ## `backend/server.py` (29)
 
@@ -56,7 +56,7 @@
 | PATCH | `/admin/reports/{report_id}` | `review_report` |
 | GET | `/admin/audit-log` | `audit_log` |
 
-## `backend/routers/community.py` (71)
+## `backend/routers/community.py` (73)
 
 | Method | Path | Handler |
 |---|---|---|
@@ -70,6 +70,8 @@
 | GET | `/communities/{community_id}` | `get_community` |
 | PATCH | `/communities/{community_id}` | `update_community` |
 | POST | `/communities/{community_id}/join` | `join_community` |
+| POST | `/communities/{community_id}/checkout` | `start_checkout` |
+| POST | `/billing/stripe/webhook` | `stripe_webhook` |
 | GET | `/communities/{community_id}/members` | `list_members` |
 | PATCH | `/communities/{community_id}/members/{member_id}` | `review_membership` |
 | POST | `/communities/{community_id}/members/{member_id}/timeout` | `timeout_member` |

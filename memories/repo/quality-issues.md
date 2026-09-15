@@ -6,25 +6,26 @@
 ## Open
 
 ### Centrifugo is not deployed (deferred by the owner)
-Client and server code are complete: connection tokens carry a `channels`
-claim for the member's own `user:{id}`, and `GET /realtime/subscription-token`
-mints per-channel tokens after the same VIEW_CHANNEL check as HTTP. **The
-deployment must configure the `channel` namespace to require subscription
-tokens** (no `allow_subscribe_for_client`), or any signed-in client could
-listen to any room. Until then every realtime path falls back to polling.
-Verified 2026-09-15.
+`deploy/centrifugo/config.json` (v6) is the template. It was verified on
+2026-09-15 with a local v6.9.6 run: tokenless room subscribe was refused (103),
+the API token admitted, the `user:` channel was delivered server-side, and
+another member's `user:` channel was refused. **Keep it free of
+`allow_subscribe_for_client`** on the `channel` namespace. Until it is deployed,
+every realtime path falls back to polling.
 
-### Push needs an EAS project id on device builds
-`frontend/src/push.ts` reads `expo.extra.eas.projectId`; without one,
-`getExpoPushTokenAsync` fails and push silently stays off (in-app
-notifications still work). Web never registers. Verified 2026-09-15.
+### Push needs an EAS project id and FCM/APNs credentials
+`frontend/src/push.ts` reads `expo.extra.eas.projectId`, then
+`EXPO_PUBLIC_EAS_PROJECT_ID`. Setup steps are in `frontend/README.md`. Without an
+id, push stays off and the in-app centre still works. It never loads in Expo Go
+(see below). Verified 2026-09-15.
 
-### Link previews: DNS-rebinding residue
-`backend/link_preview.py` resolves and checks every address before each hop,
-but httpx resolves again when it connects. A rebinding attacker with a very
-short TTL could still slip one request through. Pin the resolved IP (custom
-transport) before exposing previews to untrusted high-volume use.
-Verified 2026-09-15.
+### Paid communities pay the platform account only
+`backend/billing.py` + `community.start_checkout` / `stripe_webhook` are live
+once `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are set; without them checkout
+returns 503. Coach payouts (Stripe Connect, platform fee), refunds and disputes
+(dashboard), and tax are **business decisions still open**; see
+`docs/community-rankings-and-billing.md`. It has not been run against a real Stripe
+account yet; only a fake-key call confirmed transport and error parsing.
 
 ### ESLint had no ignore for generated test artifacts
 **Fixed 2026-09-14.** `frontend/test-results/` holds Playwright trace bundles,
@@ -38,6 +39,25 @@ nobody controls. Ignore artifact directories explicitly; `.gitignore` is not
 enough.
 
 ## Fixed — kept as precedent
+
+### What running on an Android phone found (2026-09-15)
+Web e2e passed; the Android emulator (Expo Go, SDK 54) did not:
+- Importing `expo-notifications` in Expo Go put up an error overlay at startup.
+  It is now loaded lazily and only outside Expo Go (`push.ts::notifications`).
+- With `edgeToEdgeEnabled`, Android no longer resizes for the keyboard, so
+  `KeyboardAvoidingView behavior={ios ? "padding" : undefined}` left the chat and
+  DM composers under the keyboard. Both now use `"padding"` everywhere.
+  (`auth.tsx` and `workout/[id].tsx` still use the old pattern.)
+- Poll text was not centred (`flex:1` on Android), preview images failed with no
+  fallback, and "COMMUNAUTÉ" wrapped mid-word.
+
+**Precedent:** web e2e cannot see native layout, keyboard or module-load
+failures. Run each new screen once on the emulator.
+
+### Link previews: DNS rebinding
+Fixed 2026-09-15. `link_preview._PinnedBackend` connects only to the addresses
+vetted for that hop, and a name with any private answer is refused. Regression:
+`test_social_complete.py::test_a_name_with_any_private_answer_is_refused_and_connections_stay_pinned`.
 
 ### Community completion batch (2026-09-15)
 Closed in one pass, each with a regression test in
