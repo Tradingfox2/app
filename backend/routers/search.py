@@ -30,7 +30,7 @@ MAX_QUERY = 80
 @router.get("/search")
 async def search(
     q: str = Query(min_length=2, max_length=MAX_QUERY),
-    kind: Literal["users", "communities", "posts"] = Query(default="users", alias="type"),
+    kind: Literal["users", "communities", "posts", "tags"] = Query(default="users", alias="type"),
     limit: int = Query(default=20, ge=1, le=50),
     user: dict = Depends(current_user),
 ):
@@ -65,6 +65,23 @@ async def search(
         ]
         return {"type": kind,
                 "results": [await community._community_view(row, user["id"]) for row in rows]}
+
+    if kind == "tags":
+        # Hashtags that start with the query, ranked by how many posts the
+        # viewer can see carry them — the same visibility as the tag's feed,
+        # so a tag used only in private posts never shows up here.
+        prefix = re.escape(q.strip().lstrip("#").lower()[:50])
+        if not prefix:
+            return {"type": kind, "results": []}
+        query = await social._visible_post_query(user["id"])
+        query["tags"] = {"$regex": f"^{prefix}"}
+        rows = [row async for row in db.posts.aggregate([
+            {"$match": query}, {"$unwind": "$tags"},
+            {"$match": {"tags": {"$regex": f"^{prefix}"}}},
+            {"$group": {"_id": "$tags", "posts": {"$sum": 1}}},
+            {"$sort": {"posts": -1, "_id": 1}}, {"$limit": limit},
+        ])]
+        return {"type": kind, "results": [{"tag": row["_id"], "posts": row["posts"]} for row in rows]}
 
     query = await social._visible_post_query(user["id"])
     query["content"] = pattern

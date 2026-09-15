@@ -68,6 +68,8 @@ def test_everyone_is_dropped_without_the_permission_and_kept_with_it(monkeypatch
         await seed(db, monkeypatch)
         monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(moderation, "db", db)
+        import social_graph
+        monkeypatch.setattr(social_graph, "db", db)  # @everyone now notifies through notify()
 
         muted = await community.create_message(
             "ch-1", community.MessageIn(content="@everyone leg day"), account("mem"))

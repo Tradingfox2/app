@@ -379,3 +379,35 @@ def test_a_profile_takes_a_name_bio_and_only_your_own_photo(monkeypatch):
         cleared = await server.update_me(server.ProfileUpdateIn(remove_avatar=True), member)
         assert cleared.avatar_url is None
     run_isolated(scenario)
+
+
+# --- @everyone and channel audiences ---
+
+def test_everyone_rings_every_member_who_can_see_the_channel(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await say("@everyone session moved to 18:00", "mod")  # legacy moderators hold MENTION_EVERYONE
+        told = {row["user_id"] async for row in db.notifications.find({"type": "mention"})}
+        assert told == {"owner", "mem"}  # everyone but the author
+        await db.notifications.delete_many({})
+        await say("@everyone free pizza", "mem")  # a plain member may not
+        assert await db.notifications.count_documents({}) == 0
+    run_isolated(scenario)
+
+
+def test_mentions_never_reach_people_who_cannot_see_the_channel(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        default = await community._ensure_default_role("c-1")
+        await kind_channel(db, "text", "ch-staff")
+        staff_role = await community.create_role("c-1", community.RoleIn(name="staff", rank=5), account("owner"))
+        await community.assign_member_roles("c-1", "m-mod", community.MemberRolesIn(role_ids=[staff_role["id"]]), account("owner"))
+        await community.set_channel_overwrites("ch-staff", [
+            community.OverwriteIn(role_id=default["id"], deny=p.VIEW_CHANNEL),
+            community.OverwriteIn(role_id=staff_role["id"], allow=p.VIEW_CHANNEL),
+        ], account("owner"))
+        await say("<@mem> look at this @everyone", "owner", channel="ch-staff")
+        assert await db.notifications.count_documents({"user_id": "mem"}) == 0
+        # The staff role re-allows the room, so its holder hears the @everyone.
+        assert await db.notifications.count_documents({"user_id": "mod"}) == 1
+    run_isolated(scenario)

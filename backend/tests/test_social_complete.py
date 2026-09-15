@@ -272,3 +272,17 @@ def test_link_previews_read_open_graph_first():
     assert parsed["title"] == "Squat & Deadlift Guide"
     assert parsed["image_url"] == "https://coach.example/img/cover.jpg"
     assert link_preview.first_url("see https://coach.example/guide.") == "https://coach.example/guide"
+
+
+def test_tag_search_matches_prefixes_among_visible_posts(monkeypatch):
+    from routers import search
+
+    async def scenario(db):
+        monkeypatch.setattr(search, "db", db)
+        await post("#legday #legpress")
+        await post("#legday again")
+        await db.users.update_one({"id": "cat"}, {"$set": {"is_private": True}})
+        await post("#legsecret", who="cat")
+        found = await search.search("#leg", "tags", 20, me("bob"))
+        assert found["results"] == [{"tag": "legday", "posts": 2}, {"tag": "legpress", "posts": 1}]
+    run(scenario, monkeypatch)

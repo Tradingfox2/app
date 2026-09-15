@@ -1547,19 +1547,27 @@ async def _insert_message(
         realtime.chat_channel(channel_id), {"type": "message.created", "message": published}
     )
 
-    audience = {
-        member["user_id"]
-        async for member in db.community_members.find(
-            {"community_id": community_id, "status": "active"}, {"_id": 0, "user_id": 1}
-        )
-    }
-    for mentioned in await notifications.notify_mentions(
-        content, author=user, kind=notifications.MENTION,
-        title=f"{user.get('full_name', 'Someone')} mentioned you",
-        metadata={"community_id": community_id, "channel_id": channel_id,
-                  "message_id": message["id"]},
+    # Only people who can see the channel can be pinged from it — a mention
+    # must never tell someone about a room that is hidden from them.
+    audience = await _channel_audience(channel)
+    title = f"{user.get('full_name', 'Someone')} mentioned you"
+    metadata = {"community_id": community_id, "channel_id": channel_id, "message_id": message["id"]}
+    notified = set(await notifications.notify_mentions(
+        content, author=user, kind=notifications.MENTION, title=title, metadata=metadata,
         audience=audience, target_type="message", target_id=message["id"],
-    ):
+    ))
+    if notifications.mentions_everyone(content):
+        # The token only survives the strip above for members holding
+        # MENTION_EVERYONE, so reaching this line is the permission check.
+        body = notifications.strip_everyone(content)[:200] or title
+        for member_id in audience - notified - {user["id"]}:
+            if await notifications.notify(
+                member_id, notifications.MENTION, actor=user,
+                title=f"{user.get('full_name', 'Someone')} pinged @everyone in #{channel.get('name', 'channel')}",
+                body=body, target_type="message", target_id=message["id"], metadata=metadata,
+            ):
+                notified.add(member_id)
+    for mentioned in notified:
         await realtime.publish(
             realtime.user_channel(mentioned),
             {"type": "mention", "message_id": message["id"], "channel_id": channel_id},
@@ -1570,6 +1578,19 @@ async def _insert_message(
         metadata={"community_id": community_id, "channel_id": channel_id},
     )
     return published
+
+
+async def _channel_audience(channel: dict) -> set[str]:
+    """Active members whose effective mask lets them see `channel`."""
+    community = await db.communities.find_one({"id": channel["community_id"]}, {"_id": 0}) or {}
+    roles = await _roles(channel["community_id"])
+    audience = set()
+    async for member in db.community_members.find(
+        {"community_id": channel["community_id"], "status": "active"}, {"_id": 0},
+    ):
+        if permissions.has(permissions.resolve(member, community, channel, roles), permissions.VIEW_CHANNEL):
+            audience.add(member["user_id"])
+    return audience
 
 
 EDIT_WINDOW_SECONDS = 15 * 60

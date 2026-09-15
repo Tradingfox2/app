@@ -174,7 +174,8 @@ export type InvitePreview = {
 };
 
 export type SearchPerson = MentionedUser & { is_private: boolean; follow_state: FollowState };
-export type SearchKind = "users" | "communities" | "posts";
+export type SearchKind = "users" | "communities" | "posts" | "tags";
+export type SearchTag = { tag: string; posts: number };
 
 export type ChannelOverwrite = { role_id: string; allow: number; deny: number };
 
@@ -776,6 +777,8 @@ export const api = {
     request<{ type: "communities"; results: Community[] }>(`/search?type=communities&q=${encodeURIComponent(q)}`),
   searchPosts: (q: string) =>
     request<{ type: "posts"; results: Post[] }>(`/search?type=posts&q=${encodeURIComponent(q)}`),
+  searchTags: (q: string) =>
+    request<{ type: "tags"; results: SearchTag[] }>(`/search?type=tags&q=${encodeURIComponent(q)}`),
   communityRoles: (id: string) => request<CommunityRole[]>(`/communities/${id}/roles`),
   createRole: (id: string, body: { name: string; color?: string; rank?: number; permissions?: number }) =>
     request<CommunityRole>(`/communities/${id}/roles`, { method: "POST", body: JSON.stringify(body) }),

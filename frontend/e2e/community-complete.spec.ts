@@ -285,3 +285,47 @@ test("your own DM can be unsent and shows as deleted", async ({ page }) => {
   await expect.poll(() => deletes).toEqual(["dm-1"]);
   await expect(page.getByTestId("dm-dm-1")).toContainText("Message deleted");
 });
+
+// --- Hashtag search and scheduling without typing dates ---
+
+test("typing # in search jumps to tags and opens the tag's feed", async ({ page }) => {
+  const queries: string[] = [];
+  await fixtures(page, async (route, path) => {
+    if (path === "/search") {
+      const url = new URL(route.request().url());
+      queries.push(`${url.searchParams.get("type")}:${url.searchParams.get("q")}`);
+      await route.fulfill({ json: { type: "tags", results: url.searchParams.get("type") === "tags" ? [{ tag: "legday", posts: 12 }] : [] } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/search");
+  await page.getByTestId("search-input").fill("#leg");
+  await expect(page.getByTestId("result-tag-legday")).toContainText("12");
+  expect(queries).toContain("tags:#leg");
+  await page.getByTestId("result-tag-legday").click();
+  await expect(page.getByTestId("tag-title")).toHaveText("#legday");
+});
+
+test("a host schedules a live session by tapping a day and a time", async ({ page }) => {
+  const scheduled: { title: string; starts_at: string; duration_min: number; join_url: string | null }[] = [];
+  await fixtures(page, async (route, path, method) => {
+    if (path === "/channels/ch-l") { await route.fulfill({ json: { id: "ch-l", community_id: "c-1", name: "live", description: "", kind: "live", is_default: false, overwrites: [], permissions: 0x3fff } }); return true; }
+    if (path === "/channels/ch-l/live-sessions" && method === "POST") { scheduled.push(route.request().postDataJSON()); await route.fulfill({ status: 201, json: {} }); return true; }
+    if (path === "/channels/ch-l/live-sessions") { await route.fulfill({ json: { upcoming: [], past: [] } }); return true; }
+    return false;
+  });
+  await page.goto("/channel/ch-l");
+  await page.getByTestId("schedule-live").click();
+  await page.getByTestId("live-title").fill("Sunday mobility");
+  await page.getByTestId("live-when-day-2").click();
+  await page.getByTestId("live-when-minute-30").click();
+  await expect(page.getByTestId("live-when-summary")).toContainText(":30");
+  await page.getByTestId("live-duration-45").click();
+  await page.getByTestId("live-submit").click();
+  await expect.poll(() => scheduled.length).toBe(1);
+  const when = new Date(scheduled[0].starts_at);
+  const expected = new Date(); expected.setDate(expected.getDate() + 2);
+  expect([when.getDate(), when.getMinutes()]).toEqual([expected.getDate(), 30]);
+  expect(scheduled[0]).toMatchObject({ title: "Sunday mobility", duration_min: 45, join_url: null });
+});

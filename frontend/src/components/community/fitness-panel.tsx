@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { api, type ChallengeBoard, type ChallengeMetric, type CheckinBoard, type CommunityMessage, type LiveSession, type ProgramSnapshot } from "@/src/api";
 import { MANAGE_CHANNEL, POST_PROGRAM, START_LIVE_SESSION, can } from "@/src/permissions";
+import { SchedulePicker, nextSlot } from "./schedule-picker";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -212,7 +213,7 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
   const { t, formatDate } = useI18n();
   const [sessions, setSessions] = useState<LiveSession[] | null>(null);
   const [scheduling, setScheduling] = useState(false);
-  const [form, setForm] = useState({ title: "", date: "", time: "", duration: 60, url: "" });
+  const [form, setForm] = useState({ title: "", starts: nextSlot(), duration: 60, url: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -228,10 +229,10 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
     finally { setBusy(false); }
   };
   const schedule = () => act(async () => {
-    const starts = new Date(`${form.date}T${form.time || "00:00"}`);
-    if (!form.title.trim() || Number.isNaN(starts.getTime())) throw new Error(t("Enter a title, a date (YYYY-MM-DD) and a time (HH:MM)."));
-    await api.scheduleLiveSession(channelId, { title: form.title.trim(), starts_at: starts.toISOString(), duration_min: form.duration, join_url: form.url.trim() || null });
-    setScheduling(false); setForm({ title: "", date: "", time: "", duration: 60, url: "" });
+    if (form.title.trim().length < 3) throw new Error(t("Give the session a title of at least 3 characters."));
+    if (form.starts.getTime() < Date.now() - 5 * 60 * 1000) throw new Error(t("That time has already passed."));
+    await api.scheduleLiveSession(channelId, { title: form.title.trim(), starts_at: form.starts.toISOString(), duration_min: form.duration, join_url: form.url.trim() || null });
+    setScheduling(false); setForm({ title: "", starts: nextSlot(), duration: 60, url: "" });
   });
   const canHost = can(mask, START_LIVE_SESSION);
 
@@ -246,10 +247,7 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
     </View>
     {scheduling ? <View style={{ gap: spacing.xs }} testID="live-form">
       <TextInput value={form.title} onChangeText={title => setForm({ ...form, title })} maxLength={120} placeholder={t("Session title")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-title" />
-      <View style={{ flexDirection: "row", gap: spacing.xs }}>
-        <TextInput value={form.date} onChangeText={date => setForm({ ...form, date })} maxLength={10} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textDim} style={[styles.field, { flex: 1 }]} testID="live-date" />
-        <TextInput value={form.time} onChangeText={time => setForm({ ...form, time })} maxLength={5} placeholder="HH:MM" placeholderTextColor={colors.textDim} style={[styles.field, { width: 90 }]} testID="live-time" />
-      </View>
+      <SchedulePicker value={form.starts} onChange={starts => setForm(current => ({ ...current, starts }))} testID="live-when" />
       <View style={{ flexDirection: "row", gap: spacing.xs }}>{DURATIONS.map(minutes => <Pressable key={minutes} accessibilityRole="button" onPress={() => setForm({ ...form, duration: minutes })} style={[styles.secondary, form.duration === minutes && { borderColor: colors.brand }]} testID={`live-duration-${minutes}`}><Text style={styles.secondaryText}>{minutes} min</Text></Pressable>)}</View>
       <TextInput value={form.url} onChangeText={url => setForm({ ...form, url })} maxLength={500} autoCapitalize="none" placeholder={t("Join link (https://…) — Zoom, Meet, YouTube")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-url" />
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void schedule()} style={styles.primary} testID="live-submit"><Text style={styles.primaryText}>{t("SCHEDULE SESSION")}</Text></Pressable>

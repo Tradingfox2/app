@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, Vi
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { api, type Community, type Post, type SearchKind, type SearchPerson } from "@/src/api";
+import { api, type Community, type Post, type SearchKind, type SearchPerson, type SearchTag } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { PostCard } from "@/src/components/social/feed";
@@ -12,20 +12,20 @@ import { PostCard } from "@/src/components/social/feed";
 const DEBOUNCE_MS = 300;
 const MIN_QUERY = 2;
 
-type Results = { users: SearchPerson[]; communities: Community[]; posts: Post[] };
+type Results = { users: SearchPerson[]; communities: Community[]; posts: Post[]; tags: SearchTag[] };
 
 export default function SearchScreen() {
   const router = useRouter(); const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<SearchKind>("users");
-  const [results, setResults] = useState<Results>({ users: [], communities: [], posts: [] });
+  const [results, setResults] = useState<Results>({ users: [], communities: [], posts: [], tags: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const revision = useRef(0);
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < MIN_QUERY) { setResults({ users: [], communities: [], posts: [] }); setLoading(false); return; }
+    if (q.length < MIN_QUERY) { setResults({ users: [], communities: [], posts: [], tags: [] }); setLoading(false); return; }
     // Every keystroke bumps the revision, so a slow response for "dea" can
     // never overwrite the results for "deadlift" that arrived first.
     const current = ++revision.current;
@@ -34,6 +34,7 @@ export default function SearchScreen() {
       try {
         const rows = kind === "users" ? (await api.searchUsers(q)).results
           : kind === "communities" ? (await api.searchCommunities(q)).results
+          : kind === "tags" ? (await api.searchTags(q)).results
           : (await api.searchPosts(q)).results;
         if (current === revision.current) setResults(prev => ({ ...prev, [kind]: rows }));
       } catch (cause) {
@@ -51,12 +52,12 @@ export default function SearchScreen() {
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <View style={styles.inputWrap}>
         <Ionicons name="search" size={16} color={colors.textDim} />
-        <TextInput autoFocus value={query} onChangeText={setQuery} maxLength={80} placeholder={t("Search people, communities, posts")} placeholderTextColor={colors.textDim} style={styles.input} testID="search-input" returnKeyType="search" />
+        <TextInput autoFocus value={query} onChangeText={value => { setQuery(value); if (value.startsWith("#")) setKind("tags"); }} maxLength={80} placeholder={t("Search people, communities, posts, #tags")} placeholderTextColor={colors.textDim} style={styles.input} testID="search-input" returnKeyType="search" />
         {query ? <Pressable accessibilityRole="button" accessibilityLabel={t("Clear")} testID="search-clear" onPress={() => setQuery("")}><Ionicons name="close-circle" size={16} color={colors.textDim} /></Pressable> : null}
       </View>
     </View>
     <View style={styles.tabs}>
-      {(["users", "communities", "posts"] as SearchKind[]).map(item => (
+      {(["users", "communities", "posts", "tags"] as SearchKind[]).map(item => (
         <Pressable key={item} accessibilityRole="button" testID={`search-tab-${item}`} onPress={() => setKind(item)} style={[styles.tab, kind === item && styles.tabOn]}>
           <Text style={[styles.tabText, kind === item && styles.tabTextOn]}>{t(item === "users" ? "PEOPLE" : item.toUpperCase())}</Text>
         </Pressable>
@@ -67,8 +68,8 @@ export default function SearchScreen() {
     {!active ? <View style={styles.empty}><Ionicons name="search-outline" size={32} color={colors.textDim} /><Text style={styles.emptyText}>{t("Type at least two letters to search.")}</Text></View>
       : !loading && !error && rows.length === 0 ? <View style={styles.empty} testID="search-empty"><Text style={styles.emptyText}>{t("No results.")}</Text></View> : null}
     {active ? <FlatList
-      data={rows as (SearchPerson | Community | Post)[]}
-      keyExtractor={item => item.id}
+      data={rows as (SearchPerson | Community | Post | SearchTag)[]}
+      keyExtractor={item => "tag" in item ? `tag-${item.tag}` : item.id}
       contentContainerStyle={styles.list}
       keyboardShouldPersistTaps="handled"
       renderItem={({ item }) => {
@@ -81,6 +82,16 @@ export default function SearchScreen() {
               <Text style={styles.meta}>{person.follow_state === "following" ? t("FOLLOWING") : person.follow_state === "pending" ? t("REQUESTED") : person.is_private ? t("Private") : " "}</Text>
             </View>
             {person.is_private ? <Ionicons name="lock-closed" size={14} color={colors.textDim} /> : null}
+          </Pressable>;
+        }
+        if (kind === "tags") {
+          const row = item as SearchTag;
+          return <Pressable accessibilityRole="button" testID={`result-tag-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.row}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>#</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>#{row.tag}</Text>
+              <Text style={styles.meta}>{t("{count} posts").replace("{count}", String(row.posts))}</Text>
+            </View>
           </Pressable>;
         }
         if (kind === "communities") {
