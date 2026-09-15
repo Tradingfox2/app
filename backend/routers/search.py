@@ -5,26 +5,31 @@ people exclude anyone blocked in either direction and suspended accounts;
 communities are public and not archived; posts reuse the feed's visibility
 query, so search can never surface a post the feed would hide.
 
-Case-insensitive regex with the input escaped and capped, following
-`admin.py::list_users`. There is no text index: MongoDB allows one per
-collection and the test harness builds no indexes, so a `$text` query would
-diverge between tests and production. Revisit when result volume demands it.
+People and communities: case-insensitive regex with the input escaped and
+capped, following `admin.py::list_users`. Posts: the `posts.content` text
+index ranks whole-word matches at any scale; a regex over the last
+`RECENT_DAYS` then tops the page up with partial-word matches ("dead" finds
+"deadlift"). Without the index (the test harness builds none) the text step
+is skipped and the recent regex answers alone.
 """
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
+from pymongo.errors import OperationFailure
 
 import ratelimit
 import social_graph
 from routers import community, social
-from server import clean, current_user, db
+from server import clean, current_user, db, now
 
 router = APIRouter()
 
 MAX_QUERY = 80
+RECENT_DAYS = 180
 
 
 @router.get("/search")
@@ -83,10 +88,26 @@ async def search(
         ])]
         return {"type": kind, "results": [{"tag": row["_id"], "posts": row["posts"]} for row in rows]}
 
-    query = await social._visible_post_query(user["id"])
-    query["content"] = pattern
-    posts = [
-        row async for row in db.posts.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
-    ]
+    visible = await social._visible_post_query(user["id"])
+    posts: list[dict] = []
+    try:
+        posts = [
+            row async for row in db.posts.find(
+                {**visible, "$text": {"$search": q.strip()[:MAX_QUERY]}},
+                {"_id": 0, "score": {"$meta": "textScore"}},
+            ).sort([("score", {"$meta": "textScore"})]).limit(limit)
+        ]
+    except OperationFailure:
+        posts = []  # no text index here: the recent regex below answers alone
+    if len(posts) < limit:
+        seen = [row["id"] for row in posts]
+        recent = {**visible, "content": pattern, "created_at": {"$gte": now() - timedelta(days=RECENT_DAYS)}}
+        if seen:
+            recent["id"] = {"$nin": seen}
+        posts += [
+            row async for row in db.posts.find(recent, {"_id": 0}).sort("created_at", -1).limit(limit - len(posts))
+        ]
+    for row in posts:
+        row.pop("score", None)
     decorated = await social._decorate(await social._with_originals(posts, user["id"]), user["id"])
     return {"type": kind, "results": decorated}

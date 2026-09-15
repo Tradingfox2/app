@@ -411,3 +411,22 @@ def test_mentions_never_reach_people_who_cannot_see_the_channel(monkeypatch):
         # The staff role re-allows the room, so its holder hears the @everyone.
         assert await db.notifications.count_documents({"user_id": "mod"}) == 1
     run_isolated(scenario)
+
+
+# --- Paging and name search for member lists ---
+
+def test_member_lists_page_and_search_by_name(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await db.users.insert_many([{"id": f"u{i}", "full_name": f"Dave {i:02d}" if i % 2 else f"Anna {i:02d}", "email": f"u{i}@example.invalid"} for i in range(10)])
+        await db.community_members.insert_many([{"id": f"m-u{i}", "community_id": "c-1", "user_id": f"u{i}", "role": "member", "status": "active", "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=i)} for i in range(10)])
+        daves = await community.member_directory("c-1", account("mem"), q="dave")
+        assert [row["full_name"] for row in daves] == ["Dave 01", "Dave 03", "Dave 05", "Dave 07", "Dave 09"]
+        page = await community.member_directory("c-1", account("mem"), q="dave", offset=2, limit=2)
+        assert [row["full_name"] for row in page] == ["Dave 05", "Dave 07"]
+        await db.community_members.update_one({"id": "m-u1"}, {"$set": {"status": "banned"}})
+        banned = await community.list_members("c-1", account("owner"), status="banned")
+        assert [row["id"] for row in banned] == ["m-u1"] and banned[0]["user"]["full_name"] == "Dave 01"
+        named = await community.list_members("c-1", account("owner"), q="anna 0")
+        assert {row["user"]["full_name"] for row in named} == {"Anna 00", "Anna 02", "Anna 04", "Anna 06", "Anna 08"}
+    run_isolated(scenario)

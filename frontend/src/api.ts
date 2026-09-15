@@ -701,7 +701,13 @@ export const api = {
     request<Membership>(`/communities/${id}/join`, { method: "POST" }),
   leaveCommunity: (id: string) =>
     request<void>(`/communities/${id}/membership`, { method: "DELETE" }),
-  communityMembers: (id: string) => request<Membership[]>(`/communities/${id}/members`),
+  communityMembers: (id: string, options: { q?: string; status?: Membership["status"] } = {}) => {
+    const qs = new URLSearchParams();
+    if (options.q) qs.set("q", options.q);
+    if (options.status) qs.set("status", options.status);
+    const suffix = qs.toString();
+    return request<Membership[]>(`/communities/${id}/members${suffix ? `?${suffix}` : ""}`);
+  },
   reviewCommunityMember: (communityId: string, memberId: string, status: string) =>
     request<Membership>(`/communities/${communityId}/members/${memberId}`, {
       method: "PATCH",
@@ -760,7 +766,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status, review_note: review_note ?? null }),
     }),
-  memberDirectory: (communityId: string) => request<MentionedUser[]>(`/communities/${communityId}/directory`),
+  memberDirectory: (communityId: string, q?: string) =>
+    request<MentionedUser[]>(`/communities/${communityId}/directory${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   markChannelRead: (channelId: string, messageId: string) =>
     request<{ channel_id: string; last_read_at: string }>(`/channels/${channelId}/read`, {
       method: "POST", body: JSON.stringify({ message_id: messageId }),

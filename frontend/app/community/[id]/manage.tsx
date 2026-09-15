@@ -55,6 +55,8 @@ export default function ManageCommunity() {
   const [insights, setInsights] = useState<CommunityInsights | null>(null);
   const [reports, setReports] = useState<CommunityReport[]>([]);
   const [audit, setAudit] = useState<CommunityAuditEntry[] | null>(null);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberHits, setMemberHits] = useState<Membership[] | null>(null);
   const generation = useRef(0);
   const busy = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -265,7 +267,13 @@ export default function ManageCommunity() {
   }, "Could not revoke invite");
 
   const pending = members.filter(member => member.status === "pending");
-  const active = members.filter(member => member.status === "active");
+  // A name search asks the server, so it finds members beyond the loaded page.
+  const active = (memberHits ?? members).filter(member => member.status === "active");
+  const searchMembers = (value: string) => {
+    setMemberQuery(value);
+    if (!id || value.trim().length < 2) { setMemberHits(null); return; }
+    api.communityMembers(id, { q: value.trim(), status: "active" }).then(setMemberHits).catch(() => setMemberHits([]));
+  };
   const banned = members.filter(member => member.status === "banned");
   const disabled = reviewing || loading;
   const triFor = (channel: CommunityChannel, roleId: string, bit: number): Tri => {
@@ -457,6 +465,8 @@ export default function ManageCommunity() {
     <View style={styles.addRow}><TextInput value={channelName} onChangeText={setChannelName} maxLength={50} editable={!disabled} placeholder={t("new-channel")} placeholderTextColor={colors.textDim} style={styles.input} /><Pressable accessibilityRole="button" disabled={disabled || channelName.trim().length < 2} accessibilityLabel={t("Create channel")} onPress={() => void addChannel()} style={[styles.approve, { opacity: disabled || channelName.trim().length < 2 ? 0.4 : 1 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View>
 
     <Text style={styles.section}>{t("ALL MEMBERS")}</Text>
+    <TextInput value={memberQuery} onChangeText={searchMembers} maxLength={80} placeholder={t("Search members by name")} placeholderTextColor={colors.textDim} style={styles.input} testID="member-search" />
+    {memberHits && memberHits.length === 0 ? <Text style={styles.empty}>{t("No members match.")}</Text> : null}
     {active.map(member => {
       const assigned = member.role_ids ?? [];
       return <View key={member.id}>

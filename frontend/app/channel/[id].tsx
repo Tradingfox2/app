@@ -55,6 +55,7 @@ export default function ChannelScreen() {
   const revision = useRef(0);
   const sendingRef = useRef(false);
   const lastTypingSent = useRef(0);
+  const rosterFor = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   // Fall back to the baseline grant when the payload carries no mask, so an
   // older server never silently locks the composer. The API enforces regardless.
@@ -82,9 +83,11 @@ export default function ChannelScreen() {
       setHasOlder(previous => previous || rows.length === PAGE);
       setError("");
       // Roster powers @ suggestions; a failure here must not break the channel.
-      api.memberDirectory(meta.community_id)
-        .then(people => { if (requestRevision === revision.current) setRoster(people); })
-        .catch(() => undefined);
+      // Once per channel, not every poll: typed names are searched on demand.
+      if (rosterFor.current !== meta.community_id) {
+        rosterFor.current = meta.community_id;
+        api.memberDirectory(meta.community_id).then(setRoster).catch(() => { rosterFor.current = null; });
+      }
     } catch (cause) {
       if (requestRevision === revision.current) setError(cause instanceof Error ? cause.message : t("Could not load messages"));
     } finally {
@@ -250,6 +253,18 @@ export default function ChannelScreen() {
     .filter(candidate => (candidate.full_name ?? "").toLowerCase().includes(mentionQuery.toLowerCase()))
     .slice(0, 5);
   const pickMention = (candidate: MentionedUser) => setDraft(current => applyMention(current, candidate));
+  // Large communities: the first page of the directory will not hold every
+  // name, so a typed "@da" asks the server and merges what it finds.
+  const communityId = channel?.community_id;
+  useEffect(() => {
+    if (!communityId || mentionQuery === null || mentionQuery.length < 2) return;
+    const timer = setTimeout(() => {
+      api.memberDirectory(communityId, mentionQuery)
+        .then(found => setRoster(current => [...current, ...found.filter(person => !current.some(known => known.id === person.id))]))
+        .catch(() => undefined);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [communityId, mentionQuery]);
   const typingNames = Object.values(typing).map(row => row.name);
 
   const renderMessage = ({ item }: { item: CommunityMessage }) => {

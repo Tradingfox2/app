@@ -636,16 +636,27 @@ async def join_community(community_id: str, user: dict = Depends(current_user)):
 
 
 @router.get("/communities/{community_id}/members")
-async def list_members(community_id: str, user: dict = Depends(current_user)):
+async def list_members(
+    community_id: str,
+    user: dict = Depends(current_user),
+    status: MemberStatus | None = None,
+    q: Annotated[str | None, Query(max_length=80)] = None,
+    offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+):
+    """Every membership row, for managers — a page at a time, optionally one
+    status or a name search. Profiles are fetched in one batch per page."""
     await _manager(community_id, user["id"])
-    output = []
-    async for member in db.community_members.find({"community_id": community_id}, {"_id": 0}).sort("created_at", 1):
-        profile = await db.users.find_one(
-            {"id": member["user_id"]}, {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
-        )
-        member["user"] = clean(profile)
-        output.append(clean(member))
-    return output
+    query: dict = {"community_id": community_id}
+    if status:
+        query["status"] = status
+    if q and q.strip():
+        matching = [row["id"] async for row in db.users.find(
+            {"full_name": {"$regex": re.escape(q.strip()), "$options": "i"}}, {"_id": 0, "id": 1}).limit(2000)]
+        query["user_id"] = {"$in": matching}
+    rows = [row async for row in db.community_members.find(query, {"_id": 0}).sort("created_at", 1).skip(offset).limit(limit)]
+    people = await _people([row["user_id"] for row in rows])
+    return [clean({**row, "user": people.get(row["user_id"])}) for row in rows]
 
 
 @router.patch("/communities/{community_id}/members/{member_id}")
@@ -1840,27 +1851,35 @@ async def mark_channel_read(channel_id: str, body: ReadIn, user: dict = Depends(
 
 
 @router.get("/communities/{community_id}/directory")
-async def member_directory(community_id: str, user: dict = Depends(current_user)):
-    """Active members' public fields, for any active member.
+async def member_directory(
+    community_id: str,
+    user: dict = Depends(current_user),
+    q: Annotated[str | None, Query(max_length=80)] = None,
+    offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 200,
+):
+    """Active members' public fields, for any active member, by name.
 
     Distinct from `/members`, which is manager-only because it exposes pending
     requests and statuses. Without this, @-mention suggestions were silently
-    empty for everyone who was not a manager.
+    empty for everyone who was not a manager. Paged and searchable, so a
+    community of any size answers "@da…" with the right Dave, not the first
+    thousand names.
     """
     await _community_or_404(community_id)
     await _active_member(community_id, user["id"])
-    user_ids = [
-        row["user_id"]
-        async for row in db.community_members.find(
-            {"community_id": community_id, "status": "active"}, {"_id": 0, "user_id": 1}
-        ).limit(1000)
+    pipeline: list[dict] = [
+        {"$match": {"community_id": community_id, "status": "active"}},
+        {"$lookup": {"from": "users", "localField": "user_id", "foreignField": "id", "as": "person"}},
+        {"$unwind": "$person"},
     ]
-    return [
-        clean(row)
-        async for row in db.users.find(
-            {"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
-        ).sort("full_name", 1)
+    if q and q.strip():
+        pipeline.append({"$match": {"person.full_name": {"$regex": re.escape(q.strip()), "$options": "i"}}})
+    pipeline += [
+        {"$sort": {"person.full_name": 1}}, {"$skip": offset}, {"$limit": limit},
+        {"$project": {"_id": 0, "id": "$person.id", "full_name": "$person.full_name", "avatar_url": "$person.avatar_url"}},
     ]
+    return [clean(row) async for row in db.community_members.aggregate(pipeline)]
 
 
 def _invite_state(invite: dict) -> str | None:

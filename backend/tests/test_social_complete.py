@@ -305,3 +305,20 @@ def test_a_name_with_any_private_answer_is_refused_and_connections_stay_pinned(m
         with pytest.raises(httpcore.ConnectError):
             await backend.connect_tcp("other.example", 443)
     asyncio.run(unvetted())
+
+
+def test_post_search_uses_the_text_index_and_tops_up_with_partial_words(monkeypatch):
+    from routers import search
+
+    async def scenario(db):
+        monkeypatch.setattr(search, "db", db)
+        await db.posts.create_index([("content", "text")], default_language="none")
+        whole = await post("deadlift day was brutal")
+        partial = await post("new deadlift PR")
+        await post("squat only")
+        await db.posts.update_one({"id": partial["id"]}, {"$set": {"content": "new deadlifts PR"}})
+        found = await search.search("deadlift", "posts", 20, me("bob"))
+        ids = [row["id"] for row in found["results"]]
+        assert ids[0] == whole["id"] and partial["id"] in ids and len(ids) == 2
+        assert all("score" not in row for row in found["results"])
+    run(scenario, monkeypatch)

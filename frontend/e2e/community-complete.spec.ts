@@ -329,3 +329,23 @@ test("a host schedules a live session by tapping a day and a time", async ({ pag
   expect([when.getDate(), when.getMinutes()]).toEqual([expected.getDate(), 30]);
   expect(scheduled[0]).toMatchObject({ title: "Sunday mobility", duration_min: 45, join_url: null });
 });
+
+test("member search asks the server, so it finds people beyond the loaded page", async ({ page }) => {
+  const searches: string[] = [];
+  const owned = { ...community, owner_id: me.id, owner: me, membership: { ...community.membership, role: "owner", onboarded_at: "2026-01-01T00:00:00Z" } };
+  await fixtures(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: owned }); return true; }
+    if (path === "/communities/c-1/channels") { await route.fulfill({ json: [{ id: "ch-1", community_id: "c-1", name: "general", description: "", is_default: true, kind: "text", overwrites: [], permissions: 0x3fff }] }); return true; }
+    if (path === "/communities/c-1/members") {
+      const q = new URL(route.request().url()).searchParams.get("q");
+      if (q) searches.push(q);
+      await route.fulfill({ json: q ? [{ id: "m-far", community_id: "c-1", user_id: "u-far", role: "member", status: "active", entitlement_source: "free", joined_at: null, role_ids: [], user: { id: "u-far", full_name: "Zed Far Away", avatar_url: null } }] : [] });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1/manage");
+  await page.getByTestId("member-search").fill("zed");
+  await expect(page.getByTestId("member-m-far")).toContainText("Zed Far Away");
+  expect(searches).toContain("zed");
+});

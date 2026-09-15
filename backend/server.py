@@ -292,6 +292,9 @@ def to_public_user(u: dict) -> PublicUser:
 async def lifespan(app: FastAPI):
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
+    # The feed's private-author filter scans only private accounts; this keeps
+    # that scan proportional to them, not to every user.
+    await db.users.create_index("is_private", partialFilterExpression={"is_private": True})
     await db.exercises.create_index("slug", unique=True)
     await db.muscles.create_index("slug", unique=True)
     await db.workouts.create_index([("user_id", 1), ("started_at", -1)])
@@ -366,6 +369,8 @@ async def lifespan(app: FastAPI):
     await db.poll_votes.create_index([("post_id", 1), ("user_id", 1)], unique=True)
     await db.posts.create_index([("tags", 1), ("created_at", -1)])
     await db.posts.create_index([("author_id", 1), ("created_at", -1)])
+    await db.posts.create_index([("content", "text")], default_language="none", name="posts_content_text")
+    await db.community_members.create_index([("community_id", 1), ("status", 1), ("user_id", 1)])
     await db.push_tokens.create_index("token", unique=True)
     await db.push_tokens.create_index("user_id")
     await db.community_invites.create_index("code", unique=True)
