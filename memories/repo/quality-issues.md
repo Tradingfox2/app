@@ -5,13 +5,26 @@
 
 ## Open
 
-### Duplicate content-removal paths
-`backend/routers/social.py::delete_post` has a moderator branch gated on
-`content.moderate` that audits `post.removed` and decrements `repost_count`.
-`backend/routers/admin.py::review_report` has a `content_removed` resolution
-that sets `removed_by` and **does not** decrement `repost_count`. Only the
-admin path has UI (`frontend/app/admin/index.tsx`). The social branch is
-dormant. Verified 2026-09-14.
+### Centrifugo is not deployed (deferred by the owner)
+Client and server code are complete: connection tokens carry a `channels`
+claim for the member's own `user:{id}`, and `GET /realtime/subscription-token`
+mints per-channel tokens after the same VIEW_CHANNEL check as HTTP. **The
+deployment must configure the `channel` namespace to require subscription
+tokens** (no `allow_subscribe_for_client`), or any signed-in client could
+listen to any room. Until then every realtime path falls back to polling.
+Verified 2026-09-15.
+
+### Push needs an EAS project id on device builds
+`frontend/src/push.ts` reads `expo.extra.eas.projectId`; without one,
+`getExpoPushTokenAsync` fails and push silently stays off (in-app
+notifications still work). Web never registers. Verified 2026-09-15.
+
+### Link previews: DNS-rebinding residue
+`backend/link_preview.py` resolves and checks every address before each hop,
+but httpx resolves again when it connects. A rebinding attacker with a very
+short TTL could still slip one request through. Pin the resolved IP (custom
+transport) before exposing previews to untrusted high-volume use.
+Verified 2026-09-15.
 
 ### ESLint had no ignore for generated test artifacts
 **Fixed 2026-09-14.** `frontend/test-results/` holds Playwright trace bundles,
@@ -24,49 +37,38 @@ until someone deleted them by hand. `eslint.config.js` now ignores
 nobody controls. Ignore artifact directories explicitly; `.gitignore` is not
 enough.
 
-### `notifications.MENTION` constant is unused
-Defined in `backend/notifications.py`; `backend/routers/community.py` passes the
-string literal `"mention"`. The values coincide so there is no runtime bug, but
-the two mention paths diverge: community mentions use `create()` (no
-aggregation, no block suppression) while post and comment mentions use
-`notify()`. Verified 2026-09-14.
-
-### Dormant backend capabilities
-- **Community-scoped posting from the feed composer.** `PostIn.community_id`
-  and its membership guard exist; the composer sends only `content` and
-  `media_ids`.
-- **Channel kinds `program` and `live`.** Accepted by the model but have no
-  behaviour or UI. `challenge` and `checkin` are done (2026-09-14).
-- **Permission bits `POST_PROGRAM` and `START_LIVE_SESSION`** are defined and
-  checkable but attached to no feature — they belong to the unbuilt `program`
-  and `live` channel kinds.
-
-Verified 2026-09-14.
-
-### Legacy client methods
-`api.posts()` and `api.createPost()` in `frontend/src/api.ts` point at
-`GET /api/posts`, which does not exist anywhere in `backend/`. Neither has a
-caller. Safe to remove after confirming no dynamic registration.
-Verified 2026-09-14.
-
-### Supabase schema drift
-`supabase/migrations/001_init.sql` defines 16 tables. MongoDB now has roughly
-twice that — `channels`, `messages`, `community_roles`, `follows`, `blocks`,
-`mutes`, `post_likes`, `post_comments`, `direct_messages`, `reports`,
-`audit_log`, `notifications`, `media`, `user_notes`, `coach_applications`,
-`lab_reports`. `memory/PRD.md` states the backend mirrors a full Supabase
-schema and lists migration to Supabase as a next step; that path is blocked
-until the SQL side catches up. Verified 2026-09-14.
-
-### Findings from the 2026-09-14 community-batch map (open unless marked)
-- `community.py::PostIn` is a legacy duplicate with no references; the live model is `social.py::PostIn`.
-- `api.channelPins` and `api.channelMessages(before)` have no callers — pins older than the last 50 messages are invisible; no "load older".
-- `list_communities(scope="mine")` includes archived communities.
-- Feed cursor silently ignores an unknown `before` id and returns page 1 (`list_messages` 404s instead).
-- `INVITE_MEMBER` is in `DEFAULT_MEMBER` — any invite mechanism that bypasses approval must not gate on it alone.
-- Realtime: the client subscribes without a subscription token and the connection token carries no channel claims; `user:{id}` mention publishes have no subscriber. A real Centrifugo deployment must not allow unrestricted client-side subscribe.
-
 ## Fixed — kept as precedent
+
+### Community completion batch (2026-09-15)
+Closed in one pass, each with a regression test in
+`backend/tests/test_community_complete.py` or `test_social_complete.py`:
+- **Private communities joinable without an invite** — `join_community` now
+  403s unless public; invites call `_activate` directly.
+- **Privilege escalation through roles and overwrites** — `_grant_limit` /
+  `_check_grantable`: you can only grant bits you hold, to roles below you.
+  Overwrites now also need MANAGE_ROLES (as in Discord).
+- **Rank-blind moderation** — `_check_outranks` gates re-roling, kick, ban,
+  unban and timeout; every one is audited. "Reject" on an active member is a
+  kick and needs KICK_MEMBER.
+- **Edits bypassed screening and send permission** — `edit_message` re-checks
+  `_send_permission` and re-screens.
+- **Reports as a read oracle** — `admin._visible_target` gates reportable
+  content on what the reporter can see; the receipt no longer echoes the
+  snapshot. DMs are reportable only by their recipient.
+- **Duplicate removal paths** — `moderation.remove_content` is the single,
+  idempotent path; counters (repost, comment, reply) unwind exactly once.
+- **Unused `MENTION`, community mentions via `create()`** — `notify_mentions`
+  goes through `notify()` (blocks, self, preferences).
+- **Legacy `api.posts`/`createPost`, `community.PostIn`** — removed.
+- **Feed cursor ignored unknown ids; "mine" listed archived communities;
+  discover sorted only the newest 100** — all fixed; discover ranks in Mongo.
+- **Reaction spam** — emoji-only validator, 20 distinct per message.
+- **`GET /group-sessions` needed no login** — now requires one.
+- **Supabase drift** — `supabase/migrations/003_community_social.sql`.
+
+**Precedent:** permission checks that compare only *rank* are escalations
+waiting to happen; every grant path needs both a rank ceiling and a
+bits-held check.
 
 ### Pending follows unlocked direct messages (authorization)
 `social.py::_can_message` queried `db.follows` with no `status` filter. Correct

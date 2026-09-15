@@ -152,3 +152,42 @@ through the shared module.
 - **UI:** `frontend/src/components/community/fitness-panel.tsx` renders the
   streak strip or scoreboard at the top of the channel; the kind picker and
   challenge settings are in `community/[id]/manage.tsx`.
+
+## Added 2026-09-15 (community completion)
+
+- **One removal path:** `moderation.remove_content(target_type, id, actor=)`
+  for post, comment, message and direct_message. Idempotent; unwinds
+  counters. Author deletes pass `actor={}` so no `removed_by` is stamped.
+- **Grant hierarchy** (`routers/community.py`): `_grant_limit`,
+  `_check_grantable`, `_check_outranks`. Timeouts are enforced centrally in
+  `_require` via `permissions.PARTICIPATE` — reading is never blocked.
+- **Messages:** `_insert_message` is the single insert path (slow mode,
+  check-in day, attachments, mentions, publish, screening). `create_message`,
+  `share_program` and `schedule_live_session` all use it.
+  `_decorate_messages` batches authors, reply quotes, mentions and
+  `_role_badges` per page.
+- **Program channels:** `share_program` snapshots the plan only
+  (`_program_snapshot` — never `recovery_snapshot`); `adopt_program` copies it
+  into `db.programs` as the active program and archives the old one.
+- **Live channels:** `live_sessions` + `live_rsvps`; RSVPs are notified on
+  start and cancel. The app schedules and gathers; video lives at `join_url`.
+- **Posts:** `_decorate` is batched and computes viewer state for the post
+  *and* a plain repost's original — the card acts on the original. Quote
+  posts are reposts with content. Polls: one final vote, results hidden until
+  you vote. Hashtags in `posts.tags`; `/tags/trending`.
+- **Notifications:** `notifications.preferences()` gates `create()` and
+  `notify()`; `MANDATORY` kinds (membership, coach decision, moderation, lab)
+  always record. Push goes through `push.py` (Expo HTTP API, background task,
+  prunes `DeviceNotRegistered`).
+- **Link previews:** `link_preview.py` — https only, public IPs only per hop,
+  256 KB, 3 s. Tests monkeypatch `link_preview.fetch`.
+- **Frontend shared social components** in `src/components/social/`:
+  `avatar`, `rich-text` (mentions, #tags, links), `media` (grid, full-screen
+  viewer, expo-video player), `report-sheet`, `action-sheet`,
+  `mention-input`. New screens: `post/[id]`, `tag/[tag]`, `saved`,
+  `profile-edit`, `notification-settings`.
+- **Realtime personal channel:** `useRealtimeUser` listens on the
+  connection's server-side `user:{id}` subscription (DMs, typing, receipts).
+- **Test harness:** new router params that take `Query(...)` defaults must go
+  *after* `user` and use `Annotated[..., Query()] = default`, because tests
+  call handlers positionally.
