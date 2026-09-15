@@ -317,15 +317,17 @@ function PollBlock({ poll, disabled, onVote }: { poll: Poll; disabled: boolean; 
           <Text style={[styles.pollLabel, mine && styles.actionActive]}>{option}{mine ? " ✓" : ""}</Text>
           <Text style={styles.pollPct}>{Math.round(share * 100)}%</Text>
         </View>
-        : <Pressable key={index} accessibilityRole="button" disabled={disabled || poll.closed} onPress={() => onVote(index)} style={styles.pollOption} testID={`poll-vote-${index}`}><Text style={styles.pollLabel}>{option}</Text></Pressable>;
+        : <Pressable key={index} accessibilityRole="button" disabled={disabled || poll.closed} onPress={() => onVote(index)} style={styles.pollOption} testID={`poll-vote-${index}`}><Text style={styles.pollOptionText}>{option}</Text></Pressable>;
     })}
-    <Text style={styles.time}>{t("{count} votes").replace("{count}", String(poll.total))} · {poll.closed ? t("Final results") : t("Ends {date}").replace("{date}", formatDate(poll.closes_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</Text>
+    <Text style={styles.time}>{poll.total === 1 ? t("1 vote") : t("{count} votes").replace("{count}", String(poll.total))} · {poll.closed ? t("Final results") : t("Ends {date}").replace("{date}", formatDate(poll.closes_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</Text>
   </View>;
 }
 
 function LinkCard({ preview }: { preview: LinkPreview }) {
+  // A preview image that will not load leaves no empty grey slot behind.
+  const [imageFailed, setImageFailed] = useState(false);
   return <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(preview.url)} style={styles.linkCard} testID="link-preview">
-    {preview.image_url ? <Image source={{ uri: preview.image_url }} style={styles.linkImage} accessibilityIgnoresInvertColors /> : null}
+    {preview.image_url && !imageFailed ? <Image source={{ uri: preview.image_url }} onError={() => setImageFailed(true)} style={styles.linkImage} accessibilityIgnoresInvertColors /> : null}
     <View style={styles.linkBody}>
       <Text style={styles.linkSite} numberOfLines={1}>{preview.site_name}</Text>
       <Text style={styles.linkTitle} numberOfLines={2}>{preview.title}</Text>
@@ -488,7 +490,7 @@ const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding
   pollOption: { minHeight: 40, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.brand, justifyContent: "center", paddingHorizontal: spacing.md },
   pollResult: { minHeight: 40, borderRadius: radius.sm, overflow: "hidden", flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.md, backgroundColor: colors.surface2 },
   pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: colors.surface3 }, pollBarMine: { backgroundColor: colors.brandDim },
-  pollLabel: { flex: 1, color: colors.text, fontWeight: "700" }, pollPct: { color: colors.textMuted, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  pollLabel: { flex: 1, color: colors.text, fontWeight: "700" }, pollOptionText: { color: colors.text, fontWeight: "700" }, pollPct: { color: colors.textMuted, fontWeight: "800", fontVariant: ["tabular-nums"] },
   linkCard: { borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   linkImage: { width: "100%", aspectRatio: 1.91, backgroundColor: colors.surface2 },
   linkBody: { padding: spacing.md, gap: 2 }, linkSite: { color: colors.textDim, fontSize: 11 }, linkTitle: { color: colors.text, fontWeight: "800" }, linkDesc: { color: colors.textMuted, fontSize: 12 },

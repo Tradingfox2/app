@@ -1,31 +1,58 @@
 /**
  * Phone push notifications (expo-notifications + Expo's free push service).
  *
- * Like realtime, push is an extra, never a requirement: on web, in a simulator,
- * without permission or without an EAS project id, every function here quietly
- * does nothing and the in-app notification centre carries on as before.
+ * Like realtime, push is an extra, never a requirement: on web, in Expo Go,
+ * in a simulator, without permission or without an EAS project id, every
+ * function here quietly does nothing and the in-app notification centre
+ * carries on as before.
+ *
+ * `expo-notifications` is loaded lazily and only in a real build. Expo Go
+ * removed remote push on Android in SDK 53, and merely importing the module
+ * there logs an error at startup — found by running the app on an Android
+ * emulator, which the web e2e suite cannot see.
  */
 import { useEffect } from "react";
 import { Platform } from "react-native";
-import Constants from "expo-constants";
-import * as Notifications from "expo-notifications";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { router } from "expo-router";
 import { api } from "./api";
 
+type NotificationsModule = typeof import("expo-notifications");
+
 let registeredToken: string | null = null;
+let module: NotificationsModule | null = null;
 const platform = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
 
-if (Platform.OS !== "web") {
-  // Show a banner even while the app is open: a DM or a live session starting
-  // is worth interrupting for.
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true }),
-  });
+/** True where remote push can work at all: a native build, not Expo Go. */
+export function pushSupported(): boolean {
+  return Platform.OS !== "web" && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+}
+
+function notifications(): NotificationsModule | null {
+  if (!pushSupported()) return null;
+  if (!module) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- deliberately lazy, see header
+    module = require("expo-notifications") as NotificationsModule;
+    // Show a banner even while the app is open: a DM or a live session
+    // starting is worth interrupting for.
+    module.setNotificationHandler({
+      handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true }),
+    });
+  }
+  return module;
+}
+
+/** The EAS project id, from app config or the build environment. */
+function projectId(): string | undefined {
+  return (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
+    ?? (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId
+    ?? process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
 }
 
 /** Ask for permission once signed in and register this device's token. */
 export async function registerForPush(): Promise<string | null> {
-  if (Platform.OS === "web") return null;
+  const Notifications = notifications();
+  if (!Notifications) return null;
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", { name: "IronFlow", importance: Notifications.AndroidImportance.DEFAULT });
@@ -33,14 +60,13 @@ export async function registerForPush(): Promise<string | null> {
     let { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") status = (await Notifications.requestPermissionsAsync()).status;
     if (status !== "granted") return null;
-    const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
-      ?? (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId;
-    const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+    const id = projectId();
+    const token = (await Notifications.getExpoPushTokenAsync(id ? { projectId: id } : undefined)).data;
     await api.registerPushToken(token, platform);
     registeredToken = token;
     return token;
   } catch {
-    return null; // no project id, emulator, or offline: in-app notifications still work
+    return null; // no project id, emulator without Play services, or offline
   }
 }
 
@@ -68,7 +94,8 @@ function open(data: Record<string, unknown>) {
 /** Mount once inside the signed-in app: registers the device, routes taps. */
 export function usePushNotifications(signedIn: boolean) {
   useEffect(() => {
-    if (!signedIn || Platform.OS === "web") return;
+    const Notifications = signedIn ? notifications() : null;
+    if (!Notifications) return;
     void registerForPush();
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       open((response.notification.request.content.data ?? {}) as Record<string, unknown>);

@@ -93,7 +93,7 @@ export default function CommunityScreen() {
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>{t("TRAIN TOGETHER")}</Text>
-            <Text style={styles.title}>{t("COMMUNITY")}</Text>
+            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t("COMMUNITY")}</Text>
           </View>
           <Pressable accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
             <Ionicons name="chatbubbles-outline" size={20} color={colors.brand} />
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: sp
   safe: { flex: 1, backgroundColor: colors.bg }, scroll: { paddingBottom: 120 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: "row", alignItems: "center" },
   headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.brand }, title: { ...type.screenTitle, marginTop: 2 },
-  headerAction: { width: 44, height: 44, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", marginLeft: spacing.sm },
+  headerAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", marginLeft: spacing.xs },
   headerBadge: { position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   headerBadgeText: { color: colors.brandOn, fontSize: 10, fontWeight: "900" },
   scopeRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },

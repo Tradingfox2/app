@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -277,7 +277,7 @@ export default function ChannelScreen() {
         <View style={styles.messageHead}>
           <Pressable accessibilityRole="button" accessibilityLabel={item.author?.full_name || t("Member")} onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.author_id } })}><Avatar user={item.author} size={20} /></Pressable>
           <Text style={styles.author}>{own ? t("You") : item.author?.full_name || t("Member")}</Text>
-          {item.author_role ? <Text style={[styles.roleTag, { color: item.author_role.color || colors.brand, borderColor: item.author_role.color || colors.brand }]} testID={`role-${item.id}`}>{item.author_role.name}</Text> : null}
+          {item.author_role ? <Text style={[styles.roleTag, { color: item.author_role.color || colors.brand, borderColor: item.author_role.color || colors.brand }]} testID={`role-${item.id}`}>{item.author_role.name === "owner" || item.author_role.name === "moderator" ? t(item.author_role.name.toUpperCase()) : item.author_role.name}</Text> : null}
           <Text style={styles.time}>{formatDate(item.created_at, { hour: "2-digit", minute: "2-digit" })}</Text>{item.edited_at ? <Text style={styles.time}>{t("edited")}</Text> : null}
         </View>
         {item.content ? <RichText content={item.content} mentions={item.mentions ?? []} style={styles.messageText} /> : null}
@@ -306,7 +306,7 @@ export default function ChannelScreen() {
   const slowmode = channel?.slowmode_sec ? ` · ${t("SLOW MODE {n}s").replace("{n}", String(channel.slowmode_sec))}` : "";
   const canSend = (!!draft.trim() || attachments.length > 0) && !sending && !loading && !uploading;
 
-  return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.safe}>
+  return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior="padding" style={styles.safe}>
     <View style={styles.header}>
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <View style={{ flex: 1 }}><Text style={styles.headerTitle}># {channel?.name || t("CHANNEL")}</Text><Text style={styles.live}>{kindLabel}{slowmode}</Text></View>

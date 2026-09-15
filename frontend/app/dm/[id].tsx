@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -130,7 +130,7 @@ export default function DirectMessageScreen() {
   const lastSeenId = [...messages].reverse().find(row => row.sender_id === user?.id && row.read_at)?.id;
   const canSend = (!!draft.trim() || attachments.length > 0) && !sending && !loading && !uploading;
 
-  return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.safe}>
+  return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior="padding" style={styles.safe}>
     <View style={styles.header}>
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <Pressable accessibilityRole="button" onPress={() => id && router.push({ pathname: "/user/[id]", params: { id } })} style={{ flex: 1 }}>
