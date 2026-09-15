@@ -23,6 +23,8 @@ import time
 import httpx
 import jwt
 
+import tls
+
 logger = logging.getLogger(__name__)
 
 CENTRIFUGO_URL = os.environ.get("CENTRIFUGO_URL", "").rstrip("/")
@@ -93,7 +95,7 @@ async def publish(channel: str, data: dict) -> None:
     if not is_configured():
         return
     try:
-        async with httpx.AsyncClient(timeout=PUBLISH_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=PUBLISH_TIMEOUT_SECONDS, verify=tls.client_context()) as client:
             response = await client.post(
                 f"{CENTRIFUGO_URL}/api/publish",
                 json={"channel": channel, "data": data},

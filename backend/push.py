@@ -22,6 +22,8 @@ import os
 
 import httpx
 
+import tls
+
 logger = logging.getLogger(__name__)
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
@@ -48,7 +50,7 @@ async def _send(user_id: str, title: str, body: str, data: dict) -> None:
     messages = [{"to": token, "title": title, "body": body[:180], "data": data, "sound": "default"}
                 for token in tokens]
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS, verify=tls.client_context()) as client:
             response = await client.post(EXPO_PUSH_URL, json=messages,
                                          headers={"Accept": "application/json"})
             response.raise_for_status()

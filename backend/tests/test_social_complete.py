@@ -286,3 +286,22 @@ def test_tag_search_matches_prefixes_among_visible_posts(monkeypatch):
         found = await search.search("#leg", "tags", 20, me("bob"))
         assert found["results"] == [{"tag": "legday", "posts": 2}, {"tag": "legpress", "posts": 1}]
     run(scenario, monkeypatch)
+
+
+def test_a_name_with_any_private_answer_is_refused_and_connections_stay_pinned(monkeypatch):
+    import socket
+
+    import httpcore
+
+    def rebinding(host, port, proto=0):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port)),
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", port))]
+    monkeypatch.setattr(socket, "getaddrinfo", rebinding)
+    assert link_preview._public_addresses("evil.example") == []
+    assert not link_preview.safe_url("https://evil.example/")
+
+    async def unvetted():
+        backend = link_preview._PinnedBackend({"good.example": "93.184.216.34"})
+        with pytest.raises(httpcore.ConnectError):
+            await backend.connect_tcp("other.example", 443)
+    asyncio.run(unvetted())
