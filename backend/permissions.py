@@ -55,6 +55,12 @@ MODERATOR = (
     | MANAGE_CHANNEL | KICK_MEMBER | VIEW_MEMBER_PROGRESS
 )
 
+#: What a timed-out member loses until the timeout lapses. Reading never is.
+PARTICIPATE = (
+    SEND_MESSAGE | ATTACH_MEDIA | ADD_REACTION | MENTION_EVERYONE
+    | POST_PROGRAM | START_LIVE_SESSION
+)
+
 LEGACY: dict[str, int] = {
     "owner": ALL,
     "moderator": MODERATOR,

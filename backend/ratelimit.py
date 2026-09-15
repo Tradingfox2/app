@@ -48,6 +48,9 @@ LIMITS: dict[str, tuple[int, int]] = {
     "search": (60, 60),
     "invite_create": (20, 3600),
     "invite_redeem": (15, 600),
+    "report": (20, 3600),
+    "bookmark": (120, 60),
+    "vote": (60, 60),
 }
 
 

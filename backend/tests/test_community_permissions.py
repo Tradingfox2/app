@@ -188,14 +188,14 @@ def test_reactions_are_idempotent_and_clear_when_empty(monkeypatch):
         message = await community.create_message("ch-1", community.MessageIn(content="PR today"), mem)
 
         for _ in range(3):
-            await community.add_reaction(message["id"], community.ReactionIn(emoji="A"), mem)
-        await community.add_reaction(message["id"], community.ReactionIn(emoji="A"), mod)
+            await community.add_reaction(message["id"], community.ReactionIn(emoji="🔥"), mem)
+        await community.add_reaction(message["id"], community.ReactionIn(emoji="🔥"), mod)
         stored = await db.messages.find_one({"id": message["id"]})
-        assert [r["emoji"] for r in stored["reactions"]] == ["A"]
+        assert [r["emoji"] for r in stored["reactions"]] == ["🔥"]
         assert sorted(stored["reactions"][0]["user_ids"]) == ["mem", "mod"]
 
-        await community.remove_reaction(message["id"], "A", mem)
-        await community.remove_reaction(message["id"], "A", mod)
+        await community.remove_reaction(message["id"], "🔥", mem)
+        await community.remove_reaction(message["id"], "🔥", mod)
         stored = await db.messages.find_one({"id": message["id"]})
         assert stored["reactions"] == []
     run_isolated(scenario)
@@ -366,8 +366,8 @@ def test_hiding_a_channel_also_freezes_actions_on_its_old_messages(monkeypatch):
 
         for attempt in (
             lambda: community.edit_message(message["id"], community.MessageEditIn(content="edit"), mem),
-            lambda: community.add_reaction(message["id"], community.ReactionIn(emoji="A"), mem),
-            lambda: community.remove_reaction(message["id"], "A", mem),
+            lambda: community.add_reaction(message["id"], community.ReactionIn(emoji="🔥"), mem),
+            lambda: community.remove_reaction(message["id"], "🔥", mem),
         ):
             with pytest.raises(HTTPException) as denied:
                 await attempt()

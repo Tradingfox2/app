@@ -96,6 +96,7 @@ class PublicUser(BaseModel):
     activity_ranking_opt_in: bool = False
     is_private: bool = False
     staff_role: Optional[str] = None
+    bio: str = ""
 
 
 class ProfileUpdateIn(BaseModel):
@@ -103,6 +104,12 @@ class ProfileUpdateIn(BaseModel):
     activity_ranking_opt_in: bool | None = None
     #: A private account converts incoming follows into requests.
     is_private: bool | None = None
+    full_name: str | None = Field(default=None, min_length=2, max_length=80)
+    bio: str | None = Field(default=None, max_length=300)
+    #: An image uploaded through /media first; only the uploader's own counts.
+    avatar_media_id: str | None = None
+    #: True clears the avatar.
+    remove_avatar: bool | None = None
 
 
 class TokenOut(BaseModel):
@@ -274,6 +281,7 @@ def to_public_user(u: dict) -> PublicUser:
         activity_ranking_opt_in=u.get("activity_ranking_opt_in", False),
         is_private=u.get("is_private", False),
         staff_role=u.get("staff_role"),
+        bio=u.get("bio") or "",
     )
 
 
@@ -349,6 +357,17 @@ async def lifespan(app: FastAPI):
         partialFilterExpression={"checkin_day": {"$exists": True}, "status": "active"},
     )
     await db.challenge_participants.create_index([("channel_id", 1), ("user_id", 1)], unique=True)
+    await db.program_adoptions.create_index([("message_id", 1), ("user_id", 1)], unique=True)
+    await db.live_sessions.create_index([("channel_id", 1), ("status", 1), ("starts_at", 1)])
+    await db.live_rsvps.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.post_saves.create_index([("user_id", 1), ("post_id", 1)], unique=True)
+    await db.post_saves.create_index([("user_id", 1), ("created_at", -1)])
+    await db.comment_likes.create_index([("comment_id", 1), ("user_id", 1)], unique=True)
+    await db.poll_votes.create_index([("post_id", 1), ("user_id", 1)], unique=True)
+    await db.posts.create_index([("tags", 1), ("created_at", -1)])
+    await db.posts.create_index([("author_id", 1), ("created_at", -1)])
+    await db.push_tokens.create_index("token", unique=True)
+    await db.push_tokens.create_index("user_id")
     await db.community_invites.create_index("code", unique=True)
     await db.community_invites.create_index([("community_id", 1), ("revoked_at", 1), ("created_at", -1)])
     await db.rate_limits.create_index("key", unique=True)
@@ -451,9 +470,23 @@ async def realtime_token(user: dict = Depends(current_user)):
 
 @api.patch("/auth/me", response_model=PublicUser)
 async def update_me(body: ProfileUpdateIn, user: dict = Depends(current_user)):
+    updates = body.model_dump(exclude_none=True)
+    media_id = updates.pop("avatar_media_id", None)
+    if updates.pop("remove_avatar", None):
+        updates["avatar_url"] = None
+    if media_id:
+        media = await db.media.find_one(
+            {"id": media_id, "user_id": user["id"], "kind": "image"}, {"_id": 0, "url": 1})
+        if not media:
+            raise HTTPException(422, "Unknown image")
+        updates["avatar_url"] = media["url"]
+    if "full_name" in updates:
+        updates["full_name"] = updates["full_name"].strip()
+    if "bio" in updates:
+        updates["bio"] = updates["bio"].strip()
     await db.users.update_one(
         {"id": user["id"]},
-        {"$set": {**body.model_dump(exclude_none=True), "updated_at": now()}},
+        {"$set": {**updates, "updated_at": now()}},
     )
     updated = await db.users.find_one({"id": user["id"]})
     return to_public_user(updated)
@@ -787,7 +820,7 @@ async def update_relationship(rel_id: str, body: CoachStatusIn, user: dict = Dep
 
 # ---- Group sessions ------------------------------------------------------- #
 @api.get("/group-sessions")
-async def list_sessions():
+async def list_sessions(user: dict = Depends(current_user)):
     return [
         clean(s)
         async for s in db.group_sessions.find({}, {"_id": 0}).sort("starts_at", 1).limit(50)

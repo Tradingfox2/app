@@ -129,13 +129,22 @@ def test_user_detail_never_exposes_health_data(monkeypatch):
 def test_report_flow_snapshots_content_and_resolves_once(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(admin, "db", db)
+        import moderation
+        import social_graph
+        from routers import social
+        # Removal goes through moderation; the visibility gate through social.
+        for module in (moderation, social, social_graph, server):
+            monkeypatch.setattr(module, "db", db)
         monkeypatch.setattr(notifications, "db", db)
         monkeypatch.setattr(staff, "db", db)
         moderator = account("mod", staff_role="moderator")
         await db.users.insert_many([account("reporter"), account("author"), moderator])
         await db.posts.insert_one({"id": "p1", "author_id": "author", "content": "Take 10x the dose", "status": "active"})
         report = await admin.create_report(admin.ReportIn(target_type="post", target_id="p1", reason="dangerous_advice", detail="Unsafe"), account("reporter"))
-        assert report["content_snapshot"] == "Take 10x the dose" and report["reported_user_id"] == "author"
+        # The reporter gets a receipt; the snapshot is for moderators only.
+        assert "content_snapshot" not in report and "reported_user_id" not in report
+        stored = await db.reports.find_one({"id": report["id"]})
+        assert stored["content_snapshot"] == "Take 10x the dose" and stored["reported_user_id"] == "author"
         # Duplicate reports from the same user do not spam the queue.
         assert (await admin.create_report(admin.ReportIn(target_type="post", target_id="p1", reason="dangerous_advice"), account("reporter")))["id"] == report["id"]
         assert len(await admin.list_reports("open", 50, moderator)) == 1

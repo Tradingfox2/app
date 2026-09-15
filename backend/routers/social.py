@@ -1,16 +1,21 @@
 """Social graph: feed, likes, reposts, comments, follows, direct messages, media."""
 from __future__ import annotations
 
-from typing import Literal
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pymongo.errors import DuplicateKeyError
 
+import link_preview
 import media_storage
+import moderation
 import staff
 import notifications
 import ratelimit
+import realtime
 import social_graph
 from server import clean, current_user, db, new_id, now
 
@@ -18,20 +23,110 @@ router = APIRouter()
 
 AUTHOR_FIELDS = {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
 
+#: `#legday`, `#5x5`, `#récupération` — letters, digits and underscores, any
+#: script, not starting a word mid-way (so "C#" and URLs' fragments are skipped).
+HASHTAG_PATTERN = re.compile(r"(?<![\w&/#])#(\w{1,50})", re.UNICODE)
+MAX_TAGS = 10
+POST_EDIT_WINDOW = timedelta(hours=24)
+
+
+def _aware(value: datetime) -> datetime:
+    """Stored times may come back naive depending on the client; treat as UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def extract_tags(content: str) -> list[str]:
+    seen: dict[str, None] = {}
+    for match in HASHTAG_PATTERN.finditer(content or ""):
+        tag = match.group(1).lower()
+        if not tag.isdigit():  # "#1" is a ranking, not a topic
+            seen.setdefault(tag, None)
+    return list(seen)[:MAX_TAGS]
+
+
+class PollIn(BaseModel):
+    options: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(min_length=2, max_length=4)
+    duration_hours: int = Field(default=24, ge=1, le=168)
+
+    @model_validator(mode="after")
+    def distinct(self):
+        cleaned = [option.strip() for option in self.options]
+        if any(not option for option in cleaned) or len({o.lower() for o in cleaned}) != len(cleaned):
+            raise ValueError("Poll options must be distinct and not blank")
+        self.options = cleaned
+        return self
+
 
 class PostIn(BaseModel):
     content: str = Field(default="", max_length=4000)
     community_id: str | None = None
     workout_id: str | None = None
     media_ids: list[str] = Field(default_factory=list, max_length=6)
+    poll: PollIn | None = None
+
+
+class PostEditIn(BaseModel):
+    content: str = Field(max_length=4000)
+
+
+class RepostIn(BaseModel):
+    #: Empty is a plain repost; text makes it a quote post.
+    content: str = Field(default="", max_length=4000)
 
 
 class CommentIn(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
+    #: Reply to a comment. Threads are one level deep, as on Instagram: a
+    #: reply to a reply attaches to the same top-level comment.
+    parent_id: str | None = None
+
+
+class CommentEditIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class VoteIn(BaseModel):
+    option: int = Field(ge=0, le=3)
 
 
 class DirectMessageIn(BaseModel):
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(default="", max_length=4000)
+    media_ids: list[str] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def says_something(self):
+        if not self.content.strip() and not self.media_ids:
+            raise ValueError("A message needs text or an attachment")
+        return self
+
+
+async def _people(ids) -> dict[str, dict]:
+    ids = [i for i in set(ids) if i]
+    if not ids:
+        return {}
+    return {row["id"]: clean(row) async for row in db.users.find({"id": {"$in": ids}}, AUTHOR_FIELDS)}
+
+
+async def _plain(content: str) -> str:
+    """Text with `<@id>` tokens rendered as @Name — for notification bodies,
+    which are shown as plain text and must never leak raw tokens."""
+    ids = notifications.parse_mentions(content)
+    if not ids:
+        return content or ""
+    people = await _people(ids)
+    return notifications.MENTION_PATTERN.sub(
+        lambda m: "@" + ((people.get(m.group(1)) or {}).get("full_name") or "someone"), content or "")
+
+
+async def _owned_media(media_ids: list[str], user_id: str) -> list[dict]:
+    """Only the uploader can attach a media object; rejects anyone else's."""
+    if not media_ids:
+        return []
+    media = [row async for row in db.media.find(
+        {"id": {"$in": media_ids}, "user_id": user_id}, {"_id": 0, "id": 1, "kind": 1, "url": 1})]
+    if len(media) != len(set(media_ids)):
+        raise HTTPException(422, "Unknown media attachment")
+    return media
 
 
 async def _author(user_id: str) -> dict | None:
@@ -121,24 +216,59 @@ async def _post_or_404(post_id: str, user_id: str) -> dict:
 
 
 async def _decorate(posts: list[dict], viewer_id: str) -> list[dict]:
-    ids = [post["id"] for post in posts]
+    """Everything a post card needs, in a fixed number of queries per page.
+
+    Viewer state (liked, saved, reposted, voted) is computed for both the post
+    and, for a repost, its original — the card acts on the original, so that
+    is whose state it has to show.
+    """
+    originals = [post["original"] for post in posts if post.get("original") and not post["original"].get("unavailable")]
+    every = posts + originals
+    ids = list({post["id"] for post in every})
     liked = {row["post_id"] async for row in db.post_likes.find({"post_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "post_id": 1})}
-    reposted = {row["repost_of"] async for row in db.posts.find({"repost_of": {"$in": ids}, "author_id": viewer_id, "status": {"$ne": "deleted"}}, {"_id": 0, "repost_of": 1})}
-    authors: dict[str, dict | None] = {}
-    output = []
-    for post in posts:
-        for key in (post["author_id"], (post.get("original") or {}).get("author_id")):
-            if key and key not in authors:
-                authors[key] = await _author(key)
-        post["author"] = authors[post["author_id"]]
-        if post.get("original"):
-            post["original"]["author"] = authors[post["original"]["author_id"]]
+    saved = {row["post_id"] async for row in db.post_saves.find({"post_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "post_id": 1})}
+    reposted = {row["repost_of"] async for row in db.posts.find({"repost_of": {"$in": ids}, "author_id": viewer_id, "status": {"$ne": "deleted"}, "content": ""}, {"_id": 0, "repost_of": 1})}
+    polled = [post["id"] for post in every if post.get("poll")]
+    votes = {row["post_id"]: row["option"] async for row in db.poll_votes.find({"post_id": {"$in": polled}, "user_id": viewer_id}, {"_id": 0})} if polled else {}
+    mentioned = {uid for post in every for uid in notifications.parse_mentions(post.get("content", ""))}
+    people = await _people({post["author_id"] for post in every} | mentioned)
+    moment = now()
+
+    def fill(post: dict) -> dict:
+        post["author"] = people.get(post["author_id"])
         post["liked_by_me"] = post["id"] in liked
+        post["saved_by_me"] = post["id"] in saved
         post["reposted_by_me"] = post["id"] in reposted
+        post["mentions"] = [people[uid] for uid in notifications.parse_mentions(post.get("content", "")) if uid in people]
+        post["can_edit"] = post["author_id"] == viewer_id and moment - _aware(post["created_at"]) <= POST_EDIT_WINDOW if post.get("created_at") else False
         post.setdefault("like_count", 0)
         post.setdefault("comment_count", 0)
         post.setdefault("repost_count", 0)
         post.setdefault("media", [])
+        post.setdefault("tags", [])
+        post.setdefault("link_preview", None)
+        post.setdefault("edited_at", None)
+        poll = post.get("poll")
+        if poll:
+            closed = _aware(poll["closes_at"]) <= moment
+            mine = votes.get(post["id"])
+            # Results show once you have voted, once it closes, or to its author —
+            # the convention everywhere, so early votes do not herd later ones.
+            reveal = closed or mine is not None or post["author_id"] == viewer_id
+            post["poll"] = {
+                "options": poll["options"], "closes_at": poll["closes_at"], "closed": closed,
+                "my_vote": mine, "total": sum(poll.get("counts") or []),
+                "counts": poll.get("counts") if reveal else None,
+            }
+        return post
+
+    output = []
+    for post in posts:
+        fill(post)
+        if post.get("original") and not post["original"].get("unavailable"):
+            fill(post["original"])
+        elif post.get("original"):
+            post["original"]["author"] = people.get(post["original"]["author_id"])
         output.append(clean(post))
     return output
 
@@ -193,9 +323,28 @@ async def feed(
     before: str | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     user: dict = Depends(current_user),
+    author_id: Annotated[str | None, Query(max_length=64)] = None,
+    tag: Annotated[str | None, Query(max_length=50)] = None,
+    community_id: Annotated[str | None, Query(max_length=64)] = None,
 ):
     query = await _visible_post_query(user["id"])
-    if scope == "mine":
+    if tag:
+        query["tags"] = tag.lstrip("#").lower()
+    if community_id:
+        # A community's own wall: members only, which the visible-post query
+        # already guarantees — a non-member simply gets an empty page.
+        query["community_id"] = community_id
+    if author_id:
+        # One person's posts, as on their profile. A private account withholds
+        # them until the viewer is an accepted follower.
+        if not await social_graph.can_view_profile(user["id"], author_id):
+            raise HTTPException(403, "This account is private")
+        if author_id != user["id"] and await social_graph.blocked_between(user["id"], author_id):
+            raise HTTPException(403, "This account is unavailable")
+        query["author_id"] = author_id
+        if not community_id:
+            query["community_id"] = None  # a profile shows the public wall, as its post count does
+    elif scope == "mine":
         query["author_id"] = user["id"]
     else:
         # Blocked people are already excluded; muted people leave the feed too.
@@ -218,9 +367,12 @@ async def feed(
         else:
             query.pop("author_id", None)
     if before:
+        # An unknown cursor is an error, as in list_messages: silently serving
+        # page one again would make infinite scroll repeat itself forever.
         cursor = await db.posts.find_one({"id": before}, {"_id": 0, "created_at": 1})
-        if cursor:
-            query["created_at"] = {"$lt": cursor["created_at"]}
+        if not cursor:
+            raise HTTPException(404, "Post cursor not found")
+        query["created_at"] = {"$lt": cursor["created_at"]}
     posts = [row async for row in db.posts.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)]
     return await _decorate(await _with_originals(posts, user["id"]), user["id"])
 
@@ -262,34 +414,96 @@ async def _workout_summary(workout_id: str, user: dict) -> dict:
 @router.post("/posts", status_code=201)
 async def create_post(body: PostIn, user: dict = Depends(current_user)):
     await ratelimit.hit("post", user["id"])
-    if not body.content.strip() and not body.media_ids and not body.workout_id:
-        raise HTTPException(422, "A post needs text, media or a workout")
+    if not body.content.strip() and not body.media_ids and not body.workout_id and not body.poll:
+        raise HTTPException(422, "A post needs text, media, a workout or a poll")
+    if body.poll and not body.content.strip():
+        raise HTTPException(422, "A poll needs a question")
     workout_summary = await _workout_summary(body.workout_id, user) if body.workout_id else None
     if body.community_id:
         if body.community_id not in await _member_community_ids(user["id"]):
             raise HTTPException(403, "Active community membership required")
-    media = []
-    if body.media_ids:
-        # Only the uploader can attach a media object; rejects other users' URLs.
-        async for row in db.media.find({"id": {"$in": body.media_ids}, "user_id": user["id"]}, {"_id": 0, "id": 1, "kind": 1, "url": 1}):
-            media.append(row)
-        if len(media) != len(set(body.media_ids)):
-            raise HTTPException(422, "Unknown media attachment")
+    media = await _owned_media(body.media_ids, user["id"])
+    content = body.content.strip()
+    timestamp = now()
     post = {
-        "id": new_id(), "author_id": user["id"], "content": body.content.strip(),
+        "id": new_id(), "author_id": user["id"], "content": content,
         "community_id": body.community_id, "workout_id": body.workout_id,
         "media": media, "repost_of": None, "status": "active",
         "workout_summary": workout_summary,
-        "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": now(),
+        "tags": extract_tags(content),
+        "poll": {
+            "options": body.poll.options, "counts": [0] * len(body.poll.options),
+            "closes_at": timestamp + timedelta(hours=body.poll.duration_hours),
+        } if body.poll else None,
+        # Only the first link, and never alongside media: the media is the card.
+        "link_preview": None if media else await _preview_for(content),
+        "edited_at": None,
+        "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": timestamp,
     }
     await db.posts.insert_one(post)
-    name = user.get("full_name") or "Someone"
-    for mentioned in notifications.parse_mentions(post["content"]):
-        await notifications.notify(
-            mentioned, notifications.POST_MENTION, actor=user,
-            title=f"{name} mentioned you in a post", body=post["content"][:140],
-            target_type="post", target_id=post["id"])
+    await _notify_mentions(post, user, notifications.parse_mentions(content))
+    await moderation.screen(content, author=user, target_type="post", target_id=post["id"],
+                            metadata={"community_id": body.community_id})
     return (await _decorate([post], user["id"]))[0]
+
+
+async def _preview_for(content: str) -> dict | None:
+    url = link_preview.first_url(content)
+    return await link_preview.fetch(url) if url else None
+
+
+async def _notify_mentions(post: dict, user: dict, mentioned: list[str]) -> None:
+    name = user.get("full_name") or "Someone"
+    body = (await _plain(post["content"]))[:140]
+    for person in mentioned:
+        # A private post's mention must not tell someone about a post they
+        # could not open; notify() handles blocks, this handles audience.
+        if not await _can_view_post(post, person):
+            continue
+        await notifications.notify(
+            person, notifications.POST_MENTION, actor=user,
+            title=f"{name} mentioned you in a post", body=body,
+            target_type="post", target_id=post["id"])
+
+
+@router.get("/posts/{post_id}")
+async def get_post(post_id: str, user: dict = Depends(current_user)):
+    """One post, for its own screen — where a notification about it lands."""
+    post = await _post_or_404(post_id, user["id"])
+    return (await _decorate(await _with_originals([post], user["id"]), user["id"]))[0]
+
+
+@router.patch("/posts/{post_id}")
+async def edit_post(post_id: str, body: PostEditIn, user: dict = Depends(current_user)):
+    """Edit the text of your own post within 24 hours. Marked as edited.
+
+    Media, polls and shared workouts are fixed once posted — editing a poll's
+    options after votes are cast would change what people voted for.
+    """
+    post = await _post_or_404(post_id, user["id"])
+    if post["author_id"] != user["id"]:
+        raise HTTPException(403, "Only the author can edit this post")
+    if post.get("repost_of") and not post.get("content"):
+        raise HTTPException(409, "A repost has no text to edit")
+    if now() - _aware(post["created_at"]) > POST_EDIT_WINDOW:
+        raise HTTPException(409, "The edit window for this post has closed")
+    content = body.content.strip()
+    if not content and not post.get("media") and not post.get("workout_summary") and not post.get("repost_of"):
+        raise HTTPException(422, "A post needs text, media or a workout")
+    if post.get("poll") and not content:
+        raise HTTPException(422, "A poll needs a question")
+    before = set(notifications.parse_mentions(post.get("content", "")))
+    updates = {
+        "content": content, "tags": extract_tags(content), "edited_at": now(),
+        "link_preview": None if post.get("media") else await _preview_for(content),
+    }
+    await db.posts.update_one({"id": post_id}, {"$set": updates})
+    post = {**post, **updates}
+    # Only people newly mentioned hear about it; the rest were told already.
+    await _notify_mentions(post, user, [p for p in notifications.parse_mentions(content) if p not in before])
+    await moderation.screen(content, author=user, target_type="post", target_id=post_id,
+                            metadata={"community_id": post.get("community_id"), "edited": True})
+    return (await _decorate(await _with_originals([post], user["id"]), user["id"]))[0]
 
 
 @router.delete("/posts/{post_id}", status_code=204)
@@ -297,13 +511,13 @@ async def delete_post(post_id: str, user: dict = Depends(current_user)):
     post = await db.posts.find_one({"id": post_id}, {"_id": 0})
     if not post:
         return None
-    if post["author_id"] != user["id"] and "content.moderate" not in staff.permissions_for(user):
+    own = post["author_id"] == user["id"]
+    if not own and "content.moderate" not in staff.permissions_for(user):
         raise HTTPException(403, "Only the author can delete this post")
-    await db.posts.update_one({"id": post_id}, {"$set": {"status": "deleted", "deleted_at": now()}})
-    if post["author_id"] != user["id"]:
+    # The author's own delete is not a moderation act, so it carries no removed_by.
+    removed = await moderation.remove_content("post", post_id, actor={} if own else user)
+    if removed and not own:
         await staff.audit(user, "post.removed", target_type="post", target_id=post_id)
-    if post.get("repost_of"):
-        await db.posts.update_one({"id": post["repost_of"]}, {"$inc": {"repost_count": -1}})
     return None
 
 
@@ -339,58 +553,287 @@ async def unlike_post(post_id: str, user: dict = Depends(current_user)):
 
 
 @router.post("/posts/{post_id}/repost", status_code=201)
-async def repost(post_id: str, user: dict = Depends(current_user)):
+async def repost(post_id: str, user: dict = Depends(current_user), body: RepostIn | None = None):
+    """A plain repost (idempotent, one per person) or, with text, a quote post."""
+    quote = (body.content if body else "").strip()
+    if quote:
+        await ratelimit.hit("post", user["id"])
     original = await _post_or_404(post_id, user["id"])
-    if original.get("repost_of"):
+    if original.get("repost_of") and not original.get("content"):
+        # Reposting a plain repost reposts what it carries. A quote post has
+        # its own words, so it is quoted as itself.
         original = await _post_or_404(original["repost_of"], user["id"])
-    existing = await db.posts.find_one({"repost_of": original["id"], "author_id": user["id"], "status": {"$ne": "deleted"}}, {"_id": 0})
-    if existing:
-        return (await _decorate(await _with_originals([existing], user["id"]), user["id"]))[0]
+    if not quote:
+        existing = await db.posts.find_one({"repost_of": original["id"], "author_id": user["id"], "content": "", "status": {"$ne": "deleted"}}, {"_id": 0})
+        if existing:
+            return (await _decorate(await _with_originals([existing], user["id"]), user["id"]))[0]
     post = {
-        "id": new_id(), "author_id": user["id"], "content": "", "community_id": original.get("community_id"),
+        "id": new_id(), "author_id": user["id"], "content": quote, "community_id": original.get("community_id"),
         "workout_id": None, "media": [], "repost_of": original["id"], "status": "active",
+        "tags": extract_tags(quote), "poll": None, "link_preview": None, "edited_at": None,
         "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": now(),
     }
     await db.posts.insert_one(post)
     await db.posts.update_one({"id": original["id"]}, {"$inc": {"repost_count": 1}})
     name = user.get("full_name") or "Someone"
-    await _notify_post_author(original, user, notifications.POST_REPOST, f"{name} reposted your post")
+    await _notify_post_author(
+        original, user, notifications.POST_REPOST,
+        f"{name} quoted your post" if quote else f"{name} reposted your post",
+        (await _plain(quote))[:140])
+    if quote:
+        await _notify_mentions(post, user, notifications.parse_mentions(quote))
+        await moderation.screen(quote, author=user, target_type="post", target_id=post["id"],
+                                metadata={"community_id": post["community_id"]})
     return (await _decorate(await _with_originals([post], user["id"]), user["id"]))[0]
 
 
+@router.delete("/posts/{post_id}/repost", status_code=204)
+async def undo_repost(post_id: str, user: dict = Depends(current_user)):
+    """Take back a plain repost. Quote posts are deleted like any post."""
+    existing = await db.posts.find_one(
+        {"repost_of": post_id, "author_id": user["id"], "content": "", "status": {"$ne": "deleted"}}, {"_id": 0, "id": 1})
+    if existing:
+        await moderation.remove_content("post", existing["id"], actor={})
+
+
+# --------------------------------------------------------------------------- #
+# Comments — one level of replies, likes, edit and delete                      #
+# --------------------------------------------------------------------------- #
+COMMENT_EDIT_WINDOW = timedelta(minutes=15)
+
+
+async def _comment_view(comments: list[dict], viewer_id: str) -> list[dict]:
+    ids = [row["id"] for row in comments]
+    liked = {row["comment_id"] async for row in db.comment_likes.find(
+        {"comment_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "comment_id": 1})}
+    mentioned = {uid for row in comments for uid in notifications.parse_mentions(row.get("content", ""))}
+    people = await _people({row["author_id"] for row in comments} | mentioned)
+    moment = now()
+    for row in comments:
+        row["author"] = people.get(row["author_id"])
+        row["mentions"] = [people[uid] for uid in notifications.parse_mentions(row.get("content", "")) if uid in people]
+        row["liked_by_me"] = row["id"] in liked
+        row.setdefault("like_count", 0)
+        row.setdefault("reply_count", 0)
+        row.setdefault("parent_id", None)
+        row.setdefault("edited_at", None)
+        row["can_edit"] = row["author_id"] == viewer_id and moment - _aware(row["created_at"]) <= COMMENT_EDIT_WINDOW
+    return [clean(row) for row in comments]
+
+
 @router.get("/posts/{post_id}/comments")
-async def list_comments(post_id: str, user: dict = Depends(current_user)):
+async def list_comments(
+    post_id: str,
+    user: dict = Depends(current_user),
+    before: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+):
+    """Oldest first, a page at a time; `before` walks back from a cursor.
+
+    Replies ride along with their parents. People blocked either way are
+    left out, the same rule as the feed.
+    """
     await _post_or_404(post_id, user["id"])
-    comments = [row async for row in db.post_comments.find({"post_id": post_id, "status": "active"}, {"_id": 0}).sort("created_at", 1).limit(200)]
-    for comment in comments:
-        comment["author"] = await _author(comment["author_id"])
-    return comments
+    query: dict = {"post_id": post_id, "status": "active"}
+    blocked = await social_graph.blocked_ids(user["id"])
+    if blocked:
+        query["author_id"] = {"$nin": blocked}
+    if before:
+        cursor = await db.post_comments.find_one({"id": before, "post_id": post_id}, {"_id": 0, "created_at": 1})
+        if not cursor:
+            raise HTTPException(404, "Comment cursor not found")
+        query["created_at"] = {"$lt": cursor["created_at"]}
+    rows = [row async for row in db.post_comments.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)]
+    return await _comment_view(list(reversed(rows)), user["id"])
 
 
 @router.post("/posts/{post_id}/comments", status_code=201)
 async def add_comment(post_id: str, body: CommentIn, user: dict = Depends(current_user)):
     await ratelimit.hit("comment", user["id"])
-    await _post_or_404(post_id, user["id"])
-    comment = {"id": new_id(), "post_id": post_id, "author_id": user["id"], "content": body.content.strip(), "status": "active", "created_at": now()}
-    await db.post_comments.insert_one(comment)
+    post = await _post_or_404(post_id, user["id"])
+    parent = None
+    if body.parent_id:
+        parent = await db.post_comments.find_one(
+            {"id": body.parent_id, "post_id": post_id, "status": "active"}, {"_id": 0})
+        if not parent:
+            raise HTTPException(404, "Comment being replied to was not found")
+        if parent.get("parent_id"):
+            parent = await db.post_comments.find_one({"id": parent["parent_id"]}, {"_id": 0}) or parent
+    comment = {"id": new_id(), "post_id": post_id, "author_id": user["id"], "content": body.content.strip(),
+               "parent_id": parent["id"] if parent else None, "like_count": 0, "reply_count": 0,
+               "edited_at": None, "status": "active", "created_at": now()}
+    await db.post_comments.insert_one(dict(comment))
     await db.posts.update_one({"id": post_id}, {"$inc": {"comment_count": 1}})
-    comment["author"] = await _author(user["id"])
+    if parent:
+        await db.post_comments.update_one({"id": parent["id"]}, {"$inc": {"reply_count": 1}})
 
-    post = await db.posts.find_one({"id": post_id}, {"_id": 0, "id": 1, "author_id": 1})
     name = user.get("full_name") or "Someone"
-    if post:
-        await _notify_post_author(
-            post, user, notifications.POST_COMMENT,
-            f"{name} commented on your post", comment["content"][:140])
+    body_text = (await _plain(comment["content"]))[:140]
+    told = {user["id"]}
+    await _notify_post_author(post, user, notifications.POST_COMMENT, f"{name} commented on your post", body_text)
+    told.add(post["author_id"])
+    if parent and parent["author_id"] not in told:
+        await notifications.notify(
+            parent["author_id"], notifications.COMMENT_REPLY, actor=user,
+            title=f"{name} replied to your comment", body=body_text,
+            target_type="post", target_id=post_id, metadata={"comment_id": comment["id"]})
+        told.add(parent["author_id"])
     # Someone mentioned in a comment hears about it even if it is not their post.
     for mentioned in notifications.parse_mentions(comment["content"]):
-        if post and mentioned == post["author_id"]:
-            continue  # already told, as the post author
+        if mentioned in told or not await _can_view_post(post, mentioned):
+            continue
         await notifications.notify(
             mentioned, notifications.POST_MENTION, actor=user,
-            title=f"{name} mentioned you in a comment", body=comment["content"][:140],
+            title=f"{name} mentioned you in a comment", body=body_text,
             target_type="post", target_id=post_id)
-    return clean(comment)
+    await moderation.screen(comment["content"], author=user, target_type="comment", target_id=comment["id"],
+                            metadata={"community_id": post.get("community_id"), "post_id": post_id})
+    return (await _comment_view([comment], user["id"]))[0]
+
+
+async def _comment_or_404(comment_id: str, user_id: str) -> tuple[dict, dict]:
+    comment = await db.post_comments.find_one({"id": comment_id, "status": "active"}, {"_id": 0})
+    if not comment:
+        raise HTTPException(404, "Comment not found")
+    post = await _post_or_404(comment["post_id"], user_id)
+    return comment, post
+
+
+@router.patch("/comments/{comment_id}")
+async def edit_comment(comment_id: str, body: CommentEditIn, user: dict = Depends(current_user)):
+    comment, post = await _comment_or_404(comment_id, user["id"])
+    if comment["author_id"] != user["id"]:
+        raise HTTPException(403, "Only the author can edit a comment")
+    if now() - _aware(comment["created_at"]) > COMMENT_EDIT_WINDOW:
+        raise HTTPException(409, "The edit window for this comment has closed")
+    updates = {"content": body.content.strip(), "edited_at": now()}
+    await db.post_comments.update_one({"id": comment_id}, {"$set": updates})
+    await moderation.screen(updates["content"], author=user, target_type="comment", target_id=comment_id,
+                            metadata={"community_id": post.get("community_id"), "post_id": post["id"], "edited": True})
+    return (await _comment_view([{**comment, **updates}], user["id"]))[0]
+
+
+@router.delete("/comments/{comment_id}", status_code=204)
+async def delete_comment(comment_id: str, user: dict = Depends(current_user)):
+    """The comment's author, the post's author (it is their thread), or staff."""
+    comment, post = await _comment_or_404(comment_id, user["id"])
+    own = comment["author_id"] == user["id"]
+    host = post["author_id"] == user["id"]
+    staff_power = "content.moderate" in staff.permissions_for(user)
+    if not (own or host or staff_power):
+        raise HTTPException(403, "You cannot delete this comment")
+    removed = await moderation.remove_content("comment", comment_id, actor={} if own else user)
+    if removed and comment.get("parent_id"):
+        await db.post_comments.update_one(
+            {"id": comment["parent_id"], "reply_count": {"$gt": 0}}, {"$inc": {"reply_count": -1}})
+    if removed and not own and not host:
+        await staff.audit(user, "comment.removed", target_type="comment", target_id=comment_id)
+
+
+@router.post("/comments/{comment_id}/like")
+async def like_comment(comment_id: str, user: dict = Depends(current_user)):
+    await ratelimit.hit("like", user["id"])
+    comment, _post = await _comment_or_404(comment_id, user["id"])
+    try:
+        await db.comment_likes.insert_one({"comment_id": comment_id, "user_id": user["id"], "created_at": now()})
+    except DuplicateKeyError:
+        return {"comment_id": comment_id, "liked": True, "like_count": comment.get("like_count", 0)}
+    updated = await db.post_comments.find_one_and_update(
+        {"id": comment_id}, {"$inc": {"like_count": 1}}, projection={"_id": 0, "like_count": 1}, return_document=True)
+    await notifications.notify(
+        comment["author_id"], notifications.COMMENT_LIKE, actor=user,
+        title=f"{user.get('full_name') or 'Someone'} liked your comment",
+        body=(await _plain(comment["content"]))[:140],
+        target_type="post", target_id=comment["post_id"], metadata={"comment_id": comment_id})
+    return {"comment_id": comment_id, "liked": True, "like_count": updated["like_count"]}
+
+
+@router.delete("/comments/{comment_id}/like")
+async def unlike_comment(comment_id: str, user: dict = Depends(current_user)):
+    result = await db.comment_likes.delete_one({"comment_id": comment_id, "user_id": user["id"]})
+    if result.deleted_count:
+        await db.post_comments.update_one({"id": comment_id, "like_count": {"$gt": 0}}, {"$inc": {"like_count": -1}})
+    row = await db.post_comments.find_one({"id": comment_id}, {"_id": 0, "like_count": 1}) or {}
+    return {"comment_id": comment_id, "liked": False, "like_count": row.get("like_count", 0)}
+
+
+# --------------------------------------------------------------------------- #
+# Saved posts, polls, hashtags                                                 #
+# --------------------------------------------------------------------------- #
+@router.post("/posts/{post_id}/save")
+async def save_post(post_id: str, user: dict = Depends(current_user)):
+    """Bookmark a post. Private: nobody is told, not even the author."""
+    await ratelimit.hit("bookmark", user["id"])
+    await _post_or_404(post_id, user["id"])
+    try:
+        await db.post_saves.insert_one({"post_id": post_id, "user_id": user["id"], "created_at": now()})
+    except DuplicateKeyError:
+        pass
+    return {"post_id": post_id, "saved": True}
+
+
+@router.delete("/posts/{post_id}/save")
+async def unsave_post(post_id: str, user: dict = Depends(current_user)):
+    await db.post_saves.delete_one({"post_id": post_id, "user_id": user["id"]})
+    return {"post_id": post_id, "saved": False}
+
+
+@router.get("/saved")
+async def saved_posts(
+    user: dict = Depends(current_user),
+    before: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+):
+    """Most recently saved first. A post that has since become invisible to
+    the viewer — deleted, gone private, author blocked — silently drops out."""
+    query: dict = {"user_id": user["id"]}
+    if before:
+        cursor = await db.post_saves.find_one({"user_id": user["id"], "post_id": before}, {"_id": 0, "created_at": 1})
+        if not cursor:
+            raise HTTPException(404, "Saved cursor not found")
+        query["created_at"] = {"$lt": cursor["created_at"]}
+    saves = [row async for row in db.post_saves.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)]
+    posts = {row["id"]: row async for row in db.posts.find(
+        {"id": {"$in": [s["post_id"] for s in saves]}, "status": {"$ne": "deleted"}}, {"_id": 0})}
+    visible = [posts[s["post_id"]] for s in saves
+               if s["post_id"] in posts and await _can_view_post(posts[s["post_id"]], user["id"])]
+    return await _decorate(await _with_originals(visible, user["id"]), user["id"])
+
+
+@router.post("/posts/{post_id}/vote")
+async def vote(post_id: str, body: VoteIn, user: dict = Depends(current_user)):
+    """One vote per person, final — as on X. Changing it would let a voter
+    peek at the results and then switch."""
+    await ratelimit.hit("vote", user["id"])
+    post = await _post_or_404(post_id, user["id"])
+    poll = post.get("poll")
+    if not poll:
+        raise HTTPException(404, "This post has no poll")
+    if _aware(poll["closes_at"]) <= now():
+        raise HTTPException(409, "This poll has closed")
+    if body.option >= len(poll["options"]):
+        raise HTTPException(422, "No such option")
+    try:
+        await db.poll_votes.insert_one({"post_id": post_id, "user_id": user["id"], "option": body.option, "created_at": now()})
+    except DuplicateKeyError as exc:
+        raise HTTPException(409, "You have already voted") from exc
+    await db.posts.update_one({"id": post_id}, {"$inc": {f"poll.counts.{body.option}": 1}})
+    updated = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    return (await _decorate(await _with_originals([updated], user["id"]), user["id"]))[0]
+
+
+@router.get("/tags/trending")
+async def trending_tags(user: dict = Depends(current_user)):
+    """The most used hashtags this week, among posts this viewer can see."""
+    query = await _visible_post_query(user["id"])
+    query["created_at"] = {"$gte": now() - timedelta(days=7)}
+    query["tags.0"] = {"$exists": True}
+    rows = [row async for row in db.posts.aggregate([
+        {"$match": query}, {"$unwind": "$tags"},
+        {"$group": {"_id": "$tags", "posts": {"$sum": 1}}},
+        {"$sort": {"posts": -1, "_id": 1}}, {"$limit": 15},
+    ])]
+    return [{"tag": row["_id"], "posts": row["posts"]} for row in rows]
 
 
 # --------------------------------------------------------------------------- #
@@ -529,6 +972,9 @@ async def public_profile(user_id: str, user: dict = Depends(current_user)):
         raise HTTPException(404, "User not found")
     followers, following = await social_graph.counts(user_id)
     state = await social_graph.follow_state(user["id"], user_id)
+    extra = await db.users.find_one({"id": user_id}, {"_id": 0, "bio": 1, "role": 1, "coach_status": 1}) or {}
+    profile["bio"] = extra.get("bio") or ""
+    profile["is_coach"] = extra.get("role") == "coach" and extra.get("coach_status", "approved") == "approved"
     profile["followers"] = followers
     profile["following"] = following
     profile["posts"] = await db.posts.count_documents({"author_id": user_id, "status": {"$ne": "deleted"}, "community_id": None})
@@ -574,29 +1020,71 @@ def _thread_key(a: str, b: str) -> str:
     return ":".join(sorted((a, b)))
 
 
+def _dm_view(message: dict) -> dict:
+    """A deleted DM keeps its place in the thread but loses its content."""
+    view = clean(dict(message)) or {}
+    view.setdefault("media", [])
+    view.setdefault("status", "active")
+    if view["status"] == "deleted":
+        view["content"] = ""
+        view["media"] = []
+    return view
+
+
 @router.get("/dm")
 async def list_threads(user: dict = Depends(current_user)):
+    blocked = await social_graph.blocked_ids(user["id"])
+    match: dict = {"$or": [{"sender_id": user["id"]}, {"recipient_id": user["id"]}]}
+    if blocked:
+        # A blocked person's thread disappears from the inbox, both ways.
+        match["sender_id"] = {"$nin": blocked}
+        match["recipient_id"] = {"$nin": blocked}
     pipeline = [
-        {"$match": {"$or": [{"sender_id": user["id"]}, {"recipient_id": user["id"]}]}},
+        {"$match": match},
         {"$sort": {"created_at": -1}},
         {"$group": {"_id": "$thread_key", "last": {"$first": "$$ROOT"},
                     "unread": {"$sum": {"$cond": [{"$and": [{"$eq": ["$recipient_id", user["id"]]}, {"$eq": ["$read_at", None]}]}, 1, 0]}}}},
         {"$sort": {"last.created_at": -1}}, {"$limit": 50},
     ]
-    threads = []
-    async for row in db.direct_messages.aggregate(pipeline):
-        last = clean(row["last"])
-        peer_id = last["recipient_id"] if last["sender_id"] == user["id"] else last["sender_id"]
-        threads.append({"peer": await _author(peer_id), "last_message": last, "unread": row["unread"]})
-    return threads
+    rows = [row async for row in db.direct_messages.aggregate(pipeline)]
+    peers = [row["last"]["recipient_id"] if row["last"]["sender_id"] == user["id"] else row["last"]["sender_id"] for row in rows]
+    people = await _people(peers)
+    return [{"peer": people.get(peer), "last_message": _dm_view(row["last"]), "unread": row["unread"]}
+            for row, peer in zip(rows, peers)]
+
+
+@router.get("/dm/unread-count")
+async def dm_unread_count(user: dict = Depends(current_user)):
+    """For the inbox badge on the tab bar."""
+    query: dict = {"recipient_id": user["id"], "read_at": None, "status": {"$ne": "deleted"}}
+    blocked = await social_graph.blocked_ids(user["id"])
+    if blocked:
+        query["sender_id"] = {"$nin": blocked}
+    return {"count": await db.direct_messages.count_documents(query, limit=100)}
 
 
 @router.get("/dm/{peer_id}/messages")
-async def thread_messages(peer_id: str, limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)):
+async def thread_messages(
+    peer_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict = Depends(current_user),
+    before: str | None = None,
+):
     key = _thread_key(user["id"], peer_id)
-    rows = [row async for row in db.direct_messages.find({"thread_key": key}, {"_id": 0}).sort("created_at", -1).limit(limit)]
-    await db.direct_messages.update_many({"thread_key": key, "recipient_id": user["id"], "read_at": None}, {"$set": {"read_at": now()}})
-    return list(reversed(rows))
+    query: dict = {"thread_key": key}
+    if before:
+        cursor = await db.direct_messages.find_one({"id": before, "thread_key": key}, {"_id": 0, "created_at": 1})
+        if not cursor:
+            raise HTTPException(404, "Message cursor not found")
+        query["created_at"] = {"$lt": cursor["created_at"]}
+    rows = [row async for row in db.direct_messages.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)]
+    if not before:
+        read = await db.direct_messages.update_many(
+            {"thread_key": key, "recipient_id": user["id"], "read_at": None}, {"$set": {"read_at": now()}})
+        if read.modified_count:
+            # The read receipt: tells the sender's open thread to show "Seen".
+            await realtime.publish(realtime.user_channel(peer_id), {"type": "dm.read", "peer_id": user["id"]})
+    return [_dm_view(row) for row in reversed(rows)]
 
 
 @router.post("/dm/{peer_id}/messages", status_code=201)
@@ -608,12 +1096,38 @@ async def send_direct_message(peer_id: str, body: DirectMessageIn, user: dict = 
         raise HTTPException(403, "This account is unavailable")
     if not await _can_message(user["id"], peer_id):
         raise HTTPException(403, "You can message people you share a community, coaching relationship or mutual follow with")
+    media = await _owned_media(body.media_ids, user["id"])
     message = {"id": new_id(), "thread_key": _thread_key(user["id"], peer_id), "sender_id": user["id"],
-               "recipient_id": peer_id, "content": body.content.strip(), "read_at": None, "created_at": now()}
-    await db.direct_messages.insert_one(message)
+               "recipient_id": peer_id, "content": body.content.strip(), "media": media,
+               "status": "active", "read_at": None, "created_at": now()}
+    await db.direct_messages.insert_one(dict(message))
     name = user.get("full_name") or "Someone"
     await notifications.notify(
         peer_id, notifications.DIRECT_MESSAGE, actor=user,
-        title=f"{name} sent you a message", body=message["content"][:140],
+        title=f"{name} sent you a message",
+        body=(message["content"][:140] or "📎"),
         target_type="dm", target_id=user["id"])
-    return clean(message)
+    view = _dm_view(message)
+    await realtime.publish(realtime.user_channel(peer_id), {"type": "dm.created", "message": view})
+    # Deliberately not auto-screened: staff never read DMs. The recipient can
+    # report one, which hands moderators exactly that message and nothing more.
+    return view
+
+
+@router.delete("/dm/messages/{message_id}", status_code=204)
+async def delete_direct_message(message_id: str, user: dict = Depends(current_user)):
+    """Unsend your own message. It stays as a "message deleted" marker."""
+    message = await db.direct_messages.find_one({"id": message_id}, {"_id": 0})
+    if not message or message["sender_id"] != user["id"]:
+        raise HTTPException(404, "Message not found")
+    await db.direct_messages.update_one(
+        {"id": message_id}, {"$set": {"status": "deleted", "deleted_at": now(), "content": "", "media": []}})
+    await realtime.publish(realtime.user_channel(message["recipient_id"]), {"type": "dm.deleted", "id": message_id})
+
+
+@router.post("/dm/{peer_id}/typing", status_code=204)
+async def dm_typing(peer_id: str, user: dict = Depends(current_user)):
+    """A "typing…" nudge. Realtime only — nothing is stored."""
+    if await social_graph.blocked_between(user["id"], peer_id):
+        return
+    await realtime.publish(realtime.user_channel(peer_id), {"type": "dm.typing", "peer_id": user["id"]})

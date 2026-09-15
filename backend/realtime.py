@@ -52,11 +52,36 @@ def user_channel(user_id: str) -> str:
 
 
 def connection_token(user_id: str, ttl_seconds: int | None = None) -> str:
-    """Mint the short-lived HS256 JWT the client hands to Centrifugo on connect."""
+    """Mint the short-lived HS256 JWT the client hands to Centrifugo on connect.
+
+    The `channels` claim subscribes the connection to the member's own
+    `user:{id}` channel server-side, so mention and notification nudges arrive
+    without the client ever asking — and no client can ask for someone else's.
+    """
     if not TOKEN_SECRET:
         raise RuntimeError("Realtime token secret is not configured")
     claims = {
         "sub": user_id,
+        "iat": int(time.time()),
+        "exp": int(time.time()) + (ttl_seconds or TOKEN_TTL_SECONDS),
+        "channels": [user_channel(user_id)],
+    }
+    return jwt.encode(claims, TOKEN_SECRET, algorithm="HS256")
+
+
+def subscription_token(user_id: str, channel: str, ttl_seconds: int | None = None) -> str:
+    """Mint the per-channel JWT Centrifugo checks before admitting a subscriber.
+
+    Issued only after the API has checked the member may view the channel, so
+    the permission rules stay in one place. The deployment must configure the
+    `channel` namespace to require these tokens (no `allow_subscribe_for_client`),
+    otherwise any signed-in client could listen to any room.
+    """
+    if not TOKEN_SECRET:
+        raise RuntimeError("Realtime token secret is not configured")
+    claims = {
+        "sub": user_id,
+        "channel": channel,
         "iat": int(time.time()),
         "exp": int(time.time()) + (ttl_seconds or TOKEN_TTL_SECONDS),
     }

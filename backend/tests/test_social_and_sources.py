@@ -19,7 +19,8 @@ def patch_social_db(monkeypatch, db):
     """Social routes now reach into notifications and the social graph, so the
     throwaway database has to be installed in all three or a trigger will hit
     the global client bound to an already-closed event loop."""
-    for module in (social, notifications, social_graph):
+    import moderation  # post removal goes through moderation.remove_content
+    for module in (social, notifications, social_graph, moderation):
         monkeypatch.setattr(module, "db", db)
     # ratelimit reads server.db at call time, so it follows this patch.
     monkeypatch.setattr(server, "db", db)

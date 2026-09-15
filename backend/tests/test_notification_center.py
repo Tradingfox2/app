@@ -20,6 +20,8 @@ async def seed_notifications(db, monkeypatch):
     await seed(db, monkeypatch)
     monkeypatch.setattr(notifications, "db", db)
     monkeypatch.setattr(notifications_router, "db", db)
+    import social_graph
+    monkeypatch.setattr(social_graph, "db", db)  # notify() checks blocks
 
 
 def test_notifications_are_scoped_to_their_owner(monkeypatch):

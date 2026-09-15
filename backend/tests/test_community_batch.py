@@ -189,11 +189,11 @@ def test_every_message_mutation_is_broadcast(monkeypatch):
         message = await community.create_message("ch-1", community.MessageIn(content="hi"), mem)
         sent = capture(monkeypatch)
 
-        await community.add_reaction(message["id"], community.ReactionIn(emoji="A"), mem)
+        await community.add_reaction(message["id"], community.ReactionIn(emoji="🔥"), mem)
         await community.edit_message(message["id"], community.MessageEditIn(content="hello"), mem)
         await community.pin_message(message["id"], mod)
         await community.unpin_message(message["id"], mod)
-        await community.remove_reaction(message["id"], "A", mem)
+        await community.remove_reaction(message["id"], "🔥", mem)
         await community.delete_message(message["id"], mem)
 
         kinds = [data["type"] for _, data in sent]

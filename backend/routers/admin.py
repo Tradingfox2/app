@@ -13,7 +13,9 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+import moderation
 import notifications
+import ratelimit
 import staff
 from server import clean, current_user, db, new_id, now
 
@@ -23,7 +25,7 @@ REPORT_REASONS = ("spam", "harassment", "dangerous_advice", "sexual_content", "v
 
 
 class ReportIn(BaseModel):
-    target_type: Literal["post", "comment", "message", "user", "community"]
+    target_type: Literal["post", "comment", "message", "direct_message", "user", "community"]
     target_id: str
     reason: Literal[REPORT_REASONS]  # type: ignore[valid-type]
     detail: str = Field(default="", max_length=1000)
@@ -76,28 +78,86 @@ async def create_report(body: ReportIn, user: dict = Depends(current_user)):
          "target_id": body.target_id, "status": "open"}, {"_id": 0}
     )
     if existing:
-        return clean(existing)
+        return _reporter_view(existing)
+    await ratelimit.hit("report", user["id"])
     # Snapshot the reported content: moderators must not need read access to
-    # private conversations to judge a report.
+    # private conversations to judge a report. But only content the reporter
+    # can see may be reported — otherwise a report is a way to read (or merely
+    # confirm the existence of) a post or message behind a wall.
     snapshot = ""
-    if body.target_type in {"post", "comment", "message"}:
-        collection = {"post": db.posts, "comment": db.post_comments, "message": db.messages}[body.target_type]
-        document = await collection.find_one({"id": body.target_id}, {"_id": 0, "content": 1, "author_id": 1})
+    community_id = None
+    if body.target_type == "direct_message":
+        # Only the recipient may report a DM: reporting is the one way a
+        # private message reaches a moderator, and it is theirs to hand over.
+        document = await db.direct_messages.find_one(
+            {"id": body.target_id, "recipient_id": user["id"], "status": {"$ne": "deleted"}}, {"_id": 0})
+        if not document:
+            raise HTTPException(404, "Reported content not found")
+        snapshot = (document.get("content") or "")[:1000]
+        reported_user = document.get("sender_id")
+    elif body.target_type in {"post", "comment", "message"}:
+        document = await _visible_target(body.target_type, body.target_id, user)
         if not document:
             raise HTTPException(404, "Reported content not found")
         snapshot = (document.get("content") or "")[:1000]
         reported_user = document.get("author_id")
+        community_id = document.get("community_id")
+    elif body.target_type == "user":
+        if not await db.users.find_one({"id": body.target_id}, {"_id": 1}):
+            raise HTTPException(404, "Reported account not found")
+        reported_user = body.target_id
     else:
-        reported_user = body.target_id if body.target_type == "user" else None
+        community = await db.communities.find_one({"id": body.target_id, "status": "active"}, {"_id": 0})
+        if not community:
+            raise HTTPException(404, "Reported community not found")
+        reported_user = community.get("owner_id")
+        community_id = None  # a report about a community goes to platform staff only
     report = {
         "id": new_id(), "reporter_id": user["id"], "reported_user_id": reported_user,
+        "community_id": community_id,
         "target_type": body.target_type, "target_id": body.target_id,
         "reason": body.reason, "detail": body.detail.strip(), "content_snapshot": snapshot,
         "status": "open", "resolution": None, "reviewed_by": None, "reviewed_at": None,
         "created_at": now(),
     }
     await db.reports.insert_one(report)
-    return clean(report)
+    return _reporter_view(report)
+
+
+def _reporter_view(report: dict) -> dict:
+    """What the reporter gets back: the receipt, not the content or the author."""
+    view = clean(dict(report)) or {}
+    for key in ("content_snapshot", "reported_user_id", "community_id"):
+        view.pop(key, None)
+    return view
+
+
+async def _visible_target(target_type: str, target_id: str, user: dict) -> dict | None:
+    """The reported post, comment or message — if, and only if, `user` can see it."""
+    from routers import community, social  # lazy: both import this module's peers
+
+    if target_type == "post":
+        post = await db.posts.find_one({"id": target_id, "status": {"$ne": "deleted"}}, {"_id": 0})
+        return post if post and await social._can_view_post(post, user["id"]) else None
+    if target_type == "comment":
+        comment = await db.post_comments.find_one({"id": target_id, "status": "active"}, {"_id": 0})
+        if not comment:
+            return None
+        post = await db.posts.find_one({"id": comment["post_id"], "status": {"$ne": "deleted"}}, {"_id": 0})
+        if not post or not await social._can_view_post(post, user["id"]):
+            return None
+        return {**comment, "community_id": post.get("community_id")}
+    message = await db.messages.find_one({"id": target_id, "status": "active"}, {"_id": 0})
+    if not message:
+        return None
+    channel = await db.channels.find_one({"id": message["channel_id"], "status": "active"}, {"_id": 0})
+    if not channel:
+        return None
+    try:
+        await community._require(channel["community_id"], user["id"], community.permissions.VIEW_CHANNEL, channel)
+    except HTTPException:
+        return None
+    return message
 
 
 # --------------------------------------------------------------------------- #
@@ -242,14 +302,9 @@ async def review_report(report_id: str, body: ReportReviewIn, user: dict = Depen
     if report["status"] != "open":
         raise HTTPException(409, "Report already resolved")
     if body.resolution == "content_removed":
-        if report["target_type"] == "post":
-            await db.posts.update_one({"id": report["target_id"]}, {"$set": {"status": "deleted", "deleted_at": now(), "removed_by": user["id"]}})
-        elif report["target_type"] == "comment":
-            await db.post_comments.update_one({"id": report["target_id"]}, {"$set": {"status": "removed", "removed_by": user["id"]}})
-        elif report["target_type"] == "message":
-            await db.messages.update_one({"id": report["target_id"]}, {"$set": {"status": "removed", "removed_by": user["id"]}})
-        else:
+        if report["target_type"] not in moderation.REMOVABLE:
             raise HTTPException(409, "This target type cannot be removed automatically")
+        await moderation.remove_content(report["target_type"], report["target_id"], actor=user)
     await db.reports.update_one({"id": report_id}, {"$set": {
         "status": "resolved", "resolution": body.resolution, "note": body.note.strip(),
         "reviewed_by": user["id"], "reviewed_at": now(),

@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -24,7 +24,7 @@ import staff
 router = APIRouter()
 
 JoinPolicy = Literal["open", "approval", "paid"]
-MemberStatus = Literal["pending", "active", "rejected", "left", "banned"]
+MemberStatus = Literal["pending", "active", "rejected", "left", "banned", "removed"]
 ChannelKind = Literal["text", "announcement", "program", "challenge", "checkin", "live"]
 
 
@@ -39,10 +39,19 @@ class CoachApplicationReviewIn(BaseModel):
     review_note: str | None = Field(default=None, max_length=500)
 
 
+Category = Literal[
+    "strength", "bodybuilding", "powerlifting", "crossfit", "running", "cycling",
+    "yoga", "mobility", "calisthenics", "weight_loss", "nutrition", "combat", "general",
+]
+
+Rules = list[Annotated[str, Field(min_length=1, max_length=300)]]
+
+
 class CommunityCreateIn(BaseModel):
     name: str = Field(min_length=3, max_length=80)
     slug: str = Field(min_length=3, max_length=48, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     description: str = Field(default="", max_length=1200)
+    category: Category = "general"
     is_public: bool = True
     join_policy: JoinPolicy = "open"
     price_cents: int = Field(default=0, ge=0, le=1_000_000)
@@ -67,14 +76,29 @@ class CommunityCreateIn(BaseModel):
 class CommunityUpdateIn(BaseModel):
     name: str | None = Field(default=None, min_length=3, max_length=80)
     description: str | None = Field(default=None, max_length=1200)
+    category: Category | None = None
     is_public: bool | None = None
     join_policy: JoinPolicy | None = None
     price_cents: int | None = Field(default=None, ge=0, le=1_000_000)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    #: House rules, shown on the about page and accepted on first entry.
+    rules: Rules | None = Field(default=None, max_length=15)
+    #: Shown once to each new member when they first open the community.
+    welcome_message: str | None = Field(default=None, max_length=1000)
+    #: Uploaded through /media first; only the uploader's own images count.
+    cover_media_id: str | None = None
+    avatar_media_id: str | None = None
 
 
 class MembershipReviewIn(BaseModel):
-    status: Literal["active", "rejected", "banned"]
+    #: `removed` is a kick: out, but free to rejoin. Setting it on a banned
+    #: member is how a ban is lifted.
+    status: Literal["active", "rejected", "banned", "removed"]
+
+
+class TimeoutIn(BaseModel):
+    #: 0 lifts a timeout. Four weeks is Discord's ceiling too.
+    minutes: int = Field(ge=0, le=28 * 24 * 60)
 
 
 class RoleIn(BaseModel):
@@ -123,6 +147,10 @@ class ChannelIn(BaseModel):
     description: str = Field(default="", max_length=300)
     kind: ChannelKind = "text"
     challenge: ChallengeIn | None = None
+    #: Sidebar group heading, e.g. "Training" or "Nutrition". Free text.
+    category: str | None = Field(default=None, max_length=32)
+    #: Seconds a member must wait between messages; 0 is off. Six hours max, as Discord.
+    slowmode_sec: int = Field(default=0, ge=0, le=21600)
 
     @model_validator(mode="after")
     def challenge_matches_kind(self):
@@ -148,6 +176,9 @@ class ChannelRankingIn(BaseModel):
 class ChannelUpdateIn(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=50)
     description: str | None = Field(default=None, max_length=300)
+    #: An empty string clears the category.
+    category: str | None = Field(default=None, max_length=32)
+    slowmode_sec: int | None = Field(default=None, ge=0, le=21600)
 
     @field_validator("name")
     @classmethod
@@ -163,23 +194,40 @@ class ChannelUpdateIn(BaseModel):
 
 
 class MessageIn(BaseModel):
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(default="", max_length=4000)
     reply_to_id: str | None = None
+    #: Uploaded through /media first. Needs ATTACH_MEDIA.
+    media_ids: list[str] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def says_something(self):
+        if not self.content.strip() and not self.media_ids:
+            raise ValueError("A message needs text or an attachment")
+        return self
 
 
 class MessageEditIn(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class ChannelOrderIn(BaseModel):
+    channel_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+#: Discord allows 20 distinct reactions per message; so do we.
+MAX_DISTINCT_REACTIONS = 20
+
+
 class ReactionIn(BaseModel):
     emoji: str = Field(min_length=1, max_length=8)
 
-
-class PostIn(BaseModel):
-    content: str = Field(min_length=1, max_length=4000)
-    community_id: str | None = None
-    workout_id: str | None = None
-    media_urls: list[str] = Field(default_factory=list, max_length=8)
+    @field_validator("emoji")
+    @classmethod
+    def looks_like_emoji(cls, value: str) -> str:
+        # Reactions are pictographs, not a second chat: no letters, digits or spaces.
+        if any(char.isalnum() or char.isspace() for char in value):
+            raise ValueError("A reaction must be an emoji")
+        return value
 
 
 async def _community_or_404(community_id: str) -> dict:
@@ -231,6 +279,10 @@ async def _require(
     mask, member = await _mask(community_id, user_id, channel)
     if not permissions.has(mask, permission):
         raise HTTPException(403, "Insufficient community permissions")
+    until = member.get("timeout_until")
+    if until and permission & permissions.PARTICIPATE and until > now():
+        # A timeout silences, it does not expel: reading stays allowed.
+        raise HTTPException(403, f"You are timed out until {until.isoformat()}")
     return member
 
 
@@ -382,20 +434,47 @@ async def list_coaches():
 async def list_communities(
     scope: Literal["discover", "mine"] = "discover",
     user: dict | None = Depends(optional_user),
+    category: Category | None = None,
+    offset: Annotated[int, Query(ge=0, le=10_000)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ):
-    if scope == "mine":
-        if not user:
-            raise HTTPException(401, "Not authenticated")
-        memberships = [
-            member
-            async for member in db.community_members.find(
-                {"user_id": user["id"], "status": {"$in": ["active", "pending"]}},
-                {"_id": 0, "community_id": 1},
-            )
+    if scope == "discover":
+        # Ranked by size in the database. Sorting in Python after taking the
+        # 100 newest meant a large older community simply fell off the list.
+        match: dict = {"is_public": True, "status": {"$ne": "archived"}}
+        if category:
+            match["category"] = category
+        pipeline = [
+            {"$match": match},
+            {"$lookup": {
+                "from": "community_members", "let": {"cid": "$id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$and": [
+                        {"$eq": ["$community_id", "$$cid"]}, {"$eq": ["$status", "active"]}]}}},
+                    {"$count": "n"},
+                ],
+                "as": "_mc",
+            }},
+            {"$addFields": {"_members": {"$ifNull": [{"$arrayElemAt": ["$_mc.n", 0]}, 0]}}},
+            {"$sort": {"_members": -1, "created_at": -1}},
+            {"$skip": offset},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "_mc": 0, "_members": 0}},
         ]
-        query = {"id": {"$in": [member["community_id"] for member in memberships]}}
-    else:
-        query = {"is_public": True, "status": {"$ne": "archived"}}
+        rows = [row async for row in db.communities.aggregate(pipeline)]
+        return [await _community_view(row, user["id"] if user else None) for row in rows]
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    memberships = [
+        member
+        async for member in db.community_members.find(
+            {"user_id": user["id"], "status": {"$in": ["active", "pending"]}},
+            {"_id": 0, "community_id": 1},
+        )
+    ]
+    # An archived community is closed for everyone, members included.
+    query = {"id": {"$in": [member["community_id"] for member in memberships]},
+             "status": {"$ne": "archived"}}
     communities = [
         community async for community in db.communities.find(query, {"_id": 0}).sort("created_at", -1).limit(100)
     ]
@@ -414,6 +493,9 @@ async def create_community(body: CommunityCreateIn, user: dict = Depends(current
         "owner_id": user["id"],
         **body.model_dump(),
         "cover_url": None,
+        "avatar_url": None,
+        "rules": [],
+        "welcome_message": "",
         "status": "active",
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -482,6 +564,14 @@ async def update_community(
         raise HTTPException(409, "Paid membership policy changes require a billing migration")
     if "currency" in updates:
         updates["currency"] = updates["currency"].upper()
+    for field, target in (("cover_media_id", "cover_url"), ("avatar_media_id", "avatar_url")):
+        media_id = updates.pop(field, None)
+        if media_id:
+            media = await db.media.find_one(
+                {"id": media_id, "user_id": user["id"], "kind": "image"}, {"_id": 0, "url": 1})
+            if not media:
+                raise HTTPException(422, "Unknown image")
+            updates[target] = media["url"]
     updates["updated_at"] = now()
     await db.communities.update_one({"id": community_id}, {"$set": updates})
     updated = await db.communities.find_one({"id": community_id}, {"_id": 0})
@@ -497,7 +587,7 @@ async def _activate(
 ) -> tuple[dict, bool]:
     """The single door into a community. Returns (membership, changed).
 
-    Every way in â€” joining directly, redeeming an invite â€” goes through here,
+    Every way in — joining directly, redeeming an invite — goes through here,
     so the two rules that matter cannot be routed around:
     - a banned member stays banned, whatever link they arrive with;
     - a paid community needs verified billing, whatever link they arrive with.
@@ -535,6 +625,12 @@ async def _activate(
 @router.post("/communities/{community_id}/join")
 async def join_community(community_id: str, user: dict = Depends(current_user)):
     community = await _community_or_404(community_id)
+    if not community.get("is_public", True):
+        # A private community is reached by invite only; invite redemption
+        # calls _activate directly, so it is unaffected by this door closing.
+        existing = await _membership(community_id, user["id"])
+        if (existing or {}).get("status") != "active":
+            raise HTTPException(403, "This community is invite-only")
     membership, _ = await _activate(community, user)
     return membership
 
@@ -559,17 +655,21 @@ async def review_membership(
     body: MembershipReviewIn,
     user: dict = Depends(current_user),
 ):
-    # Reviewing a join request is channel management; removing someone already
-    # inside is a separate power, which is what KICK_MEMBER exists to express.
-    if body.status == "banned":
-        await _require(community_id, user["id"], permissions.KICK_MEMBER)
-    else:
-        await _manager(community_id, user["id"])
-    member = await db.community_members.find_one({"id": member_id, "community_id": community_id})
+    member = await db.community_members.find_one({"id": member_id, "community_id": community_id}, {"_id": 0})
     if not member:
         raise HTTPException(404, "Membership not found")
     if member.get("role") == "owner":
         raise HTTPException(409, "Owner membership cannot be changed")
+    # Reviewing a join request is channel management. Anything done to someone
+    # already inside — or already banned — is a separate power, KICK_MEMBER,
+    # and only over members ranked below you. Otherwise "reject" an active
+    # member would be a kick without the kick permission.
+    reviewing_request = member.get("status") == "pending" and body.status in {"active", "rejected"}
+    if reviewing_request:
+        await _manager(community_id, user["id"])
+    else:
+        await _require(community_id, user["id"], permissions.KICK_MEMBER)
+        await _check_outranks(community_id, user["id"], member)
     community = await _community_or_404(community_id)
     if body.status == "active" and community.get("join_policy") == "paid":
         raise HTTPException(402, "Only verified billing can activate paid memberships")
@@ -577,6 +677,13 @@ async def review_membership(
     if body.status == "active":
         updates["joined_at"] = now()
     await db.community_members.update_one({"id": member_id}, {"$set": updates})
+    if not reviewing_request:
+        await staff.audit(
+            user, f"community.member_{body.status}", target_type="community_member",
+            target_id=member_id, reason=None,
+            metadata={"community_id": community_id, "user_id": member["user_id"],
+                      "from": member.get("status")},
+        )
     if body.status in {"active", "rejected"}:
         approved = body.status == "active"
         await notifications.notify(
@@ -588,9 +695,40 @@ async def review_membership(
     return clean(await db.community_members.find_one({"id": member_id}, {"_id": 0}))
 
 
+@router.post("/communities/{community_id}/members/{member_id}/timeout")
+async def timeout_member(
+    community_id: str, member_id: str, body: TimeoutIn, user: dict = Depends(current_user),
+):
+    """Silence a member for a while — the step between a warning and a kick."""
+    await _require(community_id, user["id"], permissions.KICK_MEMBER)
+    member = await db.community_members.find_one(
+        {"id": member_id, "community_id": community_id, "status": "active"}, {"_id": 0})
+    if not member:
+        raise HTTPException(404, "Membership not found")
+    if member["user_id"] == user["id"]:
+        raise HTTPException(409, "You cannot time yourself out")
+    await _check_outranks(community_id, user["id"], member)
+    until = now() + timedelta(minutes=body.minutes) if body.minutes else None
+    await db.community_members.update_one({"id": member_id}, {"$set": {"timeout_until": until}})
+    await staff.audit(
+        user, "community.member_timeout", target_type="community_member", target_id=member_id,
+        reason=None, metadata={"community_id": community_id, "user_id": member["user_id"],
+                               "minutes": body.minutes},
+    )
+    community = await _community_or_404(community_id)
+    if until:
+        await notifications.create(
+            member["user_id"], notifications.MEMBERSHIP,
+            f"You were timed out in {community['name']}",
+            f"You can read but not post until {until.isoformat()}.",
+            metadata={"target_type": "community", "target_id": community_id},
+        )
+    return clean({**member, "timeout_until": until})
+
+
 @router.delete("/communities/{community_id}", status_code=204)
 async def archive_community(community_id: str, user: dict = Depends(current_user)):
-    """Archive a community. Owner only â€” closing someone's community is not a
+    """Archive a community. Owner only — closing someone's community is not a
     power a moderator should hold, however much else they can manage.
 
     `_community_or_404` already refuses anything not `active`, so every read
@@ -606,6 +744,226 @@ async def archive_community(community_id: str, user: dict = Depends(current_user
         user, "community.archived", target_type="community", target_id=community_id,
         reason=None, metadata={"name": community.get("name")},
     )
+
+
+@router.get("/communities-archived")
+async def list_archived_communities(user: dict = Depends(current_user)):
+    """The caller's own archived communities — the only place they still show,
+    so an owner can find one again to restore it."""
+    return [
+        clean(row) async for row in db.communities.find(
+            {"owner_id": user["id"], "status": "archived"}, {"_id": 0}
+        ).sort("archived_at", -1).limit(100)
+    ]
+
+
+@router.post("/communities/{community_id}/restore")
+async def restore_community(community_id: str, user: dict = Depends(current_user)):
+    community = await db.communities.find_one({"id": community_id, "status": "archived"}, {"_id": 0})
+    if not community:
+        raise HTTPException(404, "Archived community not found")
+    if community["owner_id"] != user["id"]:
+        raise HTTPException(403, "Only the owner can restore a community")
+    await db.communities.update_one(
+        {"id": community_id}, {"$set": {"status": "active", "archived_at": None, "updated_at": now()}})
+    await staff.audit(
+        user, "community.restored", target_type="community", target_id=community_id,
+        reason=None, metadata={"name": community.get("name")},
+    )
+    return await _community_view({**community, "status": "active"}, user["id"])
+
+
+class TransferIn(BaseModel):
+    member_id: str
+
+
+@router.post("/communities/{community_id}/transfer")
+async def transfer_ownership(community_id: str, body: TransferIn, user: dict = Depends(current_user)):
+    """Hand the community to another active member. Owner only, audited.
+
+    The previous owner stays on as a moderator rather than dropping to a plain
+    member: a handover should not strand the person who built the place.
+    """
+    community = await _community_or_404(community_id)
+    if community["owner_id"] != user["id"]:
+        raise HTTPException(403, "Only the owner can transfer the community")
+    target = await db.community_members.find_one(
+        {"id": body.member_id, "community_id": community_id, "status": "active"}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Active member not found")
+    if target["user_id"] == user["id"]:
+        raise HTTPException(409, "You already own this community")
+    new_owner = await db.users.find_one({"id": target["user_id"]}, {"_id": 0})
+    if not new_owner or not _coach_is_approved(new_owner):
+        # Creating a community needs approved coach status; so does owning one.
+        raise HTTPException(409, "The new owner must be an approved coach")
+    timestamp = now()
+    await db.communities.update_one(
+        {"id": community_id}, {"$set": {"owner_id": target["user_id"], "updated_at": timestamp}})
+    await db.community_members.update_one(
+        {"community_id": community_id, "user_id": user["id"]},
+        {"$set": {"role": "moderator", "entitlement_source": "free", "updated_at": timestamp}})
+    await db.community_members.update_one(
+        {"id": target["id"]},
+        {"$set": {"role": "owner", "entitlement_source": "ownership", "timeout_until": None,
+                  "updated_at": timestamp}})
+    await db.community_members.update_many(
+        {"community_id": community_id}, {"$set": {"owner_id": target["user_id"]}})
+    await staff.audit(
+        user, "community.ownership_transferred", target_type="community", target_id=community_id,
+        reason=None, metadata={"from": user["id"], "to": target["user_id"]},
+    )
+    await notifications.notify(
+        target["user_id"], notifications.MEMBERSHIP, actor=user,
+        title=f"You now own {community['name']}",
+        target_type="community", target_id=community_id,
+    )
+    updated = await db.communities.find_one({"id": community_id}, {"_id": 0})
+    return await _community_view(updated, user["id"])
+
+
+@router.post("/communities/{community_id}/onboarding", status_code=204)
+async def complete_onboarding(community_id: str, user: dict = Depends(current_user)):
+    """The member has seen the welcome message and accepted the rules."""
+    member = await _active_member(community_id, user["id"])
+    await db.community_members.update_one(
+        {"id": member["id"], "onboarded_at": None}, {"$set": {"onboarded_at": now()}})
+    await db.community_members.update_one(
+        {"id": member["id"], "onboarded_at": {"$exists": False}}, {"$set": {"onboarded_at": now()}})
+
+
+@router.get("/communities/{community_id}/audit-log")
+async def community_audit_log(
+    community_id: str,
+    user: dict = Depends(current_user),
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+):
+    """The community's own moderation trail, for its managers.
+
+    Platform staff read the whole log through the admin console; this is the
+    slice about one community — the actions taken inside it — so an owner can
+    see who kicked whom without being platform staff.
+    """
+    await _manager(community_id, user["id"])
+    channel_ids = [row["id"] async for row in db.channels.find({"community_id": community_id}, {"_id": 0, "id": 1})]
+    query = {"$or": [
+        {"target_id": community_id},
+        {"metadata.community_id": community_id},
+        {"target_id": {"$in": channel_ids}},
+    ], "action": {"$regex": "^community\\."}}
+    # Staff emails and platform roles are the platform's business, not the owner's.
+    projection = {"_id": 0, "actor_email": 0, "actor_staff_role": 0}
+    rows = [clean(row) async for row in db.audit_log.find(query, projection).sort("created_at", -1).limit(limit)]
+    people = await _people(list({row.get("actor_id") for row in rows if row.get("actor_id")}))
+    for row in rows:
+        row["actor"] = people.get(row.get("actor_id"))
+    return rows
+
+
+class CommunityReportReviewIn(BaseModel):
+    resolution: Literal["dismissed", "content_removed"]
+    note: str = Field(default="", max_length=1000)
+
+
+@router.get("/communities/{community_id}/reports")
+async def community_reports(
+    community_id: str,
+    user: dict = Depends(current_user),
+    status: Literal["open", "resolved"] = "open",
+):
+    """Reports about content inside this community, for its moderators.
+
+    Platform staff still see every report in the admin console; this lets a
+    community keep its own house clean without waiting for them.
+    """
+    await _require(community_id, user["id"], permissions.MANAGE_MESSAGES)
+    rows = [
+        clean(row) async for row in db.reports.find(
+            {"community_id": community_id, "status": status},
+            {"_id": 0, "reporter_id": 0},  # reporters stay anonymous to the community
+        ).sort("created_at", 1).limit(100)
+    ]
+    people = await _people(list({row["reported_user_id"] for row in rows if row.get("reported_user_id")}))
+    for row in rows:
+        row["reported_user"] = people.get(row.get("reported_user_id"))
+    return rows
+
+
+@router.patch("/communities/{community_id}/reports/{report_id}")
+async def review_community_report(
+    community_id: str, report_id: str, body: CommunityReportReviewIn, user: dict = Depends(current_user),
+):
+    await _require(community_id, user["id"], permissions.MANAGE_MESSAGES)
+    report = await db.reports.find_one({"id": report_id, "community_id": community_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(404, "Report not found")
+    if report["status"] != "open":
+        raise HTTPException(409, "Report already resolved")
+    if report.get("reported_user_id") == user["id"]:
+        # Nobody judges a report about themselves; platform staff will.
+        raise HTTPException(409, "A report about you is reviewed by platform staff")
+    if body.resolution == "content_removed":
+        await moderation.remove_content(report["target_type"], report["target_id"], actor=user)
+    await db.reports.update_one({"id": report_id}, {"$set": {
+        "status": "resolved", "resolution": body.resolution, "note": body.note.strip(),
+        "reviewed_by": user["id"], "reviewed_at": now(), "reviewed_in": "community",
+    }})
+    await staff.audit(
+        user, f"community.report_{body.resolution}", target_type=report["target_type"],
+        target_id=report["target_id"], reason=body.note.strip() or None,
+        metadata={"community_id": community_id, "report_id": report_id},
+    )
+    return clean(await db.reports.find_one({"id": report_id}, {"_id": 0, "reporter_id": 0}))
+
+
+@router.get("/communities/{community_id}/insights")
+async def community_insights(community_id: str, user: dict = Depends(current_user)):
+    """Growth and engagement for the people running the community.
+
+    Counts only — who joined and how much was said — never anyone's training
+    or health data. Windows are the last 7 and 30 days.
+    """
+    await _manager(community_id, user["id"])
+    current = now()
+    week, month = current - timedelta(days=7), current - timedelta(days=30)
+    members = db.community_members
+    messages = db.messages
+
+    async def count(collection, query):
+        return await collection.count_documents(query)
+
+    active_authors = await messages.distinct(
+        "author_id", {"community_id": community_id, "status": "active", "created_at": {"$gte": week}})
+    total_members = await count(members, {"community_id": community_id, "status": "active"})
+    daily = []
+    async for row in messages.aggregate([
+        {"$match": {"community_id": community_id, "status": "active", "created_at": {"$gte": month}}},
+        {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}}, "n": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]):
+        daily.append({"day": row["_id"], "messages": row["n"]})
+    top_channels = []
+    async for row in messages.aggregate([
+        {"$match": {"community_id": community_id, "status": "active", "created_at": {"$gte": month}}},
+        {"$group": {"_id": "$channel_id", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}}, {"$limit": 5},
+    ]):
+        channel = await db.channels.find_one({"id": row["_id"]}, {"_id": 0, "id": 1, "name": 1})
+        if channel:
+            top_channels.append({**channel, "messages": row["n"]})
+    return {
+        "members": total_members,
+        "joined_7d": await count(members, {"community_id": community_id, "status": "active", "joined_at": {"$gte": week}}),
+        "joined_30d": await count(members, {"community_id": community_id, "status": "active", "joined_at": {"$gte": month}}),
+        "left_30d": await count(members, {"community_id": community_id, "status": {"$in": ["left", "removed"]}, "updated_at": {"$gte": month}}),
+        "pending": await count(members, {"community_id": community_id, "status": "pending"}),
+        "messages_7d": await count(messages, {"community_id": community_id, "status": "active", "created_at": {"$gte": week}}),
+        "messages_30d": await count(messages, {"community_id": community_id, "status": "active", "created_at": {"$gte": month}}),
+        "active_members_7d": len(active_authors),
+        "engagement_rate_7d": round(len(active_authors) / total_members, 3) if total_members else 0,
+        "daily_messages": daily,
+        "top_channels": top_channels,
+    }
 
 
 @router.delete("/communities/{community_id}/membership", status_code=204)
@@ -659,6 +1017,35 @@ async def _rank_ceiling(community_id: str, user_id: str) -> int:
     return permissions.highest_rank(member, community, await _roles(community_id))
 
 
+async def _grant_limit(community_id: str, user_id: str) -> tuple[int, int]:
+    """(permission mask, rank ceiling) — the most this member can hand out.
+
+    Rank alone is not enough: a role manager could otherwise mint a role below
+    their rank carrying every bit, assign it to themselves, and end up holding
+    powers nobody gave them. You can only grant what you hold.
+    """
+    mask, _ = await _mask(community_id, user_id)
+    return mask, await _rank_ceiling(community_id, user_id)
+
+
+def _check_grantable(bits: int, mask: int) -> None:
+    if bits & ~mask:
+        raise HTTPException(403, "Cannot grant permissions you do not hold")
+
+
+async def _target_rank(community_id: str, target: dict) -> int:
+    community = await _community_or_404(community_id)
+    return permissions.highest_rank(target, community, await _roles(community_id))
+
+
+async def _check_outranks(community_id: str, user_id: str, target: dict) -> None:
+    """Only act on someone strictly below you — the Discord role hierarchy."""
+    if target.get("user_id") == user_id:
+        return
+    if await _target_rank(community_id, target) >= await _rank_ceiling(community_id, user_id):
+        raise HTTPException(403, "Cannot act on a member at or above your own rank")
+
+
 @router.get("/communities/{community_id}/roles")
 async def list_roles(community_id: str, user: dict = Depends(current_user)):
     await _community_or_404(community_id)
@@ -669,8 +1056,10 @@ async def list_roles(community_id: str, user: dict = Depends(current_user)):
 @router.post("/communities/{community_id}/roles", status_code=201)
 async def create_role(community_id: str, body: RoleIn, user: dict = Depends(current_user)):
     await _require(community_id, user["id"], permissions.MANAGE_ROLES)
-    if body.rank >= await _rank_ceiling(community_id, user["id"]):
+    mask, ceiling = await _grant_limit(community_id, user["id"])
+    if body.rank >= ceiling:
         raise HTTPException(403, "Cannot create a role at or above your own rank")
+    _check_grantable(body.permissions, mask)
     await _ensure_default_role(community_id)
     role = {
         "id": new_id(),
@@ -688,7 +1077,7 @@ async def update_role(role_id: str, body: RoleUpdateIn, user: dict = Depends(cur
     role = await _role_or_404(role_id)
     community_id = role["community_id"]
     await _require(community_id, user["id"], permissions.MANAGE_ROLES)
-    ceiling = await _rank_ceiling(community_id, user["id"])
+    mask, ceiling = await _grant_limit(community_id, user["id"])
     if role.get("rank", 0) >= ceiling:
         raise HTTPException(403, "Cannot edit a role at or above your own rank")
     updates = {key: value for key, value in body.model_dump().items() if value is not None}
@@ -696,6 +1085,10 @@ async def update_role(role_id: str, body: RoleUpdateIn, user: dict = Depends(cur
         raise HTTPException(409, "The default role rank is fixed")
     if int(updates.get("rank", 0)) >= ceiling:
         raise HTTPException(403, "Cannot raise a role to or above your own rank")
+    if "permissions" in updates:
+        # Only the bits being added need to be held; a manager may still strip
+        # a bit they lack from a junior role.
+        _check_grantable(updates["permissions"] & ~int(role.get("permissions", 0)), mask)
     if updates:
         await db.community_roles.update_one({"id": role_id}, {"$set": updates})
     return clean({**role, **updates})
@@ -732,6 +1125,8 @@ async def assign_member_roles(
     )
     if not target:
         raise HTTPException(404, "Member not found")
+    # Re-roling someone who outranks you is a demotion you have no standing for.
+    await _check_outranks(community_id, user["id"], target)
     ceiling = await _rank_ceiling(community_id, user["id"])
     roles = {role["id"]: role for role in await _roles(community_id)}
     for role_id in body.role_ids:
@@ -761,13 +1156,26 @@ async def set_channel_overwrites(
     if not channel:
         raise HTTPException(404, "Channel not found")
     community_id = channel["community_id"]
-    await _require(community_id, user["id"], permissions.MANAGE_CHANNEL, channel)
-    known = {role["id"] for role in await _roles(community_id)}
+    # Overwrites are permissions, so they need MANAGE_ROLES as in Discord, and
+    # the same two limits as roles: only for roles below you, only bits you hold.
+    await _require(community_id, user["id"], permissions.MANAGE_CHANNEL | permissions.MANAGE_ROLES, channel)
+    mask, ceiling = await _grant_limit(community_id, user["id"])
+    roles = {role["id"]: role for role in await _roles(community_id)}
+    previous = {row.get("role_id"): row for row in channel.get("overwrites") or []}
     overwrites = []
     for entry in body:
-        if entry.role_id not in known:
+        role = roles.get(entry.role_id)
+        if not role:
             raise HTTPException(404, "Role not found")
+        before = previous.get(entry.role_id) or {}
+        if (int(before.get("allow", 0)), int(before.get("deny", 0))) != (entry.allow, entry.deny):
+            if role.get("rank", 0) >= ceiling:
+                raise HTTPException(403, "Cannot change overwrites for a role at or above your own rank")
+            _check_grantable(entry.allow | entry.deny, mask)
         overwrites.append(entry.model_dump())
+    for role_id in set(previous) - {entry.role_id for entry in body}:
+        if roles.get(role_id, {}).get("rank", 0) >= ceiling:
+            raise HTTPException(403, "Cannot remove overwrites for a role at or above your own rank")
     await db.channels.update_one({"id": channel_id}, {"$set": {"overwrites": overwrites}})
     return clean({**channel, "overwrites": overwrites})
 
@@ -785,8 +1193,26 @@ async def list_channels(community_id: str, user: dict = Depends(current_user)):
         if not permissions.has(mask, permissions.VIEW_CHANNEL):
             continue  # a denied channel should not even reveal that it exists
         visible.append(clean({**channel, "permissions": mask}))
+    # A manager's explicit order wins; channels never placed keep creation
+    # order behind them (stable sort), default channel first.
+    visible.sort(key=lambda row: row["position"] if row.get("position") is not None else 1_000_000)
     await _attach_unread(visible, member, user["id"])
     return visible
+
+
+@router.put("/communities/{community_id}/channel-order")
+async def reorder_channels(community_id: str, body: ChannelOrderIn, user: dict = Depends(current_user)):
+    """Set the sidebar order. Ids not listed keep their place after these."""
+    await _manager(community_id, user["id"])
+    known = {
+        row["id"] async for row in db.channels.find(
+            {"community_id": community_id, "status": "active"}, {"_id": 0, "id": 1})
+    }
+    if set(body.channel_ids) - known:
+        raise HTTPException(404, "Channel not found")
+    for position, channel_id in enumerate(dict.fromkeys(body.channel_ids)):
+        await db.channels.update_one({"id": channel_id}, {"$set": {"position": position}})
+    return {"channel_ids": list(dict.fromkeys(body.channel_ids))}
 
 
 #: Badges read "99+" beyond this; counting further would cost a scan for no gain.
@@ -825,10 +1251,12 @@ async def create_channel(
     user: dict = Depends(current_user),
 ):
     await _manager(community_id, user["id"])
+    fields = body.model_dump()
+    fields["category"] = (fields.get("category") or "").strip() or None
     channel = {
         "id": new_id(),
         "community_id": community_id,
-        **body.model_dump(),
+        **fields,
         "created_by": user["id"],
         "is_default": False,
         "status": "active",
@@ -861,6 +1289,8 @@ async def update_channel(channel_id: str, body: ChannelUpdateIn, user: dict = De
         raise HTTPException(404, "Channel not found")
     await _require(channel["community_id"], user["id"], permissions.MANAGE_CHANNEL, channel)
     updates = {key: value for key, value in body.model_dump().items() if value is not None}
+    if "category" in updates:
+        updates["category"] = updates["category"].strip() or None
     if not updates:
         return clean(channel)
     try:
@@ -872,7 +1302,7 @@ async def update_channel(channel_id: str, body: ChannelUpdateIn, user: dict = De
 
 @router.delete("/channels/{channel_id}", status_code=204)
 async def archive_channel(channel_id: str, user: dict = Depends(current_user)):
-    """Archive a channel. Messages are kept â€” this hides the room, not its history."""
+    """Archive a channel. Messages are kept — this hides the room, not its history."""
     channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
     if not channel:
         raise HTTPException(404, "Channel not found")
@@ -922,27 +1352,83 @@ async def list_messages(
     messages = [
         message async for message in db.messages.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
     ]
-    for message in messages:
-        author = await db.users.find_one(
-            {"id": message["author_id"]}, {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
+    return await _decorate_messages(list(reversed(messages)), channel["community_id"])
+
+
+async def _decorate_messages(messages: list[dict], community_id: str) -> list[dict]:
+    """Authors, reply quotes, mentions and role badges for a page of messages.
+
+    Batched: a constant number of queries per page, however long the page, where
+    it used to be three or four per message.
+    """
+    parent_ids = list({m["reply_to_id"] for m in messages if m.get("reply_to_id")})
+    parents = {
+        row["id"]: row async for row in db.messages.find(
+            {"id": {"$in": parent_ids}},
+            {"_id": 0, "id": 1, "author_id": 1, "content": 1, "status": 1},
         )
-        message["author"] = clean(author)
+    } if parent_ids else {}
+    mentioned = {uid for m in messages for uid in notifications.parse_mentions(m.get("content", ""))}
+    people_ids = {m["author_id"] for m in messages} | {p["author_id"] for p in parents.values()} | mentioned
+    people = await _people(list(people_ids))
+    badges = await _role_badges(community_id, [m["author_id"] for m in messages])
+    for message in messages:
+        message["author"] = people.get(message["author_id"])
+        message["author_role"] = badges.get(message["author_id"])
         # Messages written before interactions shipped carry none of these keys.
         message.setdefault("reactions", [])
         message.setdefault("reply_to_id", None)
         message.setdefault("pinned_at", None)
         message.setdefault("edited_at", None)
-        message["mentions"] = await notifications.resolve_mentions(message.get("content", ""))
-        if message["reply_to_id"]:
-            parent = await db.messages.find_one(
-                {"id": message["reply_to_id"]},
-                {"_id": 0, "id": 1, "author_id": 1, "content": 1, "status": 1},
-            )
-            if parent and parent.get("status") == "active":
-                message["reply_to"] = clean(parent)
-            else:
-                message["reply_to"] = None
-    return [clean(message) for message in reversed(messages)]
+        message.setdefault("media", [])
+        message["mentions"] = [
+            people[uid] for uid in notifications.parse_mentions(message.get("content", "")) if uid in people
+        ]
+        parent = parents.get(message["reply_to_id"]) if message["reply_to_id"] else None
+        if parent and parent.get("status") == "active":
+            message["reply_to"] = clean({**parent, "author": people.get(parent["author_id"])})
+        else:
+            message["reply_to"] = None
+    return [clean(message) for message in messages]
+
+
+async def _role_badges(community_id: str, user_ids: list[str]) -> dict[str, dict]:
+    """Each author's most senior visible role — the coloured name tag.
+
+    The owner shows as "owner"; the default role is never a badge because
+    everyone has it.
+    """
+    community = await db.communities.find_one({"id": community_id}, {"_id": 0, "owner_id": 1}) or {}
+    roles = {role["id"]: role for role in await _roles(community_id) if not role.get("is_default")}
+    badges: dict[str, dict] = {}
+    async for member in db.community_members.find(
+        {"community_id": community_id, "user_id": {"$in": list(set(user_ids))}},
+        {"_id": 0, "user_id": 1, "role": 1, "role_ids": 1},
+    ):
+        if member["user_id"] == community.get("owner_id") or member.get("role") == "owner":
+            badges[member["user_id"]] = {"name": "owner", "color": "#F5C542"}
+            continue
+        held = [roles[rid] for rid in member.get("role_ids") or [] if rid in roles]
+        if held:
+            top = max(held, key=lambda role: role.get("rank", 0))
+            badges[member["user_id"]] = {"name": top["name"], "color": top.get("color")}
+        elif member.get("role") == "moderator":
+            badges[member["user_id"]] = {"name": "moderator", "color": "#5DA9E1"}
+    return badges
+
+
+def _send_permission(channel: dict) -> int:
+    """What writing in this channel takes.
+
+    An announcement channel is broadcast-only: everyone reads, only members who
+    can manage messages may post. Expressed as a permission rather than an
+    @everyone deny, so legacy moderators — who have no role document to grant
+    an exception to — keep working without a migration. SEND_MESSAGE rides
+    along so a timeout silences announcers too.
+    """
+    if channel.get("kind") == "announcement":
+        return permissions.MANAGE_MESSAGES | permissions.SEND_MESSAGE
+    return permissions.SEND_MESSAGE
 
 
 @router.post("/channels/{channel_id}/messages", status_code=201)
@@ -955,17 +1441,44 @@ async def create_message(
     channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
     if not channel:
         raise HTTPException(404, "Channel not found")
+    needed = _send_permission(channel)
+    if body.media_ids:
+        needed |= permissions.ATTACH_MEDIA
+    await _require(channel["community_id"], user["id"], needed, channel)
+    return await _insert_message(
+        channel, user, content=body.content, reply_to_id=body.reply_to_id, media_ids=body.media_ids)
+
+
+async def _insert_message(
+    channel: dict,
+    user: dict,
+    *,
+    content: str,
+    reply_to_id: str | None = None,
+    media_ids: list[str] | None = None,
+    extra: dict | None = None,
+) -> dict:
+    """Everything that happens when a message lands, whatever posted it.
+
+    The caller has already checked the permission to post. This enforces the
+    channel's own rules (slow mode, one check-in a day), then writes, publishes,
+    notifies mentions and screens — so a shared program or any future message
+    type gets the same treatment as a typed one.
+    """
+    channel_id = channel["id"]
     community_id = channel["community_id"]
-    # An announcement channel is broadcast-only: everyone reads, only members who
-    # can manage messages may post. Expressed as a permission rather than an
-    # @everyone deny, so legacy moderators â€” who have no role document to grant
-    # an exception to â€” keep working without a migration.
-    needed = (
-        permissions.MANAGE_MESSAGES
-        if channel.get("kind") == "announcement"
-        else permissions.SEND_MESSAGE
-    )
-    await _require(community_id, user["id"], needed, channel)
+    mask, _ = await _mask(community_id, user["id"], channel)
+
+    slowmode = int(channel.get("slowmode_sec") or 0)
+    if slowmode and not permissions.has(mask, permissions.MANAGE_MESSAGES):
+        recent = await db.messages.find_one(
+            {"channel_id": channel_id, "author_id": user["id"], "status": "active",
+             "created_at": {"$gt": now() - timedelta(seconds=slowmode)}},
+            {"_id": 0, "created_at": 1}, sort=[("created_at", -1)],
+        )
+        if recent:
+            wait = slowmode - int((now() - recent["created_at"]).total_seconds())
+            raise HTTPException(429, f"Slow mode is on: wait {max(wait, 1)}s", headers={"Retry-After": str(max(wait, 1))})
 
     checkin_day = challenges.day_key(now()) if channel.get("kind") == "checkin" else None
     if checkin_day and await db.messages.find_one({
@@ -975,17 +1488,24 @@ async def create_message(
         raise HTTPException(409, "You have already checked in today")
 
     reply_to = None
-    if body.reply_to_id:
+    if reply_to_id:
         parent = await db.messages.find_one(
-            {"id": body.reply_to_id, "channel_id": channel_id, "status": "active"},
+            {"id": reply_to_id, "channel_id": channel_id, "status": "active"},
             {"_id": 0, "id": 1, "author_id": 1, "content": 1},
         )
         if not parent:
             raise HTTPException(404, "Message being replied to was not found")
-        reply_to = clean(parent)
+        reply_to = clean({**parent, "author": (await _people([parent["author_id"]])).get(parent["author_id"])})
 
-    content = body.content.strip()
-    mask, _ = await _mask(community_id, user["id"], channel)
+    media = []
+    if media_ids:
+        # Only the uploader's own files — the same ownership rule as posts.
+        media = [row async for row in db.media.find(
+            {"id": {"$in": media_ids}, "user_id": user["id"]}, {"_id": 0, "id": 1, "kind": 1, "url": 1})]
+        if len(media) != len(set(media_ids)):
+            raise HTTPException(422, "Unknown media attachment")
+
+    content = (content or "").strip()
     if notifications.mentions_everyone(content) and not permissions.has(
         mask, permissions.MENTION_EVERYONE
     ):
@@ -999,12 +1519,14 @@ async def create_message(
         "channel_id": channel_id,
         "author_id": user["id"],
         "content": content,
-        "reply_to_id": body.reply_to_id,
+        "reply_to_id": reply_to_id,
+        "media": media,
         "reactions": [],
         "pinned_at": None,
         "edited_at": None,
         "status": "active",
         "created_at": now(),
+        **(extra or {}),
     }
     if checkin_day:
         message["checkin_day"] = checkin_day
@@ -1016,6 +1538,7 @@ async def create_message(
         # concurrent check-ins from both landing.
         raise HTTPException(409, "You have already checked in today") from exc
     message["author"] = {key: user.get(key) for key in ("id", "full_name", "avatar_url")}
+    message["author_role"] = (await _role_badges(community_id, [user["id"]])).get(user["id"])
     message["reply_to"] = reply_to
     message["mentions"] = await notifications.resolve_mentions(content)
     published = clean(message)
@@ -1031,11 +1554,11 @@ async def create_message(
         )
     }
     for mentioned in await notifications.notify_mentions(
-        content, author=user, kind="mention",
+        content, author=user, kind=notifications.MENTION,
         title=f"{user.get('full_name', 'Someone')} mentioned you",
         metadata={"community_id": community_id, "channel_id": channel_id,
                   "message_id": message["id"]},
-        audience=audience,
+        audience=audience, target_type="message", target_id=message["id"],
     ):
         await realtime.publish(
             realtime.user_channel(mentioned),
@@ -1085,10 +1608,16 @@ async def add_reaction(message_id: str, body: ReactionIn, user: dict = Depends(c
         projection={"_id": 0}, return_document=True,
     )
     if not updated:
-        await db.messages.update_one(
-            {"id": message_id, "reactions.emoji": {"$ne": body.emoji}},
+        # A new pill only while the message has room: without a cap, one member
+        # could bury a message under hundreds of distinct "emoji".
+        pushed = await db.messages.update_one(
+            {"id": message_id, "reactions.emoji": {"$ne": body.emoji},
+             f"reactions.{MAX_DISTINCT_REACTIONS - 1}": {"$exists": False}},
             {"$push": {"reactions": {"emoji": body.emoji, "user_ids": [user["id"]]}}},
         )
+        if not pushed.matched_count and not await db.messages.find_one(
+                {"id": message_id, "reactions.emoji": body.emoji}, {"_id": 1}):
+            raise HTTPException(409, "This message has reached its reaction limit")
         updated = await db.messages.find_one({"id": message_id}, {"_id": 0})
     await _publish_change(channel["id"], "message.reactions",
                           {"id": message_id, "reactions": updated.get("reactions", [])})
@@ -1118,11 +1647,23 @@ async def edit_message(message_id: str, body: MessageEditIn, user: dict = Depend
     message, channel = await _message_or_404(message_id)
     if message["author_id"] != user["id"]:
         raise HTTPException(403, "Only the author can edit a message")
-    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    # Editing is posting: the same permission as writing it in the first place,
+    # so a member who lost the right to speak cannot keep rewriting old words.
+    await _require(channel["community_id"], user["id"], _send_permission(channel), channel)
     if (now() - message["created_at"]).total_seconds() > EDIT_WINDOW_SECONDS:
         raise HTTPException(409, "The edit window for this message has closed")
-    updates = {"content": body.content.strip(), "edited_at": now()}
+    content = body.content.strip()
+    mask, _ = await _mask(channel["community_id"], user["id"], channel)
+    if notifications.mentions_everyone(content) and not permissions.has(mask, permissions.MENTION_EVERYONE):
+        content = notifications.strip_everyone(content)
+    updates = {"content": content, "edited_at": now()}
     await db.messages.update_one({"id": message_id}, {"$set": updates})
+    # Screened again: otherwise a message could pass as harmless and be
+    # rewritten into something else afterwards.
+    await moderation.screen(
+        content, author=user, target_type="message", target_id=message_id,
+        metadata={"community_id": channel["community_id"], "channel_id": channel["id"], "edited": True},
+    )
     mentions = await notifications.resolve_mentions(updates["content"])
     await _publish_change(channel["id"], "message.updated",
                           {"id": message_id, "content": updates["content"],
@@ -1177,13 +1718,45 @@ async def list_pins(channel_id: str, user: dict = Depends(current_user)):
     if not channel:
         raise HTTPException(404, "Channel not found")
     await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
-    return [
-        clean(message)
+    pins = [
+        message
         async for message in db.messages.find(
             {"channel_id": channel_id, "status": "active", "pinned_at": {"$ne": None}},
             {"_id": 0},
-        ).sort("pinned_at", -1)
+        ).sort("pinned_at", -1).limit(50)
     ]
+    return await _decorate_messages(pins, channel["community_id"])
+
+
+@router.post("/channels/{channel_id}/typing", status_code=204)
+async def channel_typing(channel_id: str, user: dict = Depends(current_user)):
+    """A "typing…" nudge for everyone watching the channel. Nothing is stored."""
+    channel = await db.channels.find_one({"id": channel_id, "status": "active"}, {"_id": 0})
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+    await _require(channel["community_id"], user["id"], _send_permission(channel), channel)
+    await realtime.publish(realtime.chat_channel(channel_id), {
+        "type": "typing", "user": {"id": user["id"], "full_name": user.get("full_name")}})
+
+
+@router.get("/realtime/subscription-token")
+async def realtime_subscription_token(channel: str = Query(..., max_length=100), user: dict = Depends(current_user)):
+    """A Centrifugo subscription token for one chat channel.
+
+    The same VIEW_CHANNEL check as reading the messages over HTTP, so a hidden
+    channel stays hidden on the socket too. Only `channel:{id}` rooms are
+    subscribable; a member's own `user:{id}` channel comes with the connection.
+    """
+    prefix = realtime.chat_channel("")
+    if not channel.startswith(prefix):
+        raise HTTPException(422, "Only chat channels take a subscription token")
+    row = await db.channels.find_one({"id": channel[len(prefix):], "status": "active"}, {"_id": 0})
+    if not row:
+        raise HTTPException(404, "Channel not found")
+    await _require(row["community_id"], user["id"], permissions.VIEW_CHANNEL, row)
+    if not realtime.is_configured():
+        return {"enabled": False, "token": None}
+    return {"enabled": True, "token": realtime.subscription_token(user["id"], channel)}
 
 
 class ReadIn(BaseModel):
@@ -1317,12 +1890,17 @@ async def preview_invite(code: str, user: dict | None = Depends(optional_user)):
         {"id": invite["community_id"]}, {"_id": 0}) if invite else None
     if not invite or not community or community.get("status", "active") != "active":
         raise HTTPException(404, "Invite not found")
+    reason = _invite_state(invite)
+    if reason and not community.get("is_public", True):
+        # A dead link to a private community must not keep describing it.
+        return {"code": code, "unusable_reason": reason, "skip_approval": False,
+                "membership_status": None, "community": None}
     member_count = await db.community_members.count_documents(
         {"community_id": community["id"], "status": "active"})
     membership = await _membership(community["id"], user["id"]) if user else None
     return {
         "code": code,
-        "unusable_reason": _invite_state(invite),
+        "unusable_reason": reason,
         "skip_approval": invite.get("skip_approval", False),
         "membership_status": (membership or {}).get("status"),
         "community": {
@@ -1384,7 +1962,7 @@ async def _people(ids: list[str]) -> dict[str, dict]:
 async def checkin_board(channel_id: str, user: dict = Depends(current_user)):
     """Your streak, and who is on a live streak in this check-in channel.
 
-    One rest day never breaks a streak; two in a row do â€” see challenges.py for
+    One rest day never breaks a streak; two in a row do — see challenges.py for
     why a training streak must not punish rest.
     """
     channel = await _kind_channel_or_404(channel_id, "checkin")
@@ -1443,7 +2021,7 @@ async def leave_challenge(channel_id: str, user: dict = Depends(current_user)):
 @router.get("/channels/{channel_id}/challenge")
 async def challenge_board(channel_id: str, user: dict = Depends(current_user)):
     """The scoreboard. Only participants are scored, only from finished
-    workouts inside the window, and only training aggregates are used â€”
+    workouts inside the window, and only training aggregates are used —
     never biomarkers, lab results or wearable health data."""
     channel = await _kind_channel_or_404(channel_id, "challenge")
     await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
@@ -1494,6 +2072,289 @@ async def challenge_board(channel_id: str, user: dict = Depends(current_user)):
         "group_total": total,
         "goal_progress": round(min(1.0, total / goal), 4) if goal else None,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Program channels — a coach shares a training block; members adopt it         #
+# --------------------------------------------------------------------------- #
+class ProgramShareIn(BaseModel):
+    program_id: str
+    note: str = Field(default="", max_length=1000)
+
+
+def _program_snapshot(program: dict) -> dict:
+    """What travels into the channel: the plan, never the person.
+
+    A generated program document also stores the author's recovery snapshot
+    (HRV, sleep) and the biomarkers that shaped it. None of that leaves here —
+    the health-data firewall holds inside communities too.
+    """
+    params = program.get("params") or {}
+    weeks = (program.get("program") or {}).get("weeks") or []
+    return {
+        "program_id": program["id"],
+        "goal": params.get("goal"),
+        "level": params.get("level"),
+        "days_per_week": params.get("days_per_week"),
+        "weeks_count": len(weeks),
+        "equipment": params.get("equipment") or [],
+        "weeks": weeks,
+    }
+
+
+@router.post("/channels/{channel_id}/programs", status_code=201)
+async def share_program(channel_id: str, body: ProgramShareIn, user: dict = Depends(current_user)):
+    await ratelimit.hit("message", user["id"])
+    channel = await _kind_channel_or_404(channel_id, "program")
+    await _require(channel["community_id"], user["id"], permissions.POST_PROGRAM, channel)
+    program = await db.programs.find_one({"id": body.program_id, "user_id": user["id"]}, {"_id": 0})
+    if not program:
+        raise HTTPException(404, "Program not found")  # your own programs only
+    return await _insert_message(
+        channel, user, content=body.note, extra={"program": _program_snapshot(program)})
+
+
+@router.get("/channels/{channel_id}/programs")
+async def list_shared_programs(channel_id: str, user: dict = Depends(current_user)):
+    """The channel's program library, newest first, with adoption counts."""
+    channel = await _kind_channel_or_404(channel_id, "program")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    rows = [
+        row async for row in db.messages.find(
+            {"channel_id": channel_id, "status": "active", "program": {"$ne": None}}, {"_id": 0}
+        ).sort("created_at", -1).limit(50)
+    ]
+    ids = [row["id"] for row in rows]
+    counts = {
+        row["_id"]: row["n"] async for row in db.program_adoptions.aggregate([
+            {"$match": {"message_id": {"$in": ids}}}, {"$group": {"_id": "$message_id", "n": {"$sum": 1}}},
+        ])
+    }
+    mine = {
+        row["message_id"] async for row in db.program_adoptions.find(
+            {"message_id": {"$in": ids}, "user_id": user["id"]}, {"_id": 0, "message_id": 1})
+    }
+    decorated = await _decorate_messages(rows, channel["community_id"])
+    for row in decorated:
+        row["adoption_count"] = counts.get(row["id"], 0)
+        row["adopted_by_me"] = row["id"] in mine
+    return decorated
+
+
+@router.post("/messages/{message_id}/adopt-program", status_code=201)
+async def adopt_program(message_id: str, user: dict = Depends(current_user)):
+    """Copy a shared program into the caller's own plan and make it active.
+
+    Mirrors what generating a program does — the previous active program is
+    archived, not deleted — so the rest of the app (today's session, the
+    recovery-gated adjust) works on it unchanged.
+    """
+    message, channel = await _message_or_404(message_id)
+    snapshot = message.get("program")
+    if not snapshot:
+        raise HTTPException(404, "This message has no program")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    try:
+        await db.program_adoptions.insert_one({
+            "id": new_id(), "message_id": message_id, "user_id": user["id"],
+            "channel_id": channel["id"], "created_at": now(),
+        })
+    except DuplicateKeyError as exc:
+        raise HTTPException(409, "You already use this program") from exc
+    await db.programs.update_many({"user_id": user["id"], "status": "active"}, {"$set": {"status": "archived"}})
+    doc = {
+        "id": new_id(),
+        "user_id": user["id"],
+        "status": "active",
+        "params": {
+            "goal": snapshot.get("goal"), "level": snapshot.get("level"),
+            "days_per_week": snapshot.get("days_per_week"),
+            "equipment": snapshot.get("equipment") or [], "weeks_count": snapshot.get("weeks_count"),
+        },
+        "recovery_snapshot": None,
+        "program": {"weeks": snapshot.get("weeks") or []},
+        "model": "shared",
+        "source": {"message_id": message_id, "channel_id": channel["id"],
+                   "community_id": channel["community_id"], "coach_id": message["author_id"]},
+        "adjustments": [],
+        "created_at": now(),
+    }
+    await db.programs.insert_one(dict(doc))
+    await notifications.notify(
+        message["author_id"], notifications.PROGRAM_ADOPTED, actor=user,
+        title=f"{user.get('full_name') or 'Someone'} started your program",
+        target_type="message", target_id=message_id,
+        metadata={"channel_id": channel["id"], "community_id": channel["community_id"]},
+    )
+    return clean(doc)
+
+
+# --------------------------------------------------------------------------- #
+# Live channels — scheduled sessions with RSVPs                                #
+# --------------------------------------------------------------------------- #
+class LiveSessionIn(BaseModel):
+    title: str = Field(min_length=3, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    starts_at: datetime
+    duration_min: int = Field(default=60, ge=10, le=480)
+    #: Where the session actually happens (Zoom, Meet, YouTube…). The app does
+    #: not stream video itself; it schedules, gathers and reminds.
+    join_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("join_url")
+    @classmethod
+    def https_only(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not re.match(r"^https://[^\s/$.?#][^\s]*$", value):
+            raise ValueError("The join link must be an https:// URL")
+        return value
+
+    @field_validator("starts_at")
+    @classmethod
+    def sensible_start(cls, value: datetime) -> datetime:
+        value = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        current = datetime.now(timezone.utc)
+        if value < current - timedelta(minutes=5):
+            raise ValueError("A session cannot start in the past")
+        if value > current + timedelta(days=90):
+            raise ValueError("Schedule at most 90 days ahead")
+        return value
+
+
+LIVE_OPEN = ("scheduled", "live")
+
+
+async def _live_session_or_404(session_id: str) -> tuple[dict, dict]:
+    session = await db.live_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(404, "Session not found")
+    channel = await _kind_channel_or_404(session["channel_id"], "live")
+    return session, channel
+
+
+async def _live_view(sessions: list[dict], viewer_id: str) -> list[dict]:
+    ids = [row["id"] for row in sessions]
+    counts = {
+        row["_id"]: row["n"] async for row in db.live_rsvps.aggregate([
+            {"$match": {"session_id": {"$in": ids}}}, {"$group": {"_id": "$session_id", "n": {"$sum": 1}}},
+        ])
+    }
+    mine = {
+        row["session_id"] async for row in db.live_rsvps.find(
+            {"session_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "session_id": 1})
+    }
+    hosts = await _people(list({row["host_id"] for row in sessions}))
+    return [clean({**row, "host": hosts.get(row["host_id"]), "rsvp_count": counts.get(row["id"], 0),
+                   "rsvped": row["id"] in mine}) for row in sessions]
+
+
+async def _tell_rsvps(session: dict, actor: dict, title: str) -> None:
+    async for row in db.live_rsvps.find({"session_id": session["id"]}, {"_id": 0, "user_id": 1}):
+        await notifications.notify(
+            row["user_id"], notifications.LIVE_SESSION, actor=actor, title=title,
+            body=session["title"], target_type="channel", target_id=session["channel_id"],
+            metadata={"channel_id": session["channel_id"], "session_id": session["id"]},
+        )
+
+
+@router.post("/channels/{channel_id}/live-sessions", status_code=201)
+async def schedule_live_session(channel_id: str, body: LiveSessionIn, user: dict = Depends(current_user)):
+    channel = await _kind_channel_or_404(channel_id, "live")
+    await _require(channel["community_id"], user["id"], permissions.START_LIVE_SESSION, channel)
+    session = {
+        "id": new_id(), "channel_id": channel_id, "community_id": channel["community_id"],
+        "host_id": user["id"], **body.model_dump(), "status": "scheduled",
+        "started_at": None, "ended_at": None, "created_at": now(),
+    }
+    await db.live_sessions.insert_one(dict(session))
+    # The announcement lands in the channel like any message, so it is seen,
+    # can be reacted to, and shows up in unread counts.
+    await _insert_message(channel, user, content=body.title, extra={"live_session_id": session["id"]})
+    return (await _live_view([session], user["id"]))[0]
+
+
+@router.get("/channels/{channel_id}/live-sessions")
+async def list_live_sessions(channel_id: str, user: dict = Depends(current_user)):
+    """Live and upcoming sessions first, then the five most recent past ones."""
+    channel = await _kind_channel_or_404(channel_id, "live")
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    upcoming = [row async for row in db.live_sessions.find(
+        {"channel_id": channel_id, "status": {"$in": list(LIVE_OPEN)}}, {"_id": 0}).sort("starts_at", 1).limit(50)]
+    past = [row async for row in db.live_sessions.find(
+        {"channel_id": channel_id, "status": {"$in": ["ended", "cancelled"]}}, {"_id": 0}).sort("starts_at", -1).limit(5)]
+    return {"upcoming": await _live_view(upcoming, user["id"]), "past": await _live_view(past, user["id"])}
+
+
+@router.post("/live-sessions/{session_id}/rsvp", status_code=201)
+async def rsvp_live_session(session_id: str, user: dict = Depends(current_user)):
+    session, channel = await _live_session_or_404(session_id)
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    if session["status"] not in LIVE_OPEN:
+        raise HTTPException(409, "This session is over")
+    try:
+        await db.live_rsvps.insert_one({"id": new_id(), "session_id": session_id, "user_id": user["id"], "created_at": now()})
+    except DuplicateKeyError:
+        pass  # already going: idempotent
+    return (await _live_view([session], user["id"]))[0]
+
+
+@router.delete("/live-sessions/{session_id}/rsvp")
+async def cancel_rsvp(session_id: str, user: dict = Depends(current_user)):
+    session, channel = await _live_session_or_404(session_id)
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    await db.live_rsvps.delete_one({"session_id": session_id, "user_id": user["id"]})
+    return (await _live_view([session], user["id"]))[0]
+
+
+async def _host_or_manager(session: dict, channel: dict, user: dict) -> None:
+    if session["host_id"] == user["id"]:
+        await _require(channel["community_id"], user["id"], permissions.START_LIVE_SESSION, channel)
+    else:
+        await _require(channel["community_id"], user["id"],
+                       permissions.START_LIVE_SESSION | permissions.MANAGE_CHANNEL, channel)
+
+
+@router.post("/live-sessions/{session_id}/start")
+async def start_live_session(session_id: str, user: dict = Depends(current_user)):
+    session, channel = await _live_session_or_404(session_id)
+    await _host_or_manager(session, channel, user)
+    if session["status"] != "scheduled":
+        raise HTTPException(409, f"This session is {session['status']}")
+    updated = await db.live_sessions.find_one_and_update(
+        {"id": session_id, "status": "scheduled"},
+        {"$set": {"status": "live", "started_at": now()}}, projection={"_id": 0}, return_document=True)
+    if not updated:
+        raise HTTPException(409, "This session already started")
+    await _tell_rsvps(updated, user, f"{updated['title']} is live now")
+    await realtime.publish(realtime.chat_channel(channel["id"]), {"type": "live.started", "session_id": session_id})
+    return (await _live_view([updated], user["id"]))[0]
+
+
+@router.post("/live-sessions/{session_id}/end")
+async def end_live_session(session_id: str, user: dict = Depends(current_user)):
+    session, channel = await _live_session_or_404(session_id)
+    await _host_or_manager(session, channel, user)
+    updated = await db.live_sessions.find_one_and_update(
+        {"id": session_id, "status": "live"},
+        {"$set": {"status": "ended", "ended_at": now()}}, projection={"_id": 0}, return_document=True)
+    if not updated:
+        raise HTTPException(409, "Only a live session can end")
+    await realtime.publish(realtime.chat_channel(channel["id"]), {"type": "live.ended", "session_id": session_id})
+    return (await _live_view([updated], user["id"]))[0]
+
+
+@router.delete("/live-sessions/{session_id}", status_code=204)
+async def cancel_live_session(session_id: str, user: dict = Depends(current_user)):
+    session, channel = await _live_session_or_404(session_id)
+    await _host_or_manager(session, channel, user)
+    updated = await db.live_sessions.find_one_and_update(
+        {"id": session_id, "status": "scheduled"},
+        {"$set": {"status": "cancelled", "ended_at": now()}}, projection={"_id": 0})
+    if not updated:
+        raise HTTPException(409, "Only a scheduled session can be cancelled")
+    await _tell_rsvps(session, user, f"{session['title']} was cancelled")
 
 
 @router.get("/partner/dashboard")

@@ -105,6 +105,8 @@ async def screen(
         "id": new_id(),
         "reporter_id": None,  # authored by the system, not a member
         "reported_user_id": author.get("id"),
+        # Lets the community's own moderators see it in their queue too.
+        "community_id": (metadata or {}).get("community_id"),
         "target_type": target_type,
         "target_id": target_id,
         "reason": "auto_flagged",
@@ -120,3 +122,64 @@ async def screen(
     }
     await db.reports.insert_one(dict(report))
     return clean(report)
+
+
+REMOVABLE = ("post", "comment", "message", "direct_message")
+
+
+async def remove_content(target_type: str, target_id: str, *, actor: dict) -> bool:
+    """The one path that takes a post, comment or message down.
+
+    The author deleting their own post, a moderator using the delete button and
+    staff resolving a report all land here, so the counters a removal has to
+    unwind — a repost's tally on its original, a comment's on its post — are
+    unwound exactly once whichever door was used. Returns False when the target
+    was already gone, which makes a repeated removal a harmless no-op.
+    """
+    stamp = {"deleted_at": now()}
+    if actor.get("id"):
+        stamp["removed_by"] = actor["id"]
+    if target_type == "post":
+        post = await db.posts.find_one_and_update(
+            {"id": target_id, "status": {"$ne": "deleted"}},
+            {"$set": {"status": "deleted", **stamp}}, projection={"_id": 0},
+        )
+        if not post:
+            return False
+        if post.get("repost_of"):
+            await db.posts.update_one(
+                {"id": post["repost_of"], "repost_count": {"$gt": 0}}, {"$inc": {"repost_count": -1}}
+            )
+        return True
+    if target_type == "comment":
+        comment = await db.post_comments.find_one_and_update(
+            {"id": target_id, "status": "active"},
+            {"$set": {"status": "removed", **stamp}}, projection={"_id": 0},
+        )
+        if not comment:
+            return False
+        await db.posts.update_one(
+            {"id": comment["post_id"], "comment_count": {"$gt": 0}}, {"$inc": {"comment_count": -1}}
+        )
+        return True
+    if target_type == "message":
+        message = await db.messages.find_one_and_update(
+            {"id": target_id, "status": "active"},
+            {"$set": {"status": "removed", **stamp}}, projection={"_id": 0},
+        )
+        if not message:
+            return False
+        import realtime  # lazy: keeps this module importable without httpx config
+
+        # The id only — a removed message's content never reaches a client again.
+        await realtime.publish(
+            realtime.chat_channel(message["channel_id"]), {"type": "message.deleted", "id": target_id}
+        )
+        return True
+    if target_type == "direct_message":
+        message = await db.direct_messages.find_one_and_update(
+            {"id": target_id, "status": {"$ne": "deleted"}},
+            {"$set": {"status": "deleted", "content": "", "media": [], **stamp}}, projection={"_id": 0},
+        )
+        return bool(message)
+    raise ValueError(f"Cannot remove a {target_type}")

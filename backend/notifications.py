@@ -31,11 +31,15 @@ MENTION = "mention"
 DIRECT_MESSAGE = "direct_message"
 MEMBERSHIP = "membership"
 COACH_DECISION = "coach_decision"
+LIVE_SESSION = "live_session"
+PROGRAM_ADOPTED = "program_adopted"
+COMMENT_REPLY = "comment_reply"
+COMMENT_LIKE = "comment_like"
 
 #: Repeated events on the same object collapse into one row instead of
 #: flooding the list — "X and 4 others liked your post". Only unread rows
 #: inside this window absorb a new actor; anything older starts a fresh one.
-AGGREGATABLE = {POST_LIKE, POST_COMMENT, POST_REPOST}
+AGGREGATABLE = {POST_LIKE, POST_COMMENT, POST_REPOST, PROGRAM_ADOPTED, COMMENT_LIKE, DIRECT_MESSAGE}
 AGGREGATION_WINDOW = timedelta(hours=24)
 
 #: `<@a1b2c3d4-...>` — what the composer emits when a member picks a suggestion.
@@ -80,13 +84,57 @@ async def resolve_mentions(content: str) -> list[dict]:
     ]
 
 
+#: Always delivered, whatever the member's settings: account decisions and
+#: moderation outcomes are things a person must be told about.
+MANDATORY = {MEMBERSHIP, COACH_DECISION, "moderation_action", "lab_report_ready"}
+
+#: The types a member can switch off, in the order the settings screen lists them.
+CONFIGURABLE = (
+    FOLLOW, FOLLOW_REQUEST, FOLLOW_ACCEPTED, POST_LIKE, POST_COMMENT, POST_REPOST,
+    POST_MENTION, MENTION, COMMENT_REPLY, COMMENT_LIKE, DIRECT_MESSAGE,
+    LIVE_SESSION, PROGRAM_ADOPTED,
+)
+
+
+async def preferences(user_id: str) -> dict:
+    """`{"push": bool, "types": {type: bool}}` with defaults filled in."""
+    row = await db.users.find_one({"id": user_id}, {"_id": 0, "notification_prefs": 1}) or {}
+    stored = row.get("notification_prefs") or {}
+    types = stored.get("types") or {}
+    return {"push": stored.get("push", True),
+            "types": {kind: bool(types.get(kind, True)) for kind in CONFIGURABLE}}
+
+
+async def _wanted(user_id: str, kind: str) -> tuple[bool, bool]:
+    """(record in-app, also push). A switched-off type does neither."""
+    if kind in MANDATORY:
+        prefs = await preferences(user_id)
+        return True, prefs["push"]
+    prefs = await preferences(user_id)
+    enabled = prefs["types"].get(kind, True)
+    return enabled, enabled and prefs["push"]
+
+
+def _push(user_id: str, notification: dict) -> None:
+    import push  # lazy: keeps this module light for callers that never push
+
+    metadata = notification.get("metadata") or {}
+    push.notify(user_id, notification["title"], notification.get("body") or "", {
+        "notification_id": notification["id"], "type": notification["type"],
+        **{key: metadata[key] for key in ("target_type", "target_id", "channel_id") if metadata.get(key)},
+    })
+
+
 async def create(
     user_id: str,
     kind: str,
     title: str,
     body: str = "",
     metadata: dict | None = None,
-) -> dict:
+) -> dict | None:
+    recorded, pushed = await _wanted(user_id, kind)
+    if not recorded:
+        return None
     notification = {
         "id": new_id(),
         "user_id": user_id,
@@ -100,6 +148,8 @@ async def create(
         "created_at": now(),
     }
     await db.notifications.insert_one(dict(notification))
+    if pushed:
+        _push(user_id, notification)
     return notification
 
 
@@ -126,6 +176,9 @@ async def notify(
         return None  # nobody needs telling about their own action
     if actor_id and await social_graph.blocked_between(actor_id, recipient_id):
         return None
+    recorded, pushed = await _wanted(recipient_id, kind)
+    if not recorded:
+        return None  # the member switched this kind of notification off
 
     payload = {**(metadata or {})}
     if actor_id:
@@ -174,6 +227,8 @@ async def notify(
         "created_at": now(),
     }
     await db.notifications.insert_one(dict(notification))
+    if pushed:
+        _push(recipient_id, notification)
     return clean(notification)
 
 
@@ -201,23 +256,25 @@ async def notify_mentions(
     title: str,
     metadata: dict | None = None,
     audience: set[str] | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
 ) -> list[str]:
     """Notify everyone mentioned in `content`. Returns the ids actually notified.
 
-    Self-mentions are skipped — nobody needs a notification for their own post.
-    When `audience` is given, mentions outside it are ignored so a message
-    cannot be used to ping someone who is not in the room.
+    Goes through `notify()`, so the same rules as every other social event
+    apply: no self-mention, nothing across a block. When `audience` is given,
+    mentions outside it are ignored so a message cannot be used to ping someone
+    who is not in the room.
     """
     notified = []
     for user_id in parse_mentions(content):
-        if user_id == author.get("id"):
-            continue
         if audience is not None and user_id not in audience:
             continue
-        await create(
-            user_id, kind, title,
+        row = await notify(
+            user_id, kind, actor=author, title=title,
             body=(content or "")[:200],
-            metadata={**(metadata or {}), "actor_id": author.get("id")},
+            target_type=target_type, target_id=target_id, metadata=metadata,
         )
-        notified.append(user_id)
+        if row:
+            notified.append(user_id)
     return notified
