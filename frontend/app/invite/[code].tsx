@@ -6,6 +6,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { api, type InvitePreview } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { openCheckout } from "@/src/checkout";
 
 /**
  * Where an invite link lands. Shows what the link leads to before joining —
@@ -13,7 +14,8 @@ import { useI18n } from "@/src/i18n";
  *
  * The server decides the outcome: a plain invite grants only what joining
  * would (so an approval community still reviews the request), a manager's
- * invite skips approval, and no link ever opens a paid community or lifts a ban.
+ * invite skips approval, a paid community's link leads to Checkout (only the
+ * payment lets you in), and no link ever lifts a ban.
  */
 export default function InviteScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -45,11 +47,23 @@ export default function InviteScreen() {
     finally { busyRef.current = false; setBusy(false); }
   };
 
+  // A paid community: the invite opens Checkout; only the payment lets you in.
+  const subscribe = async () => {
+    const communityId = preview?.community?.id;
+    if (!code || !communityId || busyRef.current) return;
+    busyRef.current = true; setBusy(true); setError("");
+    try {
+      if (await openCheckout(communityId, code) === "closed") {
+        router.replace({ pathname: "/community/[id]", params: { id: communityId, checkout: "returned" } });
+      }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
   const status = preview?.membership_status;
   const community = preview?.community;
-  const blockedReason = preview?.unusable_reason
-    ? t(`This invite is ${preview.unusable_reason}.`)
-    : community?.join_policy === "paid" ? t("Paid communities need verified billing to join.") : "";
+  const paid = community?.join_policy === "paid";
+  const blockedReason = preview?.unusable_reason ? t(`This invite is ${preview.unusable_reason}.`) : "";
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
@@ -76,9 +90,12 @@ export default function InviteScreen() {
         </> : status === "pending" ? <Text style={styles.note} testID="invite-pending">{t("Your request is waiting for a manager's approval.")}</Text>
           : status === "banned" ? <Text style={styles.note}>{t("You cannot join this community.")}</Text>
           : blockedReason ? <Text style={styles.note} testID="invite-unusable">{blockedReason}</Text>
-          : <Pressable accessibilityRole="button" testID="invite-accept" disabled={busy} onPress={() => void redeem()} style={[styles.primary, busy && { opacity: 0.5 }]}>
-              <Text style={styles.primaryText}>{t(preview?.skip_approval || community.join_policy === "open" ? "JOIN" : "REQUEST TO JOIN")}</Text>
-            </Pressable>}
+          : <>
+            {paid ? <Text style={styles.note} testID="invite-paid">{t("Monthly, by card through Stripe. Leave any time and the subscription stops.")}</Text> : null}
+            <Pressable accessibilityRole="button" testID="invite-accept" disabled={busy} onPress={() => void (paid ? subscribe() : redeem())} style={[styles.primary, busy && { opacity: 0.5 }]}>
+              <Text style={styles.primaryText}>{t(paid ? "SUBSCRIBE" : preview?.skip_approval || community.join_policy === "open" ? "JOIN" : "REQUEST TO JOIN")}</Text>
+            </Pressable>
+          </>}
       </View> : null}
     </ScrollView>
   </SafeAreaView>;

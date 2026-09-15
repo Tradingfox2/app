@@ -699,6 +699,8 @@ export const api = {
   }) => request<Community>("/communities", { method: "POST", body: JSON.stringify(payload) }),
   joinCommunity: (id: string) =>
     request<Membership>(`/communities/${id}/join`, { method: "POST" }),
+  communityCheckout: (id: string, inviteCode?: string) =>
+    request<{ url: string }>(`/communities/${id}/checkout`, { method: "POST", body: JSON.stringify({ invite_code: inviteCode ?? null }) }),
   leaveCommunity: (id: string) =>
     request<void>(`/communities/${id}/membership`, { method: "DELETE" }),
   communityMembers: (id: string, options: { q?: string; status?: Membership["status"] } = {}) => {

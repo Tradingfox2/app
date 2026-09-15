@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,6 +11,7 @@ import { MANAGE_CHANNEL, can } from "@/src/permissions";
 import { Avatar } from "@/src/components/social/avatar";
 import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
 import { ReportSheet, type ReportTarget } from "@/src/components/social/report-sheet";
+import { openCheckout, waitForMembership } from "@/src/checkout";
 
 type Tab = "channels" | "wall" | "about" | "members";
 
@@ -20,7 +21,7 @@ const KIND_ICONS: Record<ChannelKind, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function CommunityDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>(); const router = useRouter(); const { t, formatNumber, localeTag, formatDate } = useI18n();
+  const { id, checkout } = useLocalSearchParams<{ id: string; checkout?: string }>(); const router = useRouter(); const { t, formatNumber, localeTag, formatDate } = useI18n();
   const [community, setCommunity] = useState<Community | null>(null); const [channels, setChannels] = useState<CommunityChannel[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -48,7 +49,34 @@ export default function CommunityDetail() {
     if (tab === "members" && isActive && members === null && id) api.memberDirectory(id).then(setMembers).catch(() => setMembers([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- feed helpers are stable per community
   }, [tab, isActive, id]);
-  const join = async () => { if (!id || busy) return; setBusy(true); setError(""); try { await api.joinCommunity(id); await load(); } catch (cause) { const message = cause instanceof Error ? cause.message : t("Could not join community"); setError(message); } finally { setBusy(false); } };
+  const [confirming, setConfirming] = useState(false);
+  // Back from Stripe: the server, not the return URL, says whether it worked.
+  const confirmPayment = useCallback(async () => {
+    if (!id) return;
+    setConfirming(true); setError("");
+    const active = await waitForMembership(id);
+    await load();
+    setConfirming(false);
+    if (!active) setError(t("No payment confirmed yet. If you completed checkout, your membership will appear here within a few minutes."));
+  }, [id, load, t]);
+  // Stripe's redirect opens this page cold, before the router can take a
+  // setParams — so remember the handled value instead of clearing the URL.
+  const handledCheckout = useRef<string | null>(null);
+  useEffect(() => {
+    if (!checkout || handledCheckout.current === checkout) return;
+    handledCheckout.current = checkout;
+    if (checkout === "cancelled") setError(t("Checkout cancelled. No payment was taken."));
+    else void confirmPayment();
+  }, [checkout, confirmPayment, t]);
+  const join = async () => {
+    if (!id || busy) return;
+    setBusy(true); setError("");
+    try {
+      if (community?.join_policy === "paid") { if (await openCheckout(id) === "closed") await confirmPayment(); }
+      else { await api.joinCommunity(id); await load(); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t("Could not join community")); }
+    finally { setBusy(false); }
+  };
   // An owner leaving would orphan the community; they archive or transfer it instead.
   const leave = async () => {
     if (!id || busy) return;
@@ -110,7 +138,7 @@ export default function CommunityDetail() {
         <Text style={styles.description} numberOfLines={3}>{community.description || t("A focused place to train and progress together.")}</Text>
         <View style={styles.meta}><Ionicons name="people" size={16} color={colors.brand} /><Text style={styles.metaText}>{formatNumber(community.member_count)} {t("members")}</Text><Text style={styles.metaText}>· {community.owner?.full_name || t("Coach")}</Text></View>
       </View>
-      {!isActive ? <View style={styles.joinBand}><View style={{ flex: 1 }}><Text style={styles.joinTitle}>{membership?.status === "pending" ? t("REQUEST PENDING") : membership?.status === "banned" ? t("YOU ARE BANNED") : community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) + t(" / month") : t("JOIN THE GROUP")}</Text><Text style={styles.joinCopy}>{membership?.status === "pending" ? t("A community manager will review your request.") : membership?.status === "banned" ? t("The community's managers removed you.") : !community.is_public ? t("This community is invite-only. Ask a member for a link.") : community.join_policy === "paid" ? t("Checkout will open when verified billing is connected.") : t("Get access to channels and member conversations.")}</Text></View>{membership?.status !== "pending" && membership?.status !== "banned" && community.is_public ? <Pressable onPress={join} disabled={busy} style={styles.joinButton} testID="join-community"><Text style={styles.joinButtonText}>{t(community.join_policy === "paid" ? "CONTINUE" : community.join_policy === "approval" ? "REQUEST" : "JOIN")}</Text></Pressable> : null}</View> : null}
+      {!isActive ? <View style={styles.joinBand}><View style={{ flex: 1 }}><Text style={styles.joinTitle}>{confirming ? t("CONFIRMING PAYMENT…") : membership?.status === "pending" ? t("REQUEST PENDING") : membership?.status === "banned" ? t("YOU ARE BANNED") : community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) + t(" / month") : t("JOIN THE GROUP")}</Text><Text style={styles.joinCopy}>{membership?.status === "pending" ? t("A community manager will review your request.") : membership?.status === "banned" ? t("The community's managers removed you.") : !community.is_public ? t("This community is invite-only. Ask a member for a link.") : community.join_policy === "paid" ? t("Monthly, by card through Stripe. Leave any time and the subscription stops.") : t("Get access to channels and member conversations.")}</Text></View>{confirming ? <ActivityIndicator color={colors.brand} testID="checkout-confirming" /> : membership?.status !== "pending" && membership?.status !== "banned" && community.is_public ? <Pressable onPress={join} disabled={busy} style={styles.joinButton} testID="join-community"><Text style={styles.joinButtonText}>{t(community.join_policy === "paid" ? "CONTINUE" : community.join_policy === "approval" ? "REQUEST" : "JOIN")}</Text></Pressable> : null}</View> : null}
       {timedOutUntil ? <View style={styles.notice} testID="timeout-notice"><Ionicons name="time-outline" size={18} color={colors.warning} /><Text style={styles.noticeText}>{t("You are timed out until {date}. You can read but not post.").replace("{date}", formatDate(timedOutUntil, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</Text></View> : null}
       {error ? <View style={styles.notice}><Ionicons name="information-circle" size={18} color={colors.warning} /><Text style={styles.noticeText}>{error}</Text></View> : null}
       {isActive ? <View style={styles.tabs}>{(["channels", "wall", "about", "members"] as Tab[]).map(item => <Pressable key={item} accessibilityRole="button" testID={`community-detail-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabOn]}><Text style={[styles.tabText, tab === item && styles.tabTextOn]}>{t(item.toUpperCase())}</Text></Pressable>)}</View> : null}
@@ -146,7 +174,7 @@ export default function CommunityDetail() {
 
       {isActive && membership?.role !== "owner" ? <Pressable accessibilityRole="button" testID="leave-community" disabled={busy} onPress={leave} style={[styles.leave, busy && { opacity: 0.4 }]}>
         <Ionicons name="exit-outline" size={15} color={colors.error} />
-        <Text style={styles.leaveText}>{t("Leave community")}</Text>
+        <Text style={styles.leaveText}>{t(community.join_policy === "paid" ? "Leave and cancel subscription" : "Leave community")}</Text>
       </Pressable> : null}
     </ScrollView> : <Text style={styles.error}>{error}</Text>}
     <Modal visible={onboarding} transparent animationType="fade" onRequestClose={() => void finishOnboarding()}>

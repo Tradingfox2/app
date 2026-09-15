@@ -1,17 +1,20 @@
 """Community marketplace, membership, chat, and partner operations."""
 from __future__ import annotations
 
+import json
+import logging
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pymongo.errors import DuplicateKeyError
 
 from server import clean, current_user, db, new_id, now, optional_user
 from community_rankings import build_rankings
+import billing
 import challenges
 import moderation
 import notifications
@@ -22,6 +25,7 @@ import social_graph
 import staff
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 JoinPolicy = Literal["open", "approval", "paid"]
 MemberStatus = Literal["pending", "active", "rejected", "left", "banned", "removed"]
@@ -591,6 +595,7 @@ async def _activate(
     so the two rules that matter cannot be routed around:
     - a banned member stays banned, whatever link they arrive with;
     - a paid community needs verified billing, whatever link they arrive with.
+      Only the signed Stripe webhook passes `source="payment"`.
     """
     community_id = community["id"]
     existing = await _membership(community_id, user["id"])
@@ -600,7 +605,7 @@ async def _activate(
     if status_now == "pending" and not bypass_approval:
         return clean(existing), False
     policy = community.get("join_policy", "open")
-    if policy == "paid":
+    if policy == "paid" and source != "payment":
         raise HTTPException(402, "Verified payment is required before membership activation")
     activate = policy == "open" or bypass_approval
     timestamp = now()
@@ -635,6 +640,151 @@ async def join_community(community_id: str, user: dict = Depends(current_user)):
     return membership
 
 
+class CheckoutIn(BaseModel):
+    invite_code: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/communities/{community_id}/checkout")
+async def start_checkout(
+    community_id: str, body: CheckoutIn | None = None, user: dict = Depends(current_user),
+):
+    """Open a Stripe Checkout page for a paid community.
+
+    This takes no money and grants nothing: the membership only switches on
+    when Stripe's signed webhook reports the payment (see `stripe_webhook`).
+    A private paid community still needs a valid invite to reach checkout.
+    """
+    await ratelimit.hit("checkout", user["id"])
+    community = await _community_or_404(community_id)
+    if community.get("join_policy") != "paid":
+        raise HTTPException(409, "This community is free to join")
+    if not billing.is_configured():
+        raise HTTPException(503, "Payments are not set up yet")
+    status_now = (await _membership(community_id, user["id"]) or {}).get("status")
+    if status_now == "banned":
+        raise HTTPException(403, "The community's managers removed you")
+    if status_now == "active":
+        raise HTTPException(409, "You are already a member")
+    invite_code = None
+    if not community.get("is_public", True):
+        code = body.invite_code if body else None
+        invite = await db.community_invites.find_one({"code": code, "community_id": community_id}, {"_id": 0}) if code else None
+        if not invite or _invite_state(invite):
+            raise HTTPException(403, "This community is invite-only")
+        invite_code = code
+    back = f"{billing.app_url()}/community/{community_id}"
+    try:
+        session = await billing.create_checkout(
+            community=community, user=user,
+            success_url=f"{back}?checkout=success", cancel_url=f"{back}?checkout=cancelled")
+    except billing.BillingError as exc:
+        logger.warning("Stripe checkout for %s failed: %s", community_id, exc)
+        raise HTTPException(502, "Could not open checkout. Try again in a moment.") from exc
+    await db.community_checkouts.insert_one({
+        "id": session["id"], "community_id": community_id, "user_id": user["id"],
+        "invite_code": invite_code, "status": "open", "amount_cents": community["price_cents"],
+        "currency": community.get("currency", "EUR"), "created_at": now(),
+    })
+    return {"url": session["url"]}
+
+
+@router.post("/billing/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Stripe's signed events — the only thing that can activate a paid membership.
+
+    Every handler is idempotent (Stripe retries, and may deliver twice), and
+    each event id is recorded so a redelivery is acknowledged without work.
+    """
+    payload = await request.body()
+    if not billing.verify_signature(payload, request.headers.get("stripe-signature", "")):
+        raise HTTPException(400, "Invalid signature")
+    event = json.loads(payload)
+    if await db.billing_events.find_one({"id": event.get("id")}, {"_id": 1}):
+        return {"received": True}
+    kind = event.get("type")
+    obj = (event.get("data") or {}).get("object") or {}
+    if kind == "checkout.session.completed":
+        await _checkout_completed(obj)
+    elif kind in {"customer.subscription.deleted", "customer.subscription.updated"}:
+        await _subscription_changed(obj, deleted=kind == "customer.subscription.deleted")
+    await db.billing_events.update_one(
+        {"id": event.get("id")}, {"$setOnInsert": {"type": kind, "received_at": now()}}, upsert=True)
+    return {"received": True}
+
+
+async def _cancel_quietly(subscription_id: str | None, why: str) -> bool:
+    """Cancel where a failure must not undo the action around it; logs instead."""
+    if not subscription_id:
+        return True
+    try:
+        await billing.cancel_subscription(subscription_id)
+        return True
+    except billing.BillingError as exc:
+        logger.error("Could not cancel subscription %s (%s): %s", subscription_id, why, exc)
+        return False
+
+
+async def _checkout_completed(session: dict) -> None:
+    if session.get("mode") != "subscription" or session.get("payment_status") not in {"paid", "no_payment_required"}:
+        return
+    checkout = await db.community_checkouts.find_one({"id": session.get("id")}, {"_id": 0})
+    if not checkout or checkout.get("status") != "open":
+        return  # not one of ours, or already handled
+    subscription_id = session.get("subscription")
+    community = await db.communities.find_one({"id": checkout["community_id"]}, {"_id": 0})
+    member = await db.users.find_one({"id": checkout["user_id"]}, {"_id": 0})
+    membership = None
+    if community and member:
+        membership, changed = await _activate(community, member, bypass_approval=True, source="payment")
+        paying_twice = not changed and membership.get("stripe_subscription_id") not in (None, subscription_id)
+        if membership.get("status") != "active" or paying_twice:
+            membership = None
+    if membership is None:
+        # Banned while on the checkout page, community gone, or already paying:
+        # never keep charging someone who did not get in.
+        await _cancel_quietly(subscription_id, "checkout refused")
+        await db.community_checkouts.update_one({"id": checkout["id"]}, {"$set": {"status": "refused", "updated_at": now()}})
+        return
+    await db.community_members.update_one({"id": membership["id"]}, {"$set": {
+        "stripe_subscription_id": subscription_id, "stripe_customer_id": session.get("customer"),
+        "entitlement_source": "payment", "ended_reason": None, "updated_at": now()}})
+    await db.community_checkouts.update_one({"id": checkout["id"]}, {"$set": {
+        "status": "completed", "subscription_id": subscription_id, "updated_at": now()}})
+    if checkout.get("invite_code"):
+        await db.community_invites.update_one({"code": checkout["invite_code"]}, {"$inc": {"uses": 1}})
+    await notifications.notify(
+        member["id"], notifications.MEMBERSHIP, actor=None, title=f"You joined {community['name']}",
+        body="Your payment went through. Welcome in.",
+        target_type="community", target_id=community["id"], metadata={"approved": True})
+
+
+async def _subscription_changed(subscription: dict, *, deleted: bool) -> None:
+    """A cancelled or unpaid subscription ends the membership; a recovered one restores it.
+
+    `past_due` changes nothing: Stripe is still retrying the card, and a
+    member should not lose access over a payment that may yet succeed.
+    """
+    membership = await db.community_members.find_one({"stripe_subscription_id": subscription.get("id")}, {"_id": 0})
+    if not membership or membership.get("role") == "owner":
+        return
+    status = subscription.get("status")
+    community = await db.communities.find_one({"id": membership["community_id"]}, {"_id": 0, "name": 1}) or {}
+    name = community.get("name", "the community")
+    if deleted or status in {"canceled", "unpaid", "incomplete_expired"}:
+        if membership.get("status") != "active":
+            return  # they already left or were removed; that path cancelled the subscription
+        await db.community_members.update_one({"id": membership["id"]}, {"$set": {
+            "status": "left", "ended_reason": "billing", "updated_at": now()}})
+        await notifications.notify(
+            membership["user_id"], notifications.MEMBERSHIP, actor=None,
+            title=f"Your membership in {name} ended",
+            body="The subscription was cancelled or a payment failed. You can subscribe again any time.",
+            target_type="community", target_id=membership["community_id"], metadata={"approved": False})
+    elif status in {"active", "trialing"} and membership.get("status") == "left" and membership.get("ended_reason") == "billing":
+        await db.community_members.update_one({"id": membership["id"]}, {"$set": {
+            "status": "active", "ended_reason": None, "updated_at": now()}})
+
+
 @router.get("/communities/{community_id}/members")
 async def list_members(
     community_id: str,
@@ -654,7 +804,8 @@ async def list_members(
         matching = [row["id"] async for row in db.users.find(
             {"full_name": {"$regex": re.escape(q.strip()), "$options": "i"}}, {"_id": 0, "id": 1}).limit(2000)]
         query["user_id"] = {"$in": matching}
-    rows = [row async for row in db.community_members.find(query, {"_id": 0}).sort("created_at", 1).skip(offset).limit(limit)]
+    rows = [row async for row in db.community_members.find(
+        query, {"_id": 0, "stripe_customer_id": 0, "stripe_subscription_id": 0}).sort("created_at", 1).skip(offset).limit(limit)]
     people = await _people([row["user_id"] for row in rows])
     return [clean({**row, "user": people.get(row["user_id"])}) for row in rows]
 
@@ -688,6 +839,11 @@ async def review_membership(
     if body.status == "active":
         updates["joined_at"] = now()
     await db.community_members.update_one({"id": member_id}, {"$set": updates})
+    if body.status != "active" and member.get("status") == "active" and member.get("stripe_subscription_id"):
+        # A removal must stop the billing too. The removal itself stands even if
+        # Stripe is down; the flag leaves the cancellation visible to finish by hand.
+        if not await _cancel_quietly(member["stripe_subscription_id"], f"member {body.status}"):
+            await db.community_members.update_one({"id": member_id}, {"$set": {"stripe_cancel_failed": True}})
     if not reviewing_request:
         await staff.audit(
             user, f"community.member_{body.status}", target_type="community_member",
@@ -818,6 +974,10 @@ async def transfer_ownership(community_id: str, body: TransferIn, user: dict = D
         {"id": target["id"]},
         {"$set": {"role": "owner", "entitlement_source": "ownership", "timeout_until": None,
                   "updated_at": timestamp}})
+    if target.get("stripe_subscription_id"):
+        # An owner does not pay for their own community.
+        if await _cancel_quietly(target["stripe_subscription_id"], "became owner"):
+            await db.community_members.update_one({"id": target["id"]}, {"$set": {"stripe_subscription_id": None}})
     await db.community_members.update_many(
         {"community_id": community_id}, {"$set": {"owner_id": target["user_id"]}})
     await staff.audit(
@@ -984,8 +1144,15 @@ async def leave_community(community_id: str, user: dict = Depends(current_user))
         return None
     if member.get("role") == "owner":
         raise HTTPException(409, "Community owners cannot leave their community")
+    if member.get("status") == "active" and member.get("stripe_subscription_id"):
+        # Cancel first: leaving must never leave the card still being charged.
+        try:
+            await billing.cancel_subscription(member["stripe_subscription_id"])
+        except billing.BillingError as exc:
+            logger.warning("Cancel on leave failed for %s: %s", member["id"], exc)
+            raise HTTPException(502, "Could not cancel your subscription, so you are still a member. Try again in a moment.") from exc
     await db.community_members.update_one(
-        {"id": member["id"]}, {"$set": {"status": "left", "updated_at": now()}}
+        {"id": member["id"]}, {"$set": {"status": "left", "ended_reason": "left", "updated_at": now()}}
     )
     return None
 

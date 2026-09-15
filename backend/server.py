@@ -371,6 +371,10 @@ async def lifespan(app: FastAPI):
     await db.posts.create_index([("author_id", 1), ("created_at", -1)])
     await db.posts.create_index([("content", "text")], default_language="none", name="posts_content_text")
     await db.community_members.create_index([("community_id", 1), ("status", 1), ("user_id", 1)])
+    await db.community_members.create_index(
+        "stripe_subscription_id", partialFilterExpression={"stripe_subscription_id": {"$type": "string"}})
+    await db.community_checkouts.create_index("id", unique=True)
+    await db.billing_events.create_index("id", unique=True)
     await db.push_tokens.create_index("token", unique=True)
     await db.push_tokens.create_index("user_id")
     await db.community_invites.create_index("code", unique=True)

@@ -35,6 +35,7 @@ separate and were not rerun for this frontend-only reliability slice.
 
 Verified checkout, payouts and optional multilevel referral settlement are not
 delivered by these changes. Top-user/channel rankings require explicit consent.
-Paid memberships
-must remain locked until verified billing is integrated. No private-feed,
+Paid community memberships go through Stripe Checkout and are activated only by
+Stripe's signed webhook (backend `billing.py`); these browser tests mock the
+API, so the webhook path is covered by `backend/tests/test_community_billing.py`. No private-feed,
 coach-approval or channel entitlement checks were relaxed.

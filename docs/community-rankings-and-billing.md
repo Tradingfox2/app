@@ -22,30 +22,53 @@
   selecting ten results. Ties use stable IDs. Membership counts are memberships,
   not deduplicated individuals across communities.
 
-## Billing remains fail-closed
+## Paid communities: Stripe Checkout + signed webhooks
 
-No checkout, payout or referral commission is enabled by this change.
+`backend/billing.py` talks to Stripe's REST API with httpx, with no SDK. Money goes to
+**the platform's Stripe account** as a monthly subscription at the community's
+`price_cents`/`currency`, with the price sent inline, so nothing has to be set up in the dashboard.
 
-- Paid membership activation is blocked through both join and manual approval.
-- Switching between paid and non-paid policies requires a future explicit billing
-  migration; metadata updates cannot silently migrate existing members.
-- The legacy platform subscription endpoint no longer creates paid access from
-  client-selected plans, or locally cancels a paid provider subscription.
-- Existing subscription/membership records are not rewritten. Previously created
-  unverified records need an operator-reviewed audit before production launch.
+- `POST /api/communities/{id}/checkout` opens a hosted Checkout page and records
+  it in `community_checkouts`. It grants nothing. It returns 503 while Stripe is not
+  configured. It refuses banned and already-active members. A private paid community needs
+  a live invite code.
+- `POST /api/billing/stripe/webhook` is the **only** way to activate a paid membership.
+  It verifies `Stripe-Signature` (HMAC-SHA256, 5-minute replay window, several `v1`
+  values accepted during secret rotation). Event ids go into `billing_events`, so a
+  redelivered event is acknowledged without being applied twice.
+  - `checkout.session.completed` activates through `_activate(source="payment")`.
+    A ban that lands during checkout, a missing community, or a second subscription
+    gets the new subscription cancelled instead.
+  - `customer.subscription.updated` to `canceled`/`unpaid`/`incomplete_expired`, or
+    `customer.subscription.deleted`, ends the membership (`status: left`,
+    `ended_reason: billing`) and notifies the member. `past_due` changes nothing while
+    Stripe retries the card, and a recovery to `active` restores access.
+- Leaving cancels the subscription first; if Stripe is down the member stays in and
+  gets a 502. A ban/removal always takes effect; if the cancel fails, the row gets
+  `stripe_cancel_failed: true` to finish by hand. A member who becomes owner stops paying.
+- Join, invite redemption and manual approval still return 402 for paid communities.
+  Switching an existing community between paid and free still needs a migration (409).
 
-Stripe is listed in backend dependencies but there is no connected merchant
-configuration or approved commission policy. The recommended next stage is Stripe
-Connect **test mode**, direct memberships only, with commissions disabled. This
-is a recommendation, not an implemented payment integration.
+### Configuration (secrets live outside git)
 
-Before enabling payments: choose merchant ownership, supported jurisdictions and
-currencies, platform fees, refund/cancellation policy, tax handling, and connected
-account onboarding. Configure secrets outside source control. Implement signed
-webhooks, idempotent ledger entries, entitlement expiry/revocation, refund/dispute
-reversals and provider reconciliation before activating access or funds movement.
-Optional multilevel commissions additionally require agreed bounded levels/rates,
-eligibility, anti-self-referral/cycle controls and jurisdictional review.
+| Variable | Value |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | `sk_test_…` first, then `sk_live_…` |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` of an endpoint pointing at `https://<api>/api/billing/stripe/webhook`, subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` |
+| `PUBLIC_APP_URL` | Web app origin Stripe returns to (`/community/{id}?checkout=success`) |
+
+For local testing: `stripe listen --forward-to localhost:8001/api/billing/stripe/webhook`
+prints a `whsec_` for the session.
+
+### Business decisions still open (not code)
+
+- **Paying coaches.** Everything is collected by the platform account. Paying
+  community owners automatically needs Stripe Connect onboarding plus a platform-fee
+  percentage — choose the fee and merchant-of-record model first.
+- **Refunds and disputes** are handled in the Stripe dashboard. Cancelling there
+  sends `customer.subscription.deleted`, which removes access automatically.
+- **Tax.** Stripe Tax can be switched on per account; no tax is computed here.
+- The app-wide Pro plan (`/api/subscriptions`) is separate and still fail-closed.
 
 ## Verification
 

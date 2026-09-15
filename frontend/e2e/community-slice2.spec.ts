@@ -136,14 +136,52 @@ test("a used-up invite explains itself instead of offering a dead button", async
   await expect(page.getByTestId("invite-accept")).toHaveCount(0);
 });
 
-test("an invite to a paid community never offers a join button", async ({ page }) => {
+test("an invite to a paid community leads to Stripe checkout, never a free join", async ({ page }) => {
+  const calls: string[] = [];
+  await page.route("https://checkout.stripe.com/**", route => route.fulfill({ contentType: "text/html", body: "<h1>Stripe Checkout</h1>" }));
   await base(page, async (route, path) => {
     if (path === "/invites/AbC123") { await route.fulfill({ json: preview({ community: { ...preview().community, join_policy: "paid" } }) }); return true; }
+    if (path === "/invites/AbC123/redeem") { calls.push("redeem"); await route.fulfill({ status: 402, json: { detail: "Verified payment is required" } }); return true; }
+    if (path === "/communities/c-1/checkout") {
+      calls.push(`checkout:${route.request().postDataJSON().invite_code}`);
+      await route.fulfill({ json: { url: "https://checkout.stripe.com/c/pay/cs_test_1" } }); return true;
+    }
     return false;
   });
   await page.goto("/invite/AbC123");
-  await expect(page.getByTestId("invite-unusable")).toContainText("Paid communities need verified billing to join.");
-  await expect(page.getByTestId("invite-accept")).toHaveCount(0);
+  await expect(page.getByTestId("invite-paid")).toContainText("by card through Stripe");
+  await page.getByTestId("invite-accept").getByText("SUBSCRIBE").click();
+  await expect(page).toHaveURL("https://checkout.stripe.com/c/pay/cs_test_1");
+  expect(calls).toEqual(["checkout:AbC123"]);
+});
+
+test("back from checkout, the page waits for the server before calling it paid", async ({ page }) => {
+  let firstRead = 0;
+  const paid = { ...community, join_policy: "paid", price_cents: 1500 };
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") {
+      firstRead ||= Date.now();
+      // The webhook lands a few seconds after the browser returns.
+      const landed = Date.now() - firstRead > 4000;
+      await route.fulfill({ json: { ...paid, membership: landed ? paid.membership : null } }); return true;
+    }
+    if (path === "/communities/c-1/channels") { await route.fulfill({ json: [{ id: "ch-1", community_id: "c-1", name: "general", description: "", is_default: true, permissions: 0b1111, unread_count: 0 }] }); return true; }
+    return false;
+  });
+  await page.goto("/community/c-1?checkout=success");
+  await expect(page.getByText("CONFIRMING PAYMENT…")).toBeVisible();
+  await expect(page.getByText("general")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("leave-community")).toContainText("Leave and cancel subscription");
+});
+
+test("a cancelled checkout says no payment was taken", async ({ page }) => {
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: { ...community, join_policy: "paid", price_cents: 1500, membership: null } }); return true; }
+    return false;
+  });
+  await page.goto("/community/c-1?checkout=cancelled");
+  await expect(page.getByText("Checkout cancelled. No payment was taken.")).toBeVisible();
+  await expect(page.getByTestId("join-community")).toContainText("CONTINUE");
 });
 
 // --- Search ---

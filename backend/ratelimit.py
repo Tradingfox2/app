@@ -51,6 +51,7 @@ LIMITS: dict[str, tuple[int, int]] = {
     "report": (20, 3600),
     "bookmark": (120, 60),
     "vote": (60, 60),
+    "checkout": (10, 3600),
 }
 
 
