@@ -25,6 +25,22 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Phone push notifications (IronFlow)
+
+Push goes through Expo's free push service; the backend needs no key for it. Push only works in a
+**development or store build**. Expo Go dropped remote push on Android in SDK 53, so there
+`src/push.ts` does nothing and the in-app notification centre is used instead.
+
+1. `npx eas-cli init` links the app to an EAS project and writes `expo.extra.eas.projectId`
+   into `app.json`. You can instead set `EXPO_PUBLIC_EAS_PROJECT_ID=<uuid>` in the build environment;
+   `src/push.ts` reads app config first, then that variable.
+2. Android: create a Firebase project, add `google-services.json` and set
+   `expo.android.googleServicesFile`, then upload the FCM V1 service-account key with
+   `npx eas-cli credentials` (Android → Push Notifications).
+3. iOS: `npx eas-cli credentials` creates the APNs key for you.
+4. `npx eas-cli build --profile development` and install the build. After sign-in the app asks
+   for permission and registers its token with `POST /api/push-tokens`.
+
 ## Get a fresh project
 
 When you're ready, run:
