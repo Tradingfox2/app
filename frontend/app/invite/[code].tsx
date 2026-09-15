@@ -59,6 +59,11 @@ export default function InviteScreen() {
     <ScrollView contentContainerStyle={styles.scroll}>
       {!preview && !error ? <ActivityIndicator color={colors.brand} /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error} testID="invite-error">{error}</Text> : null}
+      {preview && !community ? <View style={styles.card} testID="invite-dead">
+        <Ionicons name="lock-closed-outline" size={34} color={colors.textDim} />
+        <Text style={styles.note}>{blockedReason || t("This invite no longer works.")}</Text>
+        <Text style={styles.meta}>{t("Ask a member for a fresh link.")}</Text>
+      </View> : null}
       {community ? <View style={styles.card} testID="invite-card">
         <Ionicons name="people" size={34} color={colors.brand} />
         <Text style={styles.name}>{community.name}</Text>

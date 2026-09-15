@@ -25,7 +25,13 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   moderation_action: "shield-checkmark-outline",
   lab_report_ready: "flask-outline",
   community: "people-outline",
+  comment_reply: "return-down-forward",
+  comment_like: "heart-outline",
+  live_session: "radio-outline",
+  program_adopted: "barbell-outline",
 };
+
+const PAGE = 30;
 
 /**
  * "Ana and 3 others liked your post".
@@ -44,6 +50,7 @@ export default function NotificationsScreen() {
   const [rows, setRows] = useState<AppNotification[]>([]);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState("");
   const busy = useRef(false);
   const revision = useRef(0);
@@ -51,7 +58,7 @@ export default function NotificationsScreen() {
     const current = ++revision.current;
     try {
       const data = await api.notifications(only);
-      if (current === revision.current) { setRows(data); setError(""); }
+      if (current === revision.current) { setRows(data); setHasMore(data.length === PAGE); setError(""); }
     } catch (cause) {
       if (current === revision.current) setError(cause instanceof Error ? cause.message : t("Could not load notifications"));
     } finally { if (current === revision.current) setLoading(false); }
@@ -87,9 +94,32 @@ export default function NotificationsScreen() {
       case "user": return router.push({ pathname: "/user/[id]", params: { id: target } });
       case "dm": return router.push({ pathname: "/dm/[id]", params: { id: target } });
       case "community": return router.push({ pathname: "/community/[id]", params: { id: target } });
-      case "post": return router.push("/community");
+      case "post": return router.push({ pathname: "/post/[id]", params: { id: target } });
       default: return;
     }
+  };
+
+  const more = async () => {
+    const last = rows[rows.length - 1];
+    if (!last || busy.current) return;
+    busy.current = true;
+    try {
+      const page = await api.notifications(unreadOnly, last.id);
+      setRows(current => [...current, ...page.filter(row => !current.some(existing => existing.id === row.id))]);
+      setHasMore(page.length === PAGE);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { busy.current = false; }
+  };
+  const remove = async (row: AppNotification) => {
+    setRows(current => current.filter(item => item.id !== row.id));
+    try { await api.deleteNotification(row.id); } catch { void load(unreadOnly); }
+  };
+  const clearRead = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    try { await api.clearReadNotifications(); await load(unreadOnly); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { busy.current = false; }
   };
 
   return <SafeAreaView style={styles.safe}>
@@ -97,6 +127,8 @@ export default function NotificationsScreen() {
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <View style={{ flex: 1 }}><Text style={styles.headerTitle}>{t("NOTIFICATIONS")}</Text>{unread ? <Text style={styles.live}>{t("{count} unread").replace("{count}", String(unread))}</Text> : null}</View>
       {unread ? <Pressable accessibilityRole="button" testID="mark-all-read" onPress={() => void markAll()} style={styles.icon}><Ionicons name="checkmark-done" size={20} color={colors.brand} /></Pressable> : null}
+      {rows.some(row => row.read_at) ? <Pressable accessibilityRole="button" accessibilityLabel={t("Clear read notifications")} testID="clear-read" onPress={() => void clearRead()} style={styles.icon}><Ionicons name="trash-bin-outline" size={19} color={colors.textMuted} /></Pressable> : null}
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Notification settings")} testID="notification-settings" onPress={() => router.push("/notification-settings")} style={styles.icon}><Ionicons name="options-outline" size={20} color={colors.textMuted} /></Pressable>
     </View>
     <View style={styles.tabs}>
       {([["all", t("ALL")], ["unread", t("UNREAD")]] as const).map(([key, label]) => {
@@ -119,7 +151,9 @@ export default function NotificationsScreen() {
           <Text style={styles.time}>{formatDate(item.created_at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
         </View>
         {!item.read_at ? <View testID={`unread-dot-${item.id}`} style={styles.dot} /> : null}
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Delete notification")} testID={`delete-notification-${item.id}`} onPress={() => void remove(item)} style={styles.icon}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable>
       </Pressable>}
+      ListFooterComponent={hasMore ? <Pressable accessibilityRole="button" testID="notifications-more" onPress={() => void more()} style={[styles.icon, { alignSelf: "center", width: "auto" }]}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Pressable> : null}
     />
   </SafeAreaView>;
 }

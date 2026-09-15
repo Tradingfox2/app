@@ -23,6 +23,7 @@ export type User = {
   /** A private account turns incoming follows into requests. */
   is_private?: boolean;
   staff_role?: StaffRole | null;
+  bio?: string;
 };
 
 export type StaffRole = "support" | "moderator" | "admin";
@@ -44,7 +45,7 @@ export type AdminAccount = {
 
 export type ModerationReport = {
   id: string;
-  target_type: "post" | "comment" | "message" | "user" | "community";
+  target_type: "post" | "comment" | "message" | "direct_message" | "user" | "community";
   target_id: string;
   reason: string;
   detail: string;
@@ -83,8 +84,12 @@ export type Membership = {
   community_id: string;
   user_id: string;
   role: "owner" | "moderator" | "member";
-  status: "pending" | "active" | "rejected" | "left" | "banned";
-  entitlement_source: "ownership" | "free" | "payment";
+  status: "pending" | "active" | "rejected" | "left" | "banned" | "removed";
+  entitlement_source: "ownership" | "free" | "payment" | "invite";
+  /** While in the future the member can read but not post. */
+  timeout_until?: string | null;
+  /** Set once the member has seen the welcome message and accepted the rules. */
+  onboarded_at?: string | null;
   /** Custom roles assigned on top of the legacy `role` string. */
   role_ids?: string[];
   joined_at: string | null;
@@ -105,7 +110,19 @@ export type Community = {
   owner: Pick<User, "id" | "full_name" | "avatar_url"> | null;
   membership: Membership | null;
   created_at: string;
+  category?: CommunityCategory;
+  rules?: string[];
+  welcome_message?: string;
+  cover_url?: string | null;
+  avatar_url?: string | null;
+  status?: "active" | "archived";
 };
+
+export const COMMUNITY_CATEGORIES = [
+  "strength", "bodybuilding", "powerlifting", "crossfit", "running", "cycling",
+  "yoga", "mobility", "calisthenics", "weight_loss", "nutrition", "combat", "general",
+] as const;
+export type CommunityCategory = (typeof COMMUNITY_CATEGORIES)[number];
 
 export type ChannelKind = "text" | "announcement" | "program" | "challenge" | "checkin" | "live";
 
@@ -123,6 +140,11 @@ export type CommunityChannel = {
   permissions?: number;
   /** Other people's messages since the caller last read it, capped at 100. */
   unread_count?: number;
+  /** Sidebar group heading. */
+  category?: string | null;
+  position?: number | null;
+  /** Seconds between a member's messages; 0 or absent is off. */
+  slowmode_sec?: number;
 };
 
 export type CommunityInvite = {
@@ -144,10 +166,11 @@ export type InvitePreview = {
   unusable_reason: CommunityInvite["unusable_reason"];
   skip_approval: boolean;
   membership_status: Membership["status"] | null;
+  /** Null when a dead link points at a private community. */
   community: {
     id: string; name: string; description: string;
     join_policy: Community["join_policy"]; is_public: boolean; member_count: number;
-  };
+  } | null;
 };
 
 export type SearchPerson = MentionedUser & { is_private: boolean; follow_state: FollowState };
@@ -215,6 +238,8 @@ export type PublicProfile = MentionedUser & {
   is_muted: boolean;
   can_view_posts: boolean;
   can_message: boolean;
+  bio?: string;
+  is_coach?: boolean;
 };
 
 export type AppNotification = {
@@ -241,12 +266,90 @@ export type CommunityMessage = {
   author: Pick<User, "id" | "full_name" | "avatar_url"> | null;
   reactions?: MessageReaction[];
   reply_to_id?: string | null;
-  reply_to?: { id: string; author_id: string; content: string } | null;
+  reply_to?: { id: string; author_id: string; content: string; author?: MentionedUser | null } | null;
   pinned_at?: string | null;
   edited_at?: string | null;
   /** Display names for the <@id> tokens in `content`, resolved server-side. */
   mentions?: MentionedUser[];
+  media?: MediaItem[];
+  /** The author's most senior role, shown as a coloured tag. */
+  author_role?: { name: string; color: string | null } | null;
+  /** Present on a message that shares a training program. */
+  program?: ProgramSnapshot | null;
+  /** Present on the message that announced a live session. */
+  live_session_id?: string | null;
 };
+
+export type ProgramSnapshot = {
+  program_id: string;
+  goal: string | null;
+  level: string | null;
+  days_per_week: number | null;
+  weeks_count: number;
+  equipment: string[];
+  weeks: { week_index: number; phase: string; days: { day_index: number; focus: string; exercises: { name: string; sets: number; reps_min: number; reps_max: number }[] }[] }[];
+};
+
+export type SharedProgram = CommunityMessage & { adoption_count: number; adopted_by_me: boolean };
+
+export type LiveSession = {
+  id: string;
+  channel_id: string;
+  community_id: string;
+  host_id: string;
+  host: MentionedUser | null;
+  title: string;
+  description: string;
+  starts_at: string;
+  duration_min: number;
+  join_url: string | null;
+  status: "scheduled" | "live" | "ended" | "cancelled";
+  started_at: string | null;
+  ended_at: string | null;
+  rsvp_count: number;
+  rsvped: boolean;
+};
+
+export type CommunityInsights = {
+  members: number;
+  joined_7d: number;
+  joined_30d: number;
+  left_30d: number;
+  pending: number;
+  messages_7d: number;
+  messages_30d: number;
+  active_members_7d: number;
+  engagement_rate_7d: number;
+  daily_messages: { day: string; messages: number }[];
+  top_channels: { id: string; name: string; messages: number }[];
+};
+
+export type CommunityAuditEntry = {
+  id: string;
+  actor_id: string;
+  actor: MentionedUser | null;
+  action: string;
+  target_type: string;
+  target_id: string;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type CommunityReport = {
+  id: string;
+  target_type: ModerationReport["target_type"];
+  target_id: string;
+  reason: string;
+  detail: string;
+  content_snapshot: string;
+  status: "open" | "resolved";
+  resolution: string | null;
+  created_at: string;
+  reported_user: MentionedUser | null;
+};
+
+export type NotificationPrefs = { push: boolean; types: Record<string, boolean> };
 
 export type CoachApplication = {
   id?: string;
@@ -299,7 +402,27 @@ export type Post = {
   workout_summary?: WorkoutSummary | null;
   status?: string;
   created_at: string;
+  saved_by_me?: boolean;
+  mentions?: MentionedUser[];
+  /** Your own post, still inside the 24-hour edit window. */
+  can_edit?: boolean;
+  tags?: string[];
+  poll?: Poll | null;
+  link_preview?: LinkPreview | null;
+  edited_at?: string | null;
 };
+
+export type Poll = {
+  options: string[];
+  closes_at: string;
+  closed: boolean;
+  my_vote: number | null;
+  total: number;
+  /** Hidden (null) until you vote or the poll closes. */
+  counts: number[] | null;
+};
+
+export type LinkPreview = { url: string; title: string; description: string; image_url: string | null; site_name: string };
 
 export type WorkoutSummary = {
   workout_id: string;
@@ -321,6 +444,14 @@ export type PostComment = {
   author: Pick<User, "id" | "full_name" | "avatar_url"> | null;
   content: string;
   created_at: string;
+  /** Replies point at a top-level comment; threads are one level deep. */
+  parent_id?: string | null;
+  like_count?: number;
+  reply_count?: number;
+  liked_by_me?: boolean;
+  can_edit?: boolean;
+  mentions?: MentionedUser[];
+  edited_at?: string | null;
 };
 
 export type DirectMessage = {
@@ -331,6 +462,8 @@ export type DirectMessage = {
   content: string;
   read_at: string | null;
   created_at: string;
+  media?: MediaItem[];
+  status?: "active" | "deleted";
 };
 
 export type DmThread = {
@@ -482,6 +615,8 @@ export const api = {
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ activity_ranking_opt_in }) }),
   updatePrivacy: (is_private: boolean) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ is_private }) }),
+  updateProfileDetails: (body: { full_name?: string; bio?: string; avatar_media_id?: string; remove_avatar?: boolean }) =>
+    request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 
   dashboard: () => request<any>("/dashboard"),
 
@@ -533,13 +668,29 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
-  communities: (scope: "discover" | "mine" = "discover") =>
-    request<Community[]>(`/communities?scope=${scope}`),
+  communities: (scope: "discover" | "mine" = "discover", options: { category?: CommunityCategory | null; offset?: number } = {}) =>
+    request<Community[]>(`/communities?scope=${scope}${options.category ? `&category=${options.category}` : ""}${options.offset ? `&offset=${options.offset}` : ""}`),
+  archivedCommunities: () => request<Community[]>("/communities-archived"),
+  restoreCommunity: (id: string) => request<Community>(`/communities/${id}/restore`, { method: "POST" }),
+  transferCommunity: (id: string, memberId: string) =>
+    request<Community>(`/communities/${id}/transfer`, { method: "POST", body: JSON.stringify({ member_id: memberId }) }),
+  completeOnboarding: (id: string) => request<void>(`/communities/${id}/onboarding`, { method: "POST" }),
+  communityAuditLog: (id: string) => request<CommunityAuditEntry[]>(`/communities/${id}/audit-log`),
+  communityInsights: (id: string) => request<CommunityInsights>(`/communities/${id}/insights`),
+  communityReports: (id: string, status: "open" | "resolved" = "open") =>
+    request<CommunityReport[]>(`/communities/${id}/reports?status=${status}`),
+  reviewCommunityReport: (id: string, reportId: string, resolution: "dismissed" | "content_removed", note = "") =>
+    request<CommunityReport>(`/communities/${id}/reports/${reportId}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
+  timeoutMember: (communityId: string, memberId: string, minutes: number) =>
+    request<Membership>(`/communities/${communityId}/members/${memberId}/timeout`, { method: "POST", body: JSON.stringify({ minutes }) }),
+  reorderChannels: (communityId: string, channelIds: string[]) =>
+    request<{ channel_ids: string[] }>(`/communities/${communityId}/channel-order`, { method: "PUT", body: JSON.stringify({ channel_ids: channelIds }) }),
   community: (id: string) => request<Community>(`/communities/${id}`),
   createCommunity: (payload: {
     name: string;
     slug: string;
     description: string;
+    category?: CommunityCategory;
     is_public: boolean;
     join_policy: Community["join_policy"];
     price_cents: number;
@@ -558,15 +709,32 @@ export const api = {
   communityChannels: (id: string) =>
     request<CommunityChannel[]>(`/communities/${id}/channels`),
   /** `kind` and `challenge` are only sent when set, so a plain text channel's body is unchanged. */
-  createCommunityChannel: (communityId: string, name: string, description = "", options: { kind?: ChannelKind; challenge?: ChallengeSettings } = {}) =>
+  createCommunityChannel: (communityId: string, name: string, description = "", options: { kind?: ChannelKind; challenge?: ChallengeSettings; category?: string; slowmode_sec?: number } = {}) =>
     request<CommunityChannel>(`/communities/${communityId}/channels`, {
       method: "POST",
       body: JSON.stringify({
         name, description,
         ...(options.kind && options.kind !== "text" ? { kind: options.kind } : {}),
         ...(options.challenge ? { challenge: options.challenge } : {}),
+        ...(options.category ? { category: options.category } : {}),
+        ...(options.slowmode_sec ? { slowmode_sec: options.slowmode_sec } : {}),
       }),
     }),
+  sharedPrograms: (channelId: string) => request<SharedProgram[]>(`/channels/${channelId}/programs`),
+  shareProgram: (channelId: string, programId: string, note = "") =>
+    request<CommunityMessage>(`/channels/${channelId}/programs`, { method: "POST", body: JSON.stringify({ program_id: programId, note }) }),
+  adoptProgram: (messageId: string) => request<{ id: string }>(`/messages/${messageId}/adopt-program`, { method: "POST" }),
+  liveSessions: (channelId: string) => request<{ upcoming: LiveSession[]; past: LiveSession[] }>(`/channels/${channelId}/live-sessions`),
+  scheduleLiveSession: (channelId: string, body: { title: string; description?: string; starts_at: string; duration_min?: number; join_url?: string | null }) =>
+    request<LiveSession>(`/channels/${channelId}/live-sessions`, { method: "POST", body: JSON.stringify(body) }),
+  rsvpLive: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/rsvp`, { method: "POST" }),
+  cancelRsvp: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/rsvp`, { method: "DELETE" }),
+  startLive: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/start`, { method: "POST" }),
+  endLive: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/end`, { method: "POST" }),
+  cancelLive: (sessionId: string) => request<void>(`/live-sessions/${sessionId}`, { method: "DELETE" }),
+  channelTyping: (channelId: string) => request<void>(`/channels/${channelId}/typing`, { method: "POST" }),
+  searchChannel: (channelId: string, q: string) =>
+    request<CommunityMessage[]>(`/channels/${channelId}/search?q=${encodeURIComponent(q)}`),
   checkinBoard: (channelId: string) => request<CheckinBoard>(`/channels/${channelId}/checkins`),
   challengeBoard: (channelId: string) => request<ChallengeBoard>(`/channels/${channelId}/challenge`),
   joinChallenge: (channelId: string) =>
@@ -578,10 +746,10 @@ export const api = {
     request<CommunityMessage[]>(`/channels/${id}/messages${before ? `?before=${before}` : ""}`),
   updateChannelRanking: (id: string, ranking_opt_in: boolean) =>
     request<CommunityChannel>(`/channels/${id}/ranking`, { method: "PATCH", body: JSON.stringify({ ranking_opt_in }) }),
-  updateCommunity: (id: string, body: Partial<Pick<Community, "name" | "description" | "is_public" | "join_policy" | "price_cents" | "currency">>) =>
+  updateCommunity: (id: string, body: Partial<Pick<Community, "name" | "description" | "is_public" | "join_policy" | "price_cents" | "currency" | "category" | "rules" | "welcome_message">> & { cover_media_id?: string; avatar_media_id?: string }) =>
     request<Community>(`/communities/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   archiveCommunity: (id: string) => request<void>(`/communities/${id}`, { method: "DELETE" }),
-  updateChannel: (channelId: string, body: { name?: string; description?: string }) =>
+  updateChannel: (channelId: string, body: { name?: string; description?: string; category?: string; slowmode_sec?: number }) =>
     request<CommunityChannel>(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify(body) }),
   archiveChannel: (channelId: string) => request<void>(`/channels/${channelId}`, { method: "DELETE" }),
   coachApplications: (status: "pending" | "approved" | "rejected" = "pending") =>
@@ -640,19 +808,31 @@ export const api = {
   pinMessage: (messageId: string) => request<CommunityMessage>(`/messages/${messageId}/pin`, { method: "POST" }),
   unpinMessage: (messageId: string) => request<void>(`/messages/${messageId}/pin`, { method: "DELETE" }),
   channelPins: (channelId: string) => request<CommunityMessage[]>(`/channels/${channelId}/pins`),
-  notifications: (unreadOnly = false) =>
-    request<AppNotification[]>(`/notifications${unreadOnly ? "?unread_only=true" : ""}`),
+  notifications: (unreadOnly = false, before?: string) =>
+    request<AppNotification[]>(`/notifications?unread_only=${unreadOnly}${before ? `&before=${before}` : ""}`),
+  deleteNotification: (id: string) => request<void>(`/notifications/${id}`, { method: "DELETE" }),
+  clearReadNotifications: () => request<{ deleted: number }>("/notifications", { method: "DELETE" }),
+  notificationPreferences: () => request<NotificationPrefs>("/notifications/preferences"),
+  updateNotificationPreferences: (body: { push?: boolean; types?: Record<string, boolean> }) =>
+    request<NotificationPrefs>("/notifications/preferences", { method: "PUT", body: JSON.stringify(body) }),
+  registerPushToken: (token: string, platform: "ios" | "android" | "web") =>
+    request<{ registered: boolean }>("/push-tokens", { method: "POST", body: JSON.stringify({ token, platform }) }),
+  unregisterPushToken: (token: string, platform: "ios" | "android" | "web") =>
+    request<void>("/push-tokens", { method: "DELETE", body: JSON.stringify({ token, platform }) }),
   unreadNotificationCount: () => request<{ count: number }>("/notifications/unread-count"),
   markNotificationRead: (id: string) =>
     request<AppNotification>(`/notifications/${id}/read`, { method: "POST" }),
   markAllNotificationsRead: () =>
     request<{ updated: number }>("/notifications/read-all", { method: "POST" }),
   realtimeToken: () => request<{ enabled: boolean; token: string | null; url: string | null }>("/realtime/token"),
+  realtimeSubscriptionToken: (channel: string) =>
+    request<{ enabled: boolean; token: string | null }>(`/realtime/subscription-token?channel=${encodeURIComponent(channel)}`),
 
-  createChannelMessage: (id: string, content: string, reply_to_id?: string | null) =>
+  /** `media_ids` is only sent when set, so a plain message's body is unchanged. */
+  createChannelMessage: (id: string, content: string, reply_to_id?: string | null, media_ids?: string[]) =>
     request<CommunityMessage>(`/channels/${id}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content, reply_to_id: reply_to_id ?? null }),
+      body: JSON.stringify({ content, reply_to_id: reply_to_id ?? null, ...(media_ids?.length ? { media_ids } : {}) }),
     }),
   coachApplication: () => request<CoachApplication>("/coach/application"),
   applyToCoach: (bio: string, specialties: string[], credentials: string[]) =>
@@ -669,24 +849,41 @@ export const api = {
       channels: { id: string; name: string; community_id: string; community_name: string; contributors: number }[];
       window_days: number;
     }>("/community-rankings"),
-  posts: (community_id?: string) =>
-    request<any[]>(`/posts${community_id ? `?community_id=${community_id}` : ""}`),
-  createPost: (content: string, community_id?: string) =>
-    request<any>("/posts", { method: "POST", body: JSON.stringify({ content, community_id }) }),
-
   // Social feed
-  feed: (scope: "all" | "following" | "mine" = "all", before?: string) =>
-    request<Post[]>(`/feed?scope=${scope}${before ? `&before=${before}` : ""}`),
+  feed: (scope: "all" | "following" | "mine" = "all", before?: string, filters: { author_id?: string; tag?: string; community_id?: string } = {}) => {
+    const qs = new URLSearchParams({ scope });
+    if (before) qs.set("before", before);
+    for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value);
+    return request<Post[]>(`/feed?${qs.toString()}`);
+  },
+  getPost: (id: string) => request<Post>(`/posts/${id}`),
+  editPost: (id: string, content: string) =>
+    request<Post>(`/posts/${id}`, { method: "PATCH", body: JSON.stringify({ content }) }),
+  savePost: (id: string) => request<{ saved: boolean }>(`/posts/${id}/save`, { method: "POST" }),
+  unsavePost: (id: string) => request<{ saved: boolean }>(`/posts/${id}/save`, { method: "DELETE" }),
+  savedPosts: (before?: string) => request<Post[]>(`/saved${before ? `?before=${before}` : ""}`),
+  vote: (id: string, option: number) =>
+    request<Post>(`/posts/${id}/vote`, { method: "POST", body: JSON.stringify({ option }) }),
+  trendingTags: () => request<{ tag: string; posts: number }[]>("/tags/trending"),
+  undoRepost: (id: string) => request<void>(`/posts/${id}/repost`, { method: "DELETE" }),
+  editComment: (id: string, content: string) =>
+    request<PostComment>(`/comments/${id}`, { method: "PATCH", body: JSON.stringify({ content }) }),
+  deleteComment: (id: string) => request<void>(`/comments/${id}`, { method: "DELETE" }),
+  likeComment: (id: string) => request<{ liked: boolean; like_count: number }>(`/comments/${id}/like`, { method: "POST" }),
+  unlikeComment: (id: string) => request<{ liked: boolean; like_count: number }>(`/comments/${id}/like`, { method: "DELETE" }),
   /** Omit `workout_id` entirely when unset: the publish body is asserted exactly in e2e. */
-  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string }) =>
+  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string; poll?: { options: string[]; duration_hours: number } }) =>
     request<Post>("/posts", { method: "POST", body: JSON.stringify(payload) }),
   deletePost: (id: string) => request<void>(`/posts/${id}`, { method: "DELETE" }),
   likePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "POST" }),
   unlikePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "DELETE" }),
-  repost: (id: string) => request<Post>(`/posts/${id}/repost`, { method: "POST" }),
-  comments: (id: string) => request<PostComment[]>(`/posts/${id}/comments`),
-  addComment: (id: string, content: string) =>
-    request<PostComment>(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ content }) }),
+  /** With text it is a quote post; without, a plain repost. */
+  repost: (id: string, content?: string) =>
+    request<Post>(`/posts/${id}/repost`, { method: "POST", ...(content ? { body: JSON.stringify({ content }) } : {}) }),
+  comments: (id: string, before?: string) => request<PostComment[]>(`/posts/${id}/comments${before ? `?before=${before}` : ""}`),
+  /** `parent_id` is only sent for a reply, so a top-level comment's body is unchanged. */
+  addComment: (id: string, content: string, parentId?: string | null) =>
+    request<PostComment>(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ content, ...(parentId ? { parent_id: parentId } : {}) }) }),
   uploadMedia: (file: UploadFile) => upload<MediaItem>("/media", file),
   /** Returns `state: "pending"` when the target account is private. */
   follow: (userId: string) =>
@@ -710,9 +907,12 @@ export const api = {
   muteUser: (userId: string) => request<{ muted: boolean }>(`/users/${userId}/mute`, { method: "POST" }),
   unmuteUser: (userId: string) => request<void>(`/users/${userId}/mute`, { method: "DELETE" }),
   dmThreads: () => request<DmThread[]>("/dm"),
-  dmMessages: (peerId: string) => request<DirectMessage[]>(`/dm/${peerId}/messages`),
-  sendDm: (peerId: string, content: string) =>
-    request<DirectMessage>(`/dm/${peerId}/messages`, { method: "POST", body: JSON.stringify({ content }) }),
+  dmMessages: (peerId: string, before?: string) => request<DirectMessage[]>(`/dm/${peerId}/messages${before ? `?before=${before}` : ""}`),
+  sendDm: (peerId: string, content: string, media_ids?: string[]) =>
+    request<DirectMessage>(`/dm/${peerId}/messages`, { method: "POST", body: JSON.stringify({ content, ...(media_ids?.length ? { media_ids } : {}) }) }),
+  deleteDm: (messageId: string) => request<void>(`/dm/messages/${messageId}`, { method: "DELETE" }),
+  dmTyping: (peerId: string) => request<void>(`/dm/${peerId}/typing`, { method: "POST" }),
+  dmUnreadCount: () => request<{ count: number }>("/dm/unread-count"),
   importSamsungHealth: (file: UploadFile) =>
     upload<{ synced: number; files: number; metrics: string[]; from: string; to: string }>("/wearables/sources/samsung_health/import", file),
 

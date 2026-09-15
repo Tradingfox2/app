@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { router } from "expo-router";
 import { api, auth, User } from "./api";
+import { unregisterPush, usePushNotifications } from "./push";
 
 type Ctx = {
   user: User | null;
@@ -42,8 +43,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await auth.setToken(r.access_token);
     setUser(r.user);
   };
+  usePushNotifications(!!user);
   const logout = async () => {
     try {
+      await unregisterPush(); // needs the token, so before clearing it
       await auth.clearToken();
     } finally {
       setUser(null);

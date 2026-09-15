@@ -83,12 +83,13 @@ test("a channel can be renamed and archived, except the default one", async ({ p
   await expect.poll(() => archived).toEqual(["ch-2"]);
 });
 
-test("an active member can be removed, but never the owner", async ({ page }) => {
+test("an active member can be removed or banned, but never the owner", async ({ page }) => {
   const removed: unknown[] = [];
   await manageFixtures(page, async (route, path) => {
     if (path === "/communities/c-1/members/m-2" && route.request().method() === "PATCH") {
-      removed.push(route.request().postDataJSON());
-      await route.fulfill({ json: { ...members[1], status: "banned" } });
+      const body = route.request().postDataJSON();
+      removed.push(body);
+      await route.fulfill({ json: { ...members[1], status: body.status } });
       return true;
     }
     return false;
@@ -98,10 +99,15 @@ test("an active member can be removed, but never the owner", async ({ page }) =>
   await page.getByTestId("member-m-1").click();
   await expect(page.getByText("The owner cannot be removed.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("remove-member-m-1")).toHaveCount(0);
+  await expect(page.getByTestId("ban-member-m-1")).toHaveCount(0);
 
+  // "Remove" is a kick — they may come back. Banning is its own, heavier button.
   await page.getByTestId("member-m-2").click();
   await page.getByTestId("remove-member-m-2").click();
-  await expect.poll(() => removed).toEqual([{ status: "banned" }]);
+  await expect.poll(() => removed).toEqual([{ status: "removed" }]);
+  await page.getByTestId("member-m-2").click();
+  await page.getByTestId("ban-member-m-2").click();
+  await expect.poll(() => removed).toEqual([{ status: "removed" }, { status: "banned" }]);
 });
 
 test("archiving a community asks for confirmation first", async ({ page }) => {

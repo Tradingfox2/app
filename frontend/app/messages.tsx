@@ -6,6 +6,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { api, DmThread } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { Avatar } from "@/src/components/social/avatar";
 
 export default function MessagesScreen() {
   const router = useRouter(); const { t, formatDate } = useI18n();
@@ -25,8 +26,8 @@ export default function MessagesScreen() {
       {error ? <View accessibilityRole="alert" style={styles.center}><Text style={styles.muted}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} style={styles.retry}><Text style={styles.retryText}>{t("Retry")}</Text></Pressable></View> : null}
       {!loading && !error && threads.length === 0 ? <View style={styles.center}><Ionicons name="chatbubbles-outline" size={36} color={colors.textDim} /><Text style={styles.muted}>{t("No conversations yet. Open a profile to start one with people you train with.")}</Text></View> : null}
       {threads.map(thread => <Pressable key={thread.peer?.id || thread.last_message.id} accessibilityRole="button" onPress={() => thread.peer && router.push({ pathname: "/dm/[id]", params: { id: thread.peer.id, name: thread.peer.full_name || "" } })} style={styles.row}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{(thread.peer?.full_name || "?").charAt(0).toUpperCase()}</Text></View>
-        <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.name}>{thread.peer?.full_name || t("Member")}</Text><Text numberOfLines={1} style={styles.preview}>{thread.last_message.content}</Text></View>
+        <Avatar user={thread.peer} size={44} />
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.name}>{thread.peer?.full_name || t("Member")}</Text><Text numberOfLines={1} style={styles.preview}>{thread.last_message.status === "deleted" ? t("Message deleted") : thread.last_message.content || (thread.last_message.media?.length ? t("📎 Attachment") : "")}</Text></View>
         <View style={styles.meta}><Text style={styles.time}>{formatDate(thread.last_message.created_at, { day: "numeric", month: "short" })}</Text>{thread.unread ? <View style={styles.badge}><Text style={styles.badgeText}>{thread.unread}</Text></View> : null}</View>
       </Pressable>)}
     </ScrollView>

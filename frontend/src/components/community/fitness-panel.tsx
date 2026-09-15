@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { api, type ChallengeBoard, type ChallengeMetric, type CheckinBoard } from "@/src/api";
+import { useRouter } from "expo-router";
+import { api, type ChallengeBoard, type ChallengeMetric, type CheckinBoard, type CommunityMessage, type LiveSession, type ProgramSnapshot } from "@/src/api";
+import { MANAGE_CHANNEL, POST_PROGRAM, START_LIVE_SESSION, can } from "@/src/permissions";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -15,9 +17,11 @@ const UNITS: Record<ChallengeMetric, string> = {
  * `refreshKey` changes whenever the channel's messages change, so a check-in
  * posted from the composer updates the streak without a separate round trip.
  */
-export function FitnessPanel({ channelId, kind, refreshKey }: { channelId: string; kind: string; refreshKey: number }) {
+export function FitnessPanel({ channelId, kind, refreshKey, mask = 0, userId }: { channelId: string; kind: string; refreshKey: number; mask?: number; userId?: string }) {
   if (kind === "checkin") return <CheckinPanel channelId={channelId} refreshKey={refreshKey} />;
   if (kind === "challenge") return <ChallengePanel channelId={channelId} refreshKey={refreshKey} />;
+  if (kind === "program") return <ProgramPanel channelId={channelId} refreshKey={refreshKey} mask={mask} />;
+  if (kind === "live") return <LivePanel channelId={channelId} refreshKey={refreshKey} mask={mask} userId={userId} />;
   return null;
 }
 
@@ -108,6 +112,173 @@ function ChallengePanel({ channelId, refreshKey }: { channelId: string; refreshK
   </View>;
 }
 
+// --------------------------------------------------------------------------
+// Program channels
+// --------------------------------------------------------------------------
+
+type OwnProgram = { id: string; params?: { goal?: string; level?: string; days_per_week?: number }; program?: { weeks?: unknown[] }; created_at?: string };
+
+/** The strip at the top of a program channel: the library, and — for
+ *  members with POST_PROGRAM — sharing one of their own programs. */
+function ProgramPanel({ channelId, refreshKey, mask }: { channelId: string; refreshKey: number; mask: number }) {
+  const { t } = useI18n();
+  const [count, setCount] = useState<number | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [mine, setMine] = useState<OwnProgram[] | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    api.sharedPrograms(channelId).then(rows => { if (!cancelled) setCount(rows.length); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [channelId, refreshKey]);
+  const open = () => {
+    setPicking(value => !value);
+    if (!mine) api.programs().then(rows => setMine(rows as OwnProgram[])).catch(() => setMine([]));
+  };
+  const share = async (program: OwnProgram) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { await api.shareProgram(channelId, program.id, note.trim()); setPicking(false); setNote(""); setCount(value => (value ?? 0) + 1); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { setBusy(false); }
+  };
+  return <View style={styles.panel} testID="program-panel">
+    <View style={styles.row}>
+      <Ionicons name="barbell" size={22} color={colors.brand} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.headline}>{t("PROGRAM LIBRARY")}</Text>
+        <Text style={styles.meta}>{count === null ? "" : t("{count} shared programs").replace("{count}", String(count))}</Text>
+      </View>
+      {can(mask, POST_PROGRAM) ? <Pressable accessibilityRole="button" testID="share-program" onPress={open} style={styles.primary}><Text style={styles.primaryText}>{t("SHARE")}</Text></Pressable> : null}
+    </View>
+    <Text style={styles.rule}>{t("Tap USE THIS PROGRAM on any shared plan to make it your active program.")}</Text>
+    {picking ? <View style={{ gap: spacing.xs }} testID="program-picker">
+      <TextInput value={note} onChangeText={setNote} maxLength={1000} placeholder={t("Add a note for members (optional)")} placeholderTextColor={colors.textDim} style={styles.field} testID="program-note" />
+      {mine === null ? <ActivityIndicator color={colors.brand} /> : mine.length === 0 ? <Text style={styles.meta}>{t("You have no programs yet. Generate one on the Program screen first.")}</Text>
+        : mine.map(program => <Pressable key={program.id} accessibilityRole="button" disabled={busy} onPress={() => void share(program)} style={styles.leader} testID={`pick-program-${program.id}`}>
+          <Text style={styles.leaderName}>{[program.params?.goal, program.params?.level].filter(Boolean).join(" · ") || t("Program")}</Text>
+          <Text style={styles.leaderScore}>{t("{count} wk").replace("{count}", String(program.program?.weeks?.length ?? 0))}</Text>
+        </Pressable>)}
+    </View> : null}
+    {error ? <Text style={styles.error}>{error}</Text> : null}
+  </View>;
+}
+
+/** A shared program inside the message list. */
+export function ProgramCard({ message }: { message: CommunityMessage & { program: ProgramSnapshot } }) {
+  const { t } = useI18n();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [error, setError] = useState("");
+  const program = message.program;
+  const adopt = async () => {
+    if (state !== "idle") return;
+    setState("busy"); setError("");
+    try { await api.adoptProgram(message.id); setState("done"); }
+    catch (cause) {
+      const text = cause instanceof Error ? cause.message : t("Something went wrong");
+      if (/already/i.test(text)) setState("done"); else { setError(text); setState("idle"); }
+    }
+  };
+  return <View style={styles.programCard} testID={`program-card-${message.id}`}>
+    <View style={styles.row}>
+      <Ionicons name="barbell" size={16} color={colors.brand} />
+      <Text style={styles.headline}>{[program.goal, program.level].filter(Boolean).join(" · ").toUpperCase() || t("PROGRAM")}</Text>
+    </View>
+    <Text style={styles.meta}>{t("{weeks} weeks · {days} days/week").replace("{weeks}", String(program.weeks_count)).replace("{days}", String(program.days_per_week ?? "?"))}{program.equipment.length ? ` · ${program.equipment.join(", ")}` : ""}</Text>
+    <Pressable accessibilityRole="button" onPress={() => setOpen(value => !value)} testID={`program-toggle-${message.id}`}><Text style={styles.link}>{t(open ? "Hide the plan" : "See the plan")}</Text></Pressable>
+    {open ? program.weeks.map(week => <View key={week.week_index} style={{ gap: 2 }}>
+      <Text style={styles.leaderName}>{t("Week {n}").replace("{n}", String(week.week_index))} · {week.phase}</Text>
+      {week.days.map(day => <Text key={day.day_index} style={styles.rule}>{t("Day {n}").replace("{n}", String(day.day_index))} — {day.focus}: {day.exercises.map(ex => `${ex.name} ${ex.sets}×${ex.reps_min}-${ex.reps_max}`).join(", ")}</Text>)}
+    </View>) : null}
+    {state === "done"
+      ? <Pressable accessibilityRole="button" onPress={() => router.push("/program")} style={styles.secondary} testID={`program-open-${message.id}`}><Text style={styles.secondaryText}>{t("IN USE · OPEN")}</Text></Pressable>
+      : <Pressable accessibilityRole="button" disabled={state === "busy"} onPress={() => void adopt()} style={[styles.primary, state === "busy" && { opacity: 0.5 }]} testID={`program-adopt-${message.id}`}><Text style={styles.primaryText}>{t("USE THIS PROGRAM")}</Text></Pressable>}
+    {error ? <Text style={styles.error}>{error}</Text> : null}
+  </View>;
+}
+
+// --------------------------------------------------------------------------
+// Live channels
+// --------------------------------------------------------------------------
+
+const DURATIONS = [30, 45, 60, 90];
+
+/** Upcoming and live sessions, with RSVP, join, host controls and scheduling. */
+function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string; refreshKey: number; mask: number; userId?: string }) {
+  const { t, formatDate } = useI18n();
+  const [sessions, setSessions] = useState<LiveSession[] | null>(null);
+  const [scheduling, setScheduling] = useState(false);
+  const [form, setForm] = useState({ title: "", date: "", time: "", duration: 60, url: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try { setSessions((await api.liveSessions(channelId)).upcoming); } catch { setSessions([]); }
+  }, [channelId]);
+  useEffect(() => { void load(); }, [load, refreshKey]);
+
+  const act = async (action: () => Promise<unknown>) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { await action(); await load(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    finally { setBusy(false); }
+  };
+  const schedule = () => act(async () => {
+    const starts = new Date(`${form.date}T${form.time || "00:00"}`);
+    if (!form.title.trim() || Number.isNaN(starts.getTime())) throw new Error(t("Enter a title, a date (YYYY-MM-DD) and a time (HH:MM)."));
+    await api.scheduleLiveSession(channelId, { title: form.title.trim(), starts_at: starts.toISOString(), duration_min: form.duration, join_url: form.url.trim() || null });
+    setScheduling(false); setForm({ title: "", date: "", time: "", duration: 60, url: "" });
+  });
+  const canHost = can(mask, START_LIVE_SESSION);
+
+  return <View style={styles.panel} testID="live-panel">
+    <View style={styles.row}>
+      <Ionicons name="radio" size={22} color={colors.brand} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.headline}>{t("LIVE SESSIONS")}</Text>
+        <Text style={styles.meta}>{sessions === null ? "" : sessions.length ? t("{count} coming up").replace("{count}", String(sessions.length)) : t("Nothing scheduled yet")}</Text>
+      </View>
+      {canHost ? <Pressable accessibilityRole="button" testID="schedule-live" onPress={() => setScheduling(value => !value)} style={styles.primary}><Text style={styles.primaryText}>{t("SCHEDULE")}</Text></Pressable> : null}
+    </View>
+    {scheduling ? <View style={{ gap: spacing.xs }} testID="live-form">
+      <TextInput value={form.title} onChangeText={title => setForm({ ...form, title })} maxLength={120} placeholder={t("Session title")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-title" />
+      <View style={{ flexDirection: "row", gap: spacing.xs }}>
+        <TextInput value={form.date} onChangeText={date => setForm({ ...form, date })} maxLength={10} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textDim} style={[styles.field, { flex: 1 }]} testID="live-date" />
+        <TextInput value={form.time} onChangeText={time => setForm({ ...form, time })} maxLength={5} placeholder="HH:MM" placeholderTextColor={colors.textDim} style={[styles.field, { width: 90 }]} testID="live-time" />
+      </View>
+      <View style={{ flexDirection: "row", gap: spacing.xs }}>{DURATIONS.map(minutes => <Pressable key={minutes} accessibilityRole="button" onPress={() => setForm({ ...form, duration: minutes })} style={[styles.secondary, form.duration === minutes && { borderColor: colors.brand }]} testID={`live-duration-${minutes}`}><Text style={styles.secondaryText}>{minutes} min</Text></Pressable>)}</View>
+      <TextInput value={form.url} onChangeText={url => setForm({ ...form, url })} maxLength={500} autoCapitalize="none" placeholder={t("Join link (https://…) — Zoom, Meet, YouTube")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-url" />
+      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void schedule()} style={styles.primary} testID="live-submit"><Text style={styles.primaryText}>{t("SCHEDULE SESSION")}</Text></Pressable>
+    </View> : null}
+    {(sessions || []).map(session => {
+      const hosting = session.host_id === userId;
+      const manage = hosting ? canHost : canHost && can(mask, MANAGE_CHANNEL);
+      const live = session.status === "live";
+      return <View key={session.id} style={styles.liveRow} testID={`live-${session.id}`}>
+        <View style={styles.row}>
+          {live ? <View style={styles.liveBadge}><Text style={styles.liveBadgeText}>{t("LIVE")}</Text></View> : null}
+          <Text style={[styles.leaderName, { fontWeight: "900" }]} numberOfLines={1}>{session.title}</Text>
+        </View>
+        <Text style={styles.meta}>{formatDate(session.starts_at, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {session.duration_min} min · {session.host?.full_name || t("Coach")} · {t("{count} going").replace("{count}", String(session.rsvp_count))}</Text>
+        <View style={[styles.row, { flexWrap: "wrap" }]}>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => session.rsvped ? api.cancelRsvp(session.id) : api.rsvpLive(session.id))} style={session.rsvped ? styles.secondary : styles.primary} testID={`live-rsvp-${session.id}`}>
+            <Text style={session.rsvped ? styles.secondaryText : styles.primaryText}>{t(session.rsvped ? "GOING ✓" : "I'M IN")}</Text>
+          </Pressable>
+          {session.join_url && (live || hosting) ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.primary} testID={`live-join-${session.id}`}><Text style={styles.primaryText}>{t("JOIN")}</Text></Pressable> : null}
+          {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.startLive(session.id))} style={styles.secondary} testID={`live-start-${session.id}`}><Text style={styles.secondaryText}>{t("GO LIVE")}</Text></Pressable> : null}
+          {manage && live ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.endLive(session.id))} style={styles.secondary} testID={`live-end-${session.id}`}><Text style={styles.secondaryText}>{t("END")}</Text></Pressable> : null}
+          {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.cancelLive(session.id))} style={styles.secondary} testID={`live-cancel-${session.id}`}><Text style={[styles.secondaryText, { color: colors.error }]}>{t("CANCEL")}</Text></Pressable> : null}
+        </View>
+      </View>;
+    })}
+    {error ? <Text style={styles.error}>{error}</Text> : null}
+  </View>;
+}
+
 const styles = StyleSheet.create({
   panel: { margin: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface2, gap: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
@@ -127,4 +298,10 @@ const styles = StyleSheet.create({
   secondary: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   secondaryText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   error: { color: colors.error, fontSize: 12 },
+  field: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
+  link: { color: colors.brand, fontWeight: "800", fontSize: 12 },
+  programCard: { marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.bg, gap: spacing.xs },
+  liveRow: { gap: 4, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  liveBadge: { backgroundColor: colors.error, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1 },
+  liveBadgeText: { color: colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 });

@@ -15,6 +15,7 @@ import { useAuth } from "@/src/auth-context";
 import { api, type SupportedLocale } from "@/src/api";
 import { card, colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { Avatar } from "@/src/components/social/avatar";
 
 const PLANS: { key: string; name: string; price: string; features: string[] }[] = [
   { key: "free", name: "FREE", price: "€0", features: ["Workout tracker", "50 exercises", "Community feed"] },
@@ -133,12 +134,19 @@ export default function Profile() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.hero}>
           <View style={styles.heroAvatar}>
-            <Text style={styles.heroAvatarTxt}>
-              {(user?.full_name ?? user?.email ?? "?").charAt(0).toUpperCase()}
-            </Text>
+            <Avatar user={user ? { full_name: user.full_name ?? user.email, avatar_url: user.avatar_url } : null} size={72} />
           </View>
           <Text style={styles.heroName}>{user?.full_name ?? user?.email}</Text>
           <Text style={styles.heroRole}>{user?.role?.toUpperCase()}</Text>
+          {user?.bio ? <Text style={styles.refMeta} testID="my-bio">{user.bio}</Text> : null}
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            <Pressable accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.logoutBtn}>
+              <Ionicons name="create-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("EDIT PROFILE")}</Text>
+            </Pressable>
+            {user ? <Pressable accessibilityRole="button" testID="view-my-profile" onPress={() => router.push({ pathname: "/user/[id]", params: { id: user.id } })} style={styles.logoutBtn}>
+              <Ionicons name="person-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("VIEW PROFILE")}</Text>
+            </Pressable> : null}
+          </View>
           <Pressable
             testID="logout-btn"
             accessibilityRole="button"
@@ -197,6 +205,20 @@ export default function Profile() {
             </View>
             {unreadCount > 0 ? <View testID="notification-badge" style={styles.badge}><Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text></View> : null}
             <Ionicons name="notifications" size={28} color={colors.brand} />
+          </Pressable>
+          <Pressable testID="open-notification-settings" style={styles.refCard} onPress={() => router.push("/notification-settings")}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refLabel}>{t("NOTIFICATION SETTINGS")}</Text>
+              <Text style={styles.refMeta}>{t("Choose what reaches you, in the app and on your phone.")}</Text>
+            </View>
+            <Ionicons name="options" size={28} color={colors.brand} />
+          </Pressable>
+          <Pressable testID="open-saved" style={styles.refCard} onPress={() => router.push("/saved")}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refLabel}>{t("SAVED POSTS")}</Text>
+              <Text style={styles.refMeta}>{t("Posts you bookmarked. Only you can see this list.")}</Text>
+            </View>
+            <Ionicons name="bookmark" size={28} color={colors.brand} />
           </Pressable>
           {user?.staff_role ? (
             <Pressable testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>

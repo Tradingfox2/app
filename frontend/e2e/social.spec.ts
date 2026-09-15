@@ -48,7 +48,8 @@ test("feed renders posts, likes toggle from server counts and reposts are single
   const repost = page.getByRole("button", { name: "Repost", exact: true }).first();
   await repost.click();
   await expect(page.getByText(/Fixture Me reposted/)).toBeVisible();
-  await expect(page.getByTestId("post-post-1").getByRole("button", { name: "Repost", exact: true })).toBeDisabled();
+  // A second tap takes the repost back rather than doing nothing.
+  await expect(page.getByTestId("post-post-1").getByRole("button", { name: "Undo repost", exact: true })).toBeVisible();
   expect(reposts).toBe(1);
   await page.getByTestId("feed-scope-following").click();
   await expect(page.getByText("Follow athletes and coaches to build your feed", { exact: true })).toBeVisible();

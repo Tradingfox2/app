@@ -3,11 +3,14 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { api, Community, User } from "@/src/api";
+import { api, COMMUNITY_CATEGORIES, type CommunityCategory, Community, User } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
+import { Avatar } from "@/src/components/social/avatar";
+
+const DISCOVER_PAGE = 50;
 
 type Tab = "feed" | "discover" | "mine" | "coaches" | "rankings";
 type Coach = User & { community_count: number; member_count: number };
@@ -22,6 +25,11 @@ export default function CommunityScreen() {
   const [mine, setMine] = useState<Community[]>([]);
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [rankings, setRankings] = useState<Awaited<ReturnType<typeof api.communityRankings>> | null>(null);
+  const [category, setCategory] = useState<CommunityCategory | null>(null);
+  const [moreCommunities, setMoreCommunities] = useState(false);
+  const [trending, setTrending] = useState<{ tag: string; posts: number }[]>([]);
+  const [archived, setArchived] = useState<Community[]>([]);
+  const [dmUnread, setDmUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -32,10 +40,15 @@ export default function CommunityScreen() {
     setError("");
     try {
       const [discoverResult, mineResult, coachResult, rankingResult] = await Promise.all([
-        api.communities(), api.communities("mine"), api.coaches(), api.communityRankings(),
+        api.communities("discover", { category }), api.communities("mine"), api.coaches(), api.communityRankings(),
       ]);
       if (requestRevision !== revision.current) return;
       setCommunities(discoverResult);
+      setMoreCommunities(discoverResult.length === DISCOVER_PAGE);
+      // Extras: none of these may take the tab down if they fail.
+      api.trendingTags().then(rows => { if (requestRevision === revision.current) setTrending(rows); }).catch(() => undefined);
+      api.archivedCommunities().then(rows => { if (requestRevision === revision.current) setArchived(rows); }).catch(() => undefined);
+      api.dmUnreadCount().then(row => { if (requestRevision === revision.current) setDmUnread(row.count); }).catch(() => undefined);
       setMine(mineResult);
       setCoaches(coachResult);
       setRankings(rankingResult);
@@ -47,7 +60,19 @@ export default function CommunityScreen() {
         setRefreshing(false);
       }
     }
-  }, [t]);
+  }, [t, category]);
+
+  const loadMoreCommunities = async () => {
+    try {
+      const rows = await api.communities("discover", { category, offset: communities.length });
+      setCommunities(current => [...current, ...rows.filter(row => !current.some(existing => existing.id === row.id))]);
+      setMoreCommunities(rows.length === DISCOVER_PAGE);
+    } catch { setError(t("Something went wrong")); }
+  };
+  const restore = async (community: Community) => {
+    try { await api.restoreCommunity(community.id); await load(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+  };
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -72,6 +97,10 @@ export default function CommunityScreen() {
           </View>
           <Pressable accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
             <Ionicons name="chatbubbles-outline" size={20} color={colors.brand} />
+            {dmUnread ? <View style={styles.headerBadge} testID="dm-unread-badge"><Text style={styles.headerBadgeText}>{dmUnread > 99 ? "99+" : dmUnread}</Text></View> : null}
+          </Pressable>
+          <Pressable accessibilityLabel={t("Saved posts")} testID="open-saved" style={styles.headerAction} onPress={() => router.push("/saved")}>
+            <Ionicons name="bookmark-outline" size={20} color={colors.brand} />
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}><Ionicons name="search" size={20} color={colors.brand} /></Pressable><Pressable accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
             <Ionicons name={isCoach ? "analytics" : "ribbon"} size={20} color={colors.brand} />
@@ -100,6 +129,12 @@ export default function CommunityScreen() {
         {tab === "feed" ? (
           <View testID="feed">
             <Composer onPublished={feed.prepend} />
+            {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
+              <Ionicons name="trending-up" size={16} color={colors.brand} style={{ alignSelf: "center" }} />
+              {trending.map(row => <Pressable key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>
+                <Text style={styles.scopeText}>#{row.tag} · {formatNumber(row.posts)}</Text>
+              </Pressable>)}
+            </ScrollView> : null}
             <View style={styles.scopeRow}>
               {(["all", "following", "mine"] as const).map(scope => (
                 <Pressable key={scope} accessibilityRole="button" accessibilityState={{ selected: feed.scope === scope }} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
@@ -131,6 +166,11 @@ export default function CommunityScreen() {
               <Text style={styles.sectionTitle}>{t(tab === "discover" ? "TRENDING COMMUNITIES" : "YOUR COMMUNITIES")}</Text>
               <Text style={styles.count}>{formatNumber((tab === "discover" ? communities : mine).length)}</Text>
             </View>
+            {tab === "discover" ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.sm }} testID="category-filter">
+              {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Pressable key={item ?? "all"} accessibilityRole="button" testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
+                <Text style={[styles.scopeText, category === item && styles.scopeTextActive]}>{t(item ? item.replace("_", " ").toUpperCase() : "ALL")}</Text>
+              </Pressable>)}
+            </ScrollView> : null}
             {(tab === "discover" ? communities : mine).map((community, index) => (
               <Pressable key={community.id} testID={`community-${community.id}`} style={styles.communityRow} onPress={() => openCommunity(community)}>
                 <View style={styles.rankMark}><Text style={styles.rankMarkText}>{String(index + 1).padStart(2, "0")}</Text></View>
@@ -151,6 +191,14 @@ export default function CommunityScreen() {
               </Pressable>
             ))}
             {(tab === "discover" ? communities : mine).length === 0 ? <Empty icon="people-outline" text={t(tab === "discover" ? "No communities yet" : "You have not joined a community yet")} /> : null}
+            {tab === "discover" && moreCommunities ? <Pressable accessibilityRole="button" testID="communities-more" onPress={() => void loadMoreCommunities()} style={styles.loadMore}><Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text></Pressable> : null}
+            {tab === "mine" && archived.length ? <>
+              <View style={[styles.sectionHead, { marginTop: spacing.xl }]}><Text style={styles.sectionTitle}>{t("ARCHIVED BY YOU")}</Text></View>
+              {archived.map(row => <View key={row.id} style={styles.rankingRow} testID={`archived-${row.id}`}>
+                <Text numberOfLines={1} style={styles.rankingName}>{row.name}</Text>
+                <Pressable accessibilityRole="button" testID={`restore-${row.id}`} onPress={() => void restore(row)} style={styles.scopeChip}><Text style={styles.scopeText}>{t("RESTORE")}</Text></Pressable>
+              </View>)}
+            </> : null}
           </View>
         ) : null}
 
@@ -158,14 +206,14 @@ export default function CommunityScreen() {
           <View style={styles.list}>
             <View style={styles.sectionHead}><Text style={styles.sectionTitle}>{t("TOP COACHES")}</Text><Text style={styles.count}>{formatNumber(coaches.length)}</Text></View>
             {coaches.map((coach) => (
-              <View key={coach.id} style={styles.coachRow}>
-                <View style={styles.avatar}><Text style={styles.avatarText}>{(coach.full_name || "C").charAt(0).toUpperCase()}</Text></View>
+              <Pressable key={coach.id} accessibilityRole="button" testID={`coach-${coach.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: coach.id } })} style={styles.coachRow}>
+                <Avatar user={coach} size={44} />
                 <View style={styles.communityCopy}>
                   <Text style={styles.communityName}>{coach.full_name || t("Coach")}</Text>
                   <Text style={styles.meta}>{formatNumber(coach.member_count)} {t("members")} · {formatNumber(coach.community_count)} {t("communities")}</Text>
                 </View>
                 <Ionicons name="checkmark-circle" size={19} color={colors.brand} />
-              </View>
+              </Pressable>
             ))}
             {coaches.length === 0 ? <Empty icon="ribbon-outline" text={t("No approved coaches yet")} /> : null}
           </View>
@@ -182,18 +230,18 @@ export default function CommunityScreen() {
             ))}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP COACHES")}</Text>
             {(rankings?.coaches || []).map((row, index) => (
-              <View key={row.coach?.id || index} style={styles.rankingRow}>
+              <Pressable key={row.coach?.id || index} accessibilityRole="button" onPress={() => row.coach && router.push({ pathname: "/user/[id]", params: { id: row.coach.id } })} style={styles.rankingRow}>
                 <Text style={styles.rankingNumber}>{index + 1}</Text><Text numberOfLines={1} style={styles.rankingName}>{row.coach?.full_name || t("Coach")}</Text><Text style={styles.rankingValue}>{formatNumber(row.member_count)}</Text>
-              </View>
+              </Pressable>
             ))}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP USERS")}</Text>
             <Text style={styles.rankingNote}>{t("Ranked by active days, not message volume.")}</Text>
             {(rankings?.users || []).map((row, index) => (
-              <View key={row.id} style={styles.rankingRow}>
+              <Pressable key={row.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: row.id } })} style={styles.rankingRow}>
                 <Text style={styles.rankingNumber}>{index + 1}</Text>
                 <Text numberOfLines={1} style={styles.rankingName}>{row.full_name || t("Member")}</Text>
                 <Text style={styles.rankingValue}>{t("{count} active days", { count: formatNumber(row.active_days) })}</Text>
-              </View>
+              </Pressable>
             ))}
             {!rankings?.users?.length ? <Text style={styles.rankingNote}>{t("No opted-in activity yet")}</Text> : null}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP CHANNELS")}</Text>
@@ -221,6 +269,8 @@ const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: sp
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: "row", alignItems: "center" },
   headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.brand }, title: { ...type.screenTitle, marginTop: 2 },
   headerAction: { width: 44, height: 44, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", marginLeft: spacing.sm },
+  headerBadge: { position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  headerBadgeText: { color: colors.brandOn, fontSize: 10, fontWeight: "900" },
   scopeRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   scopeChip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" }, scopeChipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
   scopeText: { color: colors.textMuted, fontSize: 10, fontWeight: "900", letterSpacing: 1 }, scopeTextActive: { color: colors.brand },

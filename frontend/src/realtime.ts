@@ -60,7 +60,15 @@ export function useRealtimeChannel(
       client.on("connecting", () => !cancelled && setConnected(false));
       client.on("disconnected", () => !cancelled && setConnected(false));
 
-      subscription = client.newSubscription(channel);
+      // Each room needs its own token, minted only after the API has checked
+      // the member may see it — the socket enforces the same rules as HTTP.
+      subscription = client.newSubscription(channel, {
+        getToken: async () => {
+          const minted = await api.realtimeSubscriptionToken(channel);
+          if (!minted.token) throw new Error("Realtime subscription refused");
+          return minted.token;
+        },
+      });
       subscription.on("publication", (ctx: PublicationContext) => {
         const data = ctx.data as RealtimeEvent | null;
         if (data && typeof data.type === "string") handler.current(data);
@@ -80,6 +88,53 @@ export function useRealtimeChannel(
       }
     };
   }, [channel]);
+
+  return { connected };
+}
+
+/**
+ * The member's own `user:{id}` channel — DMs, typing, read receipts, mention
+ * nudges. The server subscribes the connection to it through the token's
+ * `channels` claim, so there is nothing to subscribe to here and nobody can
+ * ask for someone else's. Same fallback contract: `connected: false` means
+ * keep polling.
+ */
+export function useRealtimeUser(enabled: boolean, onEvent: (event: RealtimeEvent) => void): { connected: boolean } {
+  const [connected, setConnected] = useState(false);
+  const handler = useRef(onEvent);
+  handler.current = onEvent;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let client: Centrifuge | null = null;
+    let cancelled = false;
+    (async () => {
+      let config: { enabled: boolean; token: string | null; url: string | null };
+      try { config = await api.realtimeToken(); } catch { return; }
+      if (cancelled || !config.enabled || !config.token || !config.url) return;
+      client = new Centrifuge(websocketUrl(config.url), {
+        token: config.token,
+        getToken: async () => {
+          const refreshed = await api.realtimeToken();
+          if (!refreshed.token) throw new Error("Realtime token unavailable");
+          return refreshed.token;
+        },
+      });
+      client.on("connected", () => !cancelled && setConnected(true));
+      client.on("disconnected", () => !cancelled && setConnected(false));
+      // Server-side subscriptions deliver here rather than on a Subscription.
+      client.on("publication", ctx => {
+        const data = ctx.data as RealtimeEvent | null;
+        if (data && typeof data.type === "string") handler.current(data);
+      });
+      client.connect();
+    })();
+    return () => {
+      cancelled = true;
+      setConnected(false);
+      try { client?.disconnect(); } catch { /* never opened */ }
+    };
+  }, [enabled]);
 
   return { connected };
 }
