@@ -54,6 +54,8 @@ LIMITS: dict[str, tuple[int, int]] = {
     "bookmark": (120, 60),
     "vote": (60, 60),
     "checkout": (10, 3600),
+    # One hit per request, and a request carries at most 25 events.
+    "analytics": (60, 60),
 }
 
 

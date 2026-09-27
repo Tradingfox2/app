@@ -4,16 +4,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole } from "@/src/api";
+import { AnalyticsPanel } from "@/src/components/admin/analytics-panel";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
-type Tab = "overview" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit";
+type Tab = "overview" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit" | "analytics";
 type CoachFilter = "pending" | "approved" | "rejected" | "suspended";
 type Status = "all" | "active" | "suspended" | "staff";
 
 const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: "overview", label: "OVERVIEW", icon: "grid-outline" },
+  { id: "analytics", label: "ANALYTICS", icon: "pulse-outline" },
   { id: "reports", label: "REPORTS", icon: "flag-outline" },
   { id: "coaches", label: "COACHES", icon: "ribbon-outline" },
   { id: "joins", label: "JOIN REQUESTS", icon: "enter-outline" },
@@ -179,7 +181,7 @@ export default function AdminConsole() {
       </View>
 
       <View style={styles.tabs}>
-        {NAV.map(item => {
+        {NAV.filter(item => item.id !== "analytics" || can("analytics.read")).map(item => {
           const count = item.id === "reports" ? overview?.queues.open_reports
             : item.id === "coaches" ? overview?.queues.pending_coach_applications
             : item.id === "joins" ? overview?.queues.pending_memberships
@@ -439,6 +441,8 @@ export default function AdminConsole() {
             </Pressable>
           ))}
         </> : null}
+
+        {tab === "analytics" && can("analytics.read") ? <AnalyticsPanel /> : null}
 
         {tab === "audit" ? <>
           <Text style={styles.hint}>{t("Append-only record of every staff action.")}</Text>

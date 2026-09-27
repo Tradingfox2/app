@@ -4,7 +4,7 @@
 > decorators on 2026-09-15 (branch `feature/interactive-muscle-explorer`).
 > All paths are under `/api`. Regenerate rather than hand-edit.
 
-**188 routes.**
+**188 routes** as of 2026-09-15, plus `POST /events` and `GET /admin/analytics` (2026-09-27).
 
 ## `backend/server.py` (29)
 
@@ -248,3 +248,10 @@
 |---|---|---|
 | GET | `/tips/daily` | `tips_daily` |
 | GET | `/coach/tip` | `coach_tip` |
+
+## Added 2026-09-27 (`backend/routers/analytics.py`)
+
+| Method | Path | Handler |
+|---|---|---|
+| POST | `/events` | `ingest` |
+| GET | `/admin/analytics` | `event_counts` |

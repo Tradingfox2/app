@@ -15,13 +15,17 @@ from server import current_user, db, new_id, now
 StaffRole = Literal["support", "moderator", "admin"]
 
 # Least privilege: each role inherits the one before it.
-# Support owns the ticket queue (read and reply). Moderator and admin inherit it.
+# Support owns the ticket queue and can read product analytics. Higher roles inherit both.
 PERMISSIONS: dict[str, set[str]] = {
-    "support": {"users.read", "reports.read", "audit.read", "tickets.read", "tickets.write"},
-    "moderator": {"users.read", "reports.read", "audit.read", "tickets.read", "tickets.write",
+    "support": {"users.read", "reports.read", "audit.read", "analytics.read",
+                "tickets.read", "tickets.write"},
+    "moderator": {"users.read", "reports.read", "audit.read", "analytics.read",
+                  "tickets.read", "tickets.write",
                   "reports.resolve", "content.moderate", "users.suspend"},
-    "admin": {"users.read", "reports.read", "audit.read", "tickets.read", "tickets.write",
-              "reports.resolve", "content.moderate", "users.suspend", "staff.manage", "coaches.review"},
+    "admin": {"users.read", "reports.read", "audit.read", "analytics.read",
+              "tickets.read", "tickets.write",
+              "reports.resolve", "content.moderate", "users.suspend", "staff.manage",
+              "coaches.review"},
 }
 STAFF_ROLES = tuple(PERMISSIONS)
 
