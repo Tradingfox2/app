@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { api, type ChallengeBoard, type ChallengeMetric, type CheckinBoard, type CommunityMessage, type LiveSession, type ProgramSnapshot } from "@/src/api";
 import { MANAGE_CHANNEL, POST_PROGRAM, START_LIVE_SESSION, can } from "@/src/permissions";
 import { SchedulePicker, nextSlot } from "./schedule-picker";
@@ -211,6 +211,7 @@ const DURATIONS = [30, 45, 60, 90];
 /** Upcoming and live sessions, with RSVP, join, host controls and scheduling. */
 function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string; refreshKey: number; mask: number; userId?: string }) {
   const { t, formatDate } = useI18n();
+  const router = useRouter();
   const [sessions, setSessions] = useState<LiveSession[] | null>(null);
   const [scheduling, setScheduling] = useState(false);
   const [form, setForm] = useState({ title: "", starts: nextSlot(), duration: 60, url: "" });
@@ -219,6 +220,13 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
   const load = useCallback(async () => {
     try { setSessions((await api.liveSessions(channelId)).upcoming); } catch { setSessions([]); }
   }, [channelId]);
+  // The badge is the session's persisted status. Poll so a member watching the
+  // list sees the coach go live, and so returning from the room drops an ended one.
+  useFocusEffect(useCallback(() => {
+    void load();
+    const timer = setInterval(() => void load(), 4000);
+    return () => clearInterval(timer);
+  }, [load]));
   useEffect(() => { void load(); }, [load, refreshKey]);
 
   const act = async (action: () => Promise<unknown>) => {
@@ -258,7 +266,7 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
       const live = session.status === "live";
       return <View key={session.id} style={styles.liveRow} testID={`live-${session.id}`}>
         <View style={styles.row}>
-          {live ? <View style={styles.liveBadge}><Text style={styles.liveBadgeText}>{t("LIVE")}</Text></View> : null}
+          {live ? <View style={styles.liveBadge} testID={`live-badge-${session.id}`}><Text style={styles.liveBadgeText}>{t("LIVE")}</Text></View> : null}
           <Text style={[styles.leaderName, { fontWeight: "900" }]} numberOfLines={1}>{session.title}</Text>
         </View>
         <Text style={styles.meta}>{formatDate(session.starts_at, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {session.duration_min} min · {session.host?.full_name || t("Coach")} · {t("{count} going").replace("{count}", String(session.rsvp_count))}</Text>
@@ -266,8 +274,9 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
           <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => session.rsvped ? api.cancelRsvp(session.id) : api.rsvpLive(session.id))} style={session.rsvped ? styles.secondary : styles.primary} testID={`live-rsvp-${session.id}`}>
             <Text style={session.rsvped ? styles.secondaryText : styles.primaryText}>{t(session.rsvped ? "GOING ✓" : "I'M IN")}</Text>
           </Pressable>
-          {session.join_url && (live || hosting) ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.primary} testID={`live-join-${session.id}`}><Text style={styles.primaryText}>{t("JOIN")}</Text></Pressable> : null}
-          {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.startLive(session.id))} style={styles.secondary} testID={`live-start-${session.id}`}><Text style={styles.secondaryText}>{t("GO LIVE")}</Text></Pressable> : null}
+          {live ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })} style={styles.primary} testID={`live-join-${session.id}`}><Text style={styles.primaryText}>{t("JOIN")}</Text></Pressable> : null}
+          {session.join_url && (live || hosting) ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.secondary} testID={`live-external-${session.id}`}><Text style={styles.secondaryText}>{t("OPEN LINK")}</Text></Pressable> : null}
+          {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(async () => { await api.startLive(session.id); router.push({ pathname: "/live/[id]", params: { id: session.id } }); })} style={styles.secondary} testID={`live-start-${session.id}`}><Text style={styles.secondaryText}>{t("GO LIVE")}</Text></Pressable> : null}
           {manage && live ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.endLive(session.id))} style={styles.secondary} testID={`live-end-${session.id}`}><Text style={styles.secondaryText}>{t("END")}</Text></Pressable> : null}
           {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.cancelLive(session.id))} style={styles.secondary} testID={`live-cancel-${session.id}`}><Text style={[styles.secondaryText, { color: colors.error }]}>{t("CANCEL")}</Text></Pressable> : null}
         </View>
