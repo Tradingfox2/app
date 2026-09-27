@@ -10,9 +10,10 @@ in another PostgreSQL instance.
 ```
 supabase/
 ├── migrations/
-│   ├── 001_init.sql   -- tables, indexes, foreign keys
-│   ├── 002_rls.sql    -- Row Level Security policies + helper function
-│   └── 003_community_social.sql
+│   ├── 001_init.sql                    -- tables, indexes, foreign keys
+│   ├── 002_rls.sql                     -- Row Level Security policies + helper function
+│   ├── 003_community_social.sql        -- community, social graph, media
+│   └── 004_support_and_dual_media.sql  -- support tickets + admin_media
 ├── seed.sql           -- 15 muscles + 50 exercises
 └── README.md
 ```
@@ -30,6 +31,10 @@ supabase/
 | `communities`, `community_members`, `posts` | Social layer |
 | `group_sessions`, `session_participants` | Live group coaching sessions |
 | `subscriptions`, `payouts`, `referrals` | Monetization layer |
+| `media` | End-user uploads (`users/{user_id}/…` keys) |
+| `admin_media` | Staff assets (`admin/{staff_id}/…`); purposes announcement, moderation evidence, exercise library, community asset, other |
+| `support_tickets` | User support tickets (billing, account, bug, feature, other); status open/pending/closed |
+| `support_ticket_messages` | Ticket thread; optional `media_id` points at `media` |
 
 ## RLS model
 
@@ -43,6 +48,10 @@ Every user-owned table has RLS enabled. Two access rules apply everywhere:
 
 Reference tables `muscles` and `exercises` are readable by everyone.
 
+`admin_media`, `support_tickets`, and `support_ticket_messages` enable RLS
+and ship with no policies, so a direct client is denied. FastAPI uses the
+service role and enforces access in the API.
+
 ## Deploy to Supabase
 
 ### Option A — Supabase Dashboard (fastest)
@@ -51,7 +60,9 @@ Reference tables `muscles` and `exercises` are readable by everyone.
 2. In **SQL Editor**, paste and run in order:
    1. `migrations/001_init.sql`
    2. `migrations/002_rls.sql`
-   3. `seed.sql`
+   3. `migrations/003_community_social.sql`
+   4. `migrations/004_support_and_dual_media.sql`
+   5. `seed.sql`
 3. In **Project Settings → API**, copy:
    - `Project URL` → `EXPO_PUBLIC_SUPABASE_URL`
    - `anon public key` → `EXPO_PUBLIC_SUPABASE_ANON_KEY`

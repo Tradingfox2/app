@@ -338,6 +338,32 @@ export type LiveSession = {
   ended_at: string | null;
   rsvp_count: number;
   rsvped: boolean;
+  /** Centrifugo channel for the in-app room, `live:{id}`. */
+  realtime_channel?: string;
+};
+
+export type LiveParticipant = {
+  user_id: string;
+  joined_at: string;
+  user: MentionedUser | null;
+};
+
+export type LiveRoom = {
+  session: LiveSession;
+  participants: LiveParticipant[];
+  realtime_channel: string;
+  /** Centrifugo subscription JWT when realtime is configured; otherwise null. */
+  subscription_token: string | null;
+  joined: boolean;
+};
+
+export type LiveChatMessage = {
+  id: string;
+  session_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+  author: MentionedUser | null;
 };
 
 export type CommunityInsights = {
@@ -785,6 +811,11 @@ export const api = {
   startLive: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/start`, { method: "POST" }),
   endLive: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/end`, { method: "POST" }),
   cancelLive: (sessionId: string) => request<void>(`/live-sessions/${sessionId}`, { method: "DELETE" }),
+  liveSession: (sessionId: string) => request<LiveRoom>(`/live-sessions/${sessionId}`),
+  joinLive: (sessionId: string) => request<LiveRoom>(`/live-sessions/${sessionId}/join`, { method: "POST" }),
+  liveMessages: (sessionId: string) => request<LiveChatMessage[]>(`/live-sessions/${sessionId}/messages`),
+  sendLiveMessage: (sessionId: string, content: string) =>
+    request<LiveChatMessage>(`/live-sessions/${sessionId}/messages`, { method: "POST", body: JSON.stringify({ content }) }),
   channelTyping: (channelId: string) => request<void>(`/channels/${channelId}/typing`, { method: "POST" }),
   searchChannel: (channelId: string, q: string) =>
     request<CommunityMessage[]>(`/channels/${channelId}/search?q=${encodeURIComponent(q)}`),

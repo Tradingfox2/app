@@ -363,6 +363,10 @@ async def lifespan(app: FastAPI):
     await db.program_adoptions.create_index([("message_id", 1), ("user_id", 1)], unique=True)
     await db.live_sessions.create_index([("channel_id", 1), ("status", 1), ("starts_at", 1)])
     await db.live_rsvps.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.live_participants.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.live_messages.create_index([("session_id", 1), ("created_at", 1)])
+    await db.insight_events.create_index([("session_id", 1), ("created_at", -1)])
+    await db.insight_events.create_index([("name", 1), ("created_at", -1)])
     await db.post_saves.create_index([("user_id", 1), ("post_id", 1)], unique=True)
     await db.post_saves.create_index([("user_id", 1), ("created_at", -1)])
     await db.comment_likes.create_index([("comment_id", 1), ("user_id", 1)], unique=True)
@@ -385,6 +389,17 @@ async def lifespan(app: FastAPI):
     await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
     await db.direct_messages.create_index([("recipient_id", 1), ("read_at", 1)])
     await db.media.create_index([("user_id", 1), ("created_at", -1)])
+    # Mirrors 004_support_and_dual_media.sql: unique object key, plus the two
+    # partial indexes that skip soft-deleted staff assets.
+    await db.admin_media.create_index("key", unique=True)
+    await db.admin_media.create_index(
+        [("uploader_staff_id", 1), ("created_at", -1)],
+        partialFilterExpression={"deleted_at": None},
+    )
+    await db.admin_media.create_index(
+        [("purpose", 1), ("created_at", -1)],
+        partialFilterExpression={"deleted_at": None},
+    )
     await db.reports.create_index([("status", 1), ("created_at", 1)])
     await db.reports.create_index([("reporter_id", 1), ("target_id", 1), ("status", 1)])
     await db.audit_log.create_index([("created_at", -1)])
