@@ -4,8 +4,10 @@ One Mongo collection, `analytics_events`, is the only source for the staff
 rollup. Counts are aggregations over stored rows. Nothing here samples,
 estimates, or invents a number.
 
-The SQL mirror is `supabase/migrations/004_analytics_events.sql`. FastAPI
-writes through Motor; there is no SQLAlchemy layer.
+Live source of truth is this Mongo collection. FastAPI writes and reads it
+through Motor. `supabase/migrations/005_analytics_events.sql` is a schema
+mirror only; runtime code does not write analytics to Postgres. There is
+no SQLAlchemy layer.
 
 `ts` is the server's UTC receipt time. Client clocks cannot move an event
 into or out of the 24h / 7d windows. `actor_id`, `role` and `source` are

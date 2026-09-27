@@ -1,13 +1,16 @@
 -- ============================================================================
--- IronFlow — Product analytics events
+-- IronFlow — Product analytics events (schema mirror only)
 -- ----------------------------------------------------------------------------
--- Mirrors the MongoDB collection `analytics_events` written by FastAPI
--- (backend/analytics.py, backend/routers/analytics.py). A later move to
--- Supabase is a data copy: same names, same columns.
+-- Numbered 005 because 004 is `004_support_and_dual_media.sql`.
+--
+-- Live source of truth is the MongoDB collection `analytics_events`.
+-- FastAPI/Motor writes that collection and the admin rollup reads it
+-- (backend/analytics.py, backend/routers/analytics.py). This file keeps the
+-- Postgres shape level with Mongo, the same dual-store pattern as the other
+-- migrations. The API does not write analytics here at runtime.
 --
 -- `ts` is the API receipt time in UTC, not the device clock.
--- The API uses the service role, which bypasses RLS. No client policy is
--- granted: athletes do not read or write this table directly.
+-- RLS is on with no client policy. A future copy would use the service role.
 -- ============================================================================
 
 create table if not exists public.analytics_events (
