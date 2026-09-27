@@ -3,6 +3,7 @@ program and live channels, and owner tools."""
 import os
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from fastapi import HTTPException
 
@@ -10,6 +11,7 @@ os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
 import moderation  # noqa: E402
 import notifications  # noqa: E402
 import permissions as p  # noqa: E402
+import realtime  # noqa: E402
 import server  # noqa: E402,F401
 import social_graph  # noqa: E402
 from routers import admin, community, social  # noqa: E402
@@ -23,6 +25,7 @@ async def seed_all(db, monkeypatch):
     for collection, keys in (
         ("program_adoptions", [("message_id", 1), ("user_id", 1)]),
         ("live_rsvps", [("session_id", 1), ("user_id", 1)]),
+        ("live_participants", [("session_id", 1), ("user_id", 1)]),
     ):
         await db[collection].create_index(keys, unique=True)
 
@@ -345,6 +348,75 @@ def test_live_sessions_schedule_gather_and_notify(monkeypatch):
         assert listed["upcoming"] == [] and listed["past"][0]["status"] == "ended"
         with pytest.raises(ValueError):
             community.LiveSessionIn(title="bad link", starts_at=when, join_url="http://insecure.example")
+        assert await db.insight_events.find_one({"name": "live_session_started", "session_id": session["id"]})
+        assert await db.insight_events.find_one({"name": "live_session_ended", "session_id": session["id"]})
+    run_isolated(scenario)
+
+
+def test_joining_a_live_session_persists_presence_and_refuses_when_it_ends(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        published: list[tuple[str, str]] = []
+
+        async def capture(channel, data):
+            published.append((channel, data["type"]))
+
+        monkeypatch.setattr(community.realtime, "publish", capture)
+        monkeypatch.setattr(realtime, "CENTRIFUGO_URL", "http://centrifugo.invalid")
+        monkeypatch.setattr(realtime, "CENTRIFUGO_API_KEY", "key")
+        monkeypatch.setattr(realtime, "TOKEN_SECRET", "unit-test-secret")
+
+        cid = await kind_channel(db, "live")
+        when = datetime.now(timezone.utc) + timedelta(hours=2)
+        session = await community.schedule_live_session(
+            cid, community.LiveSessionIn(title="Mobility flow", starts_at=when), account("owner"))
+        sid = session["id"]
+        assert session["host_id"] == "owner"
+        assert session["realtime_channel"] == f"live:{sid}"
+        assert session["status"] == "scheduled" and session["started_at"] is None
+
+        await expect(409, community.join_live_session(sid, account("mem")))
+        started = await community.start_live_session(sid, account("owner"))
+        assert started["status"] == "live" and started["started_at"]
+        assert await db.insight_events.find_one({"name": "live_session_started", "actor_id": "owner", "session_id": sid})
+
+        token = await community.realtime_subscription_token(f"live:{sid}", account("mem"))
+        claims = jwt.decode(token["token"], "unit-test-secret", algorithms=["HS256"])
+        assert token["enabled"] and claims["channel"] == f"live:{sid}" and claims["sub"] == "mem"
+        await expect(403, community.realtime_subscription_token(f"live:{sid}", account("out")))
+        await expect(422, community.realtime_subscription_token("nope:x", account("mem")))
+
+        room = await community.join_live_session(sid, account("mem"))
+        assert room["joined"] and room["realtime_channel"] == f"live:{sid}"
+        assert room["subscription_token"]
+        assert [row["user_id"] for row in room["participants"]] == ["mem"]
+        assert await db.live_participants.count_documents({"session_id": sid}) == 1
+        again = await community.join_live_session(sid, account("mem"))
+        assert [row["user_id"] for row in again["participants"]] == ["mem"]
+        assert await db.insight_events.count_documents({"name": "live_session_joined", "session_id": sid}) == 1
+        await expect(403, community.join_live_session(sid, account("out")))
+
+        await expect(409, community.post_live_message(sid, community.LiveChatIn(content="not in yet"), account("owner")))
+        posted = await community.post_live_message(sid, community.LiveChatIn(content="here"), account("mem"))
+        assert posted["content"] == "here" and posted["author"]["id"] == "mem"
+
+        ended = await community.end_live_session(sid, account("owner"))
+        assert ended["status"] == "ended" and ended["ended_at"]
+        assert await db.insight_events.find_one({"name": "live_session_ended", "actor_id": "owner", "session_id": sid})
+        await expect(409, community.join_live_session(sid, account("mod")))
+        await expect(409, community.post_live_message(sid, community.LiveChatIn(content="late"), account("mem")))
+        listed = await community.list_live_sessions(cid, account("mem"))
+        assert listed["upcoming"] == [] and listed["past"][0]["status"] == "ended"
+        history = await community.list_live_messages(sid, account("mem"))
+        assert [row["content"] for row in history] == ["here"]
+        snapshot = await community.get_live_session(sid, account("mem"))
+        assert snapshot["session"]["status"] == "ended" and snapshot["joined"]
+
+        assert ("channel:ch-k", "live.started") in published
+        assert (f"live:{sid}", "presence.joined") in published
+        assert (f"live:{sid}", "chat.message") in published
+        assert (f"live:{sid}", "live.ended") in published
+        assert ("channel:ch-k", "live.ended") in published
     run_isolated(scenario)
 
 

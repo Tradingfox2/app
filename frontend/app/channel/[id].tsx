@@ -57,6 +57,7 @@ export default function ChannelScreen() {
   const lastTypingSent = useRef(0);
   const rosterFor = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [panelRefresh, setPanelRefresh] = useState(0);
   // Fall back to the baseline grant when the payload carries no mask, so an
   // older server never silently locks the composer. The API enforces regardless.
   const mask = channel?.permissions ?? DEFAULT_MEMBER;
@@ -122,7 +123,7 @@ export default function ChannelScreen() {
       setTyping(current => ({ ...current, [who.id]: { name: who.full_name || t("Someone"), until: Date.now() + TYPING_TTL_MS } }));
       return;
     }
-    if (event.type === "live.started" || event.type === "live.ended") { void load(); return; }
+    if (event.type === "live.started" || event.type === "live.ended") { setPanelRefresh(tick => tick + 1); void load(); return; }
     // Every other event mutates a row we already hold. It must never append:
     // an update for an unseen id belongs to history outside the loaded page.
     const targetId = typeof event.id === "string" ? event.id : null;
@@ -325,7 +326,7 @@ export default function ChannelScreen() {
       <Text numberOfLines={1} style={[styles.pinsItem, { flex: 1 }]}>{item.author?.full_name ? `${item.author.full_name}: ` : ""}{item.content}</Text>
       {can(mask, PIN_MESSAGE) ? <Pressable accessibilityRole="button" accessibilityLabel={t("Unpin")} testID={`unpin-${item.id}`} onPress={() => togglePin(item)}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable> : null}
     </View>)}</View> : null}
-    {id && channel?.kind ? <FitnessPanel channelId={id} kind={channel.kind} refreshKey={messages.length} mask={mask} userId={user?.id} /> : null}
+    {id && channel?.kind ? <FitnessPanel channelId={id} kind={channel.kind} refreshKey={messages.length + panelRefresh} mask={mask} userId={user?.id} /> : null}
     {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} style={styles.icon}><Text style={styles.author}>{t("Retry")}</Text></Pressable></View> : null}
     {loading ? <ActivityIndicator accessibilityLabel={t("Loading...")} color={colors.brand} /> : null}
     <FlatList data={messages} keyExtractor={item => item.id} contentContainerStyle={styles.list}
