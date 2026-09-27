@@ -12,7 +12,8 @@ Two rules make this safe to add to an existing product:
    reconciles on reconnect via Centrifugo's own history recovery. Losing a
    realtime nudge must never lose the message that triggered it.
 
-Channel naming mirrors the domain: `community:{id}`, `channel:{id}`, `user:{id}`.
+Channel naming mirrors the domain: `community:{id}`, `channel:{id}`,
+`user:{id}`, and `live:{session_id}` for an in-app live room.
 """
 from __future__ import annotations
 
@@ -51,6 +52,11 @@ def chat_channel(channel_id: str) -> str:
 
 def user_channel(user_id: str) -> str:
     return f"user:{user_id}"
+
+
+def live_channel(session_id: str) -> str:
+    """Centrifugo room for one live session: presence and session chat."""
+    return f"live:{session_id}"
 
 
 def connection_token(user_id: str, ttl_seconds: int | None = None) -> str:

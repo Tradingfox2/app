@@ -15,7 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 import bcrypt
 import jwt
@@ -97,6 +97,9 @@ class PublicUser(BaseModel):
     is_private: bool = False
     staff_role: Optional[str] = None
     bio: str = ""
+    cover_url: Optional[str] = None
+    sports: list[str] = []
+    about: str = ""
 
 
 class ProfileUpdateIn(BaseModel):
@@ -106,10 +109,14 @@ class ProfileUpdateIn(BaseModel):
     is_private: bool | None = None
     full_name: str | None = Field(default=None, min_length=2, max_length=80)
     bio: str | None = Field(default=None, max_length=300)
+    about: str | None = Field(default=None, max_length=500)
+    sports: list[Annotated[str, Field(min_length=1, max_length=24)]] | None = Field(default=None, max_length=8)
     #: An image uploaded through /media first; only the uploader's own counts.
     avatar_media_id: str | None = None
-    #: True clears the avatar.
+    cover_media_id: str | None = None
+    #: True clears the avatar or cover.
     remove_avatar: bool | None = None
+    remove_cover: bool | None = None
 
 
 class TokenOut(BaseModel):
@@ -282,6 +289,9 @@ def to_public_user(u: dict) -> PublicUser:
         is_private=u.get("is_private", False),
         staff_role=u.get("staff_role"),
         bio=u.get("bio") or "",
+        cover_url=u.get("cover_url"),
+        sports=list(u.get("sports") or []),
+        about=u.get("about") or "",
     )
 
 
@@ -363,6 +373,10 @@ async def lifespan(app: FastAPI):
     await db.program_adoptions.create_index([("message_id", 1), ("user_id", 1)], unique=True)
     await db.live_sessions.create_index([("channel_id", 1), ("status", 1), ("starts_at", 1)])
     await db.live_rsvps.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.live_participants.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.live_messages.create_index([("session_id", 1), ("created_at", 1)])
+    await db.insight_events.create_index([("session_id", 1), ("created_at", -1)])
+    await db.insight_events.create_index([("name", 1), ("created_at", -1)])
     await db.post_saves.create_index([("user_id", 1), ("post_id", 1)], unique=True)
     await db.post_saves.create_index([("user_id", 1), ("created_at", -1)])
     await db.comment_likes.create_index([("comment_id", 1), ("user_id", 1)], unique=True)
@@ -385,10 +399,25 @@ async def lifespan(app: FastAPI):
     await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
     await db.direct_messages.create_index([("recipient_id", 1), ("read_at", 1)])
     await db.media.create_index([("user_id", 1), ("created_at", -1)])
+    await db.stories.create_index([("author_id", 1), ("created_at", -1)])
+    await db.stories.create_index([("expires_at", 1)])
+    # Mirrors 004_support_and_dual_media.sql: unique object key, plus the two
+    # partial indexes that skip soft-deleted staff assets.
+    await db.admin_media.create_index("key", unique=True)
+    await db.admin_media.create_index(
+        [("uploader_staff_id", 1), ("created_at", -1)],
+        partialFilterExpression={"deleted_at": None},
+    )
+    await db.admin_media.create_index(
+        [("purpose", 1), ("created_at", -1)],
+        partialFilterExpression={"deleted_at": None},
+    )
     await db.reports.create_index([("status", 1), ("created_at", 1)])
     await db.reports.create_index([("reporter_id", 1), ("target_id", 1), ("status", 1)])
     await db.audit_log.create_index([("created_at", -1)])
     await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
+    # Product analytics: unique event id, and name+ts for the 24h / 7d rollup.
+    await analytics.ensure_indexes(db)
     await db.user_notes.create_index([("user_id", 1), ("created_at", -1)])
     # Read by _roles() on every permission resolve — the hot path for each
     # channel read and message write, so it must never be a collection scan.
@@ -396,6 +425,15 @@ async def lifespan(app: FastAPI):
     await db.community_roles.create_index("id", unique=True)
     await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("read_at", 1)])
+    # Support tickets. user_id + status are the member list and the staff queue;
+    # ticket_id is how a thread is loaded. id is the public key.
+    await db.tickets.create_index("id", unique=True)
+    await db.tickets.create_index("user_id")
+    await db.tickets.create_index("status")
+    await db.tickets.create_index([("user_id", 1), ("updated_at", -1)])
+    await db.ticket_messages.create_index("id", unique=True)
+    await db.ticket_messages.create_index("ticket_id")
+    await db.ticket_messages.create_index([("ticket_id", 1), ("created_at", 1)])
     # Terra webhooks are acknowledged after being persisted. Replay unfinished
     # inbox entries on restart so an interrupted background task is not lost.
     from routers.labs import process_claimed_terra_lab_event
@@ -477,22 +515,53 @@ async def realtime_token(user: dict = Depends(current_user)):
     }
 
 
+def _clean_sports(values: list[str]) -> list[str]:
+    """Trim, drop blanks, and keep the first spelling of each sport."""
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in values:
+        tag = " ".join(raw.split())
+        if not tag or len(tag) > 24:
+            raise HTTPException(422, "Sport tags must be 1–24 characters")
+        key = tag.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(tag)
+    if len(cleaned) > 8:
+        raise HTTPException(422, "At most 8 sports")
+    return cleaned
+
+
 @api.patch("/auth/me", response_model=PublicUser)
 async def update_me(body: ProfileUpdateIn, user: dict = Depends(current_user)):
     updates = body.model_dump(exclude_none=True)
     media_id = updates.pop("avatar_media_id", None)
+    cover_id = updates.pop("cover_media_id", None)
     if updates.pop("remove_avatar", None):
         updates["avatar_url"] = None
+    if updates.pop("remove_cover", None):
+        updates["cover_url"] = None
     if media_id:
         media = await db.media.find_one(
             {"id": media_id, "user_id": user["id"], "kind": "image"}, {"_id": 0, "url": 1})
         if not media:
             raise HTTPException(422, "Unknown image")
         updates["avatar_url"] = media["url"]
+    if cover_id:
+        media = await db.media.find_one(
+            {"id": cover_id, "user_id": user["id"], "kind": "image"}, {"_id": 0, "url": 1})
+        if not media:
+            raise HTTPException(422, "Unknown image")
+        updates["cover_url"] = media["url"]
     if "full_name" in updates:
         updates["full_name"] = updates["full_name"].strip()
     if "bio" in updates:
         updates["bio"] = updates["bio"].strip()
+    if "about" in updates:
+        updates["about"] = updates["about"].strip()
+    if "sports" in updates:
+        updates["sports"] = _clean_sports(updates["sports"])
     await db.users.update_one(
         {"id": user["id"]},
         {"$set": {**updates, "updated_at": now()}},
@@ -943,6 +1012,7 @@ async def progression(exercise_id: str, user: dict = Depends(current_user)):
 
 # --------------------------------------------------------------------------- #
 # Feature routers (import late: they import shared helpers from this module)  #
+import analytics  # noqa: E402
 from routers.labs import router as labs_router  # noqa: E402
 from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
@@ -950,6 +1020,8 @@ from routers.program import router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
+from routers.tickets import router as tickets_router  # noqa: E402
+from routers.analytics import router as analytics_router  # noqa: E402
 from routers.notifications import router as notifications_router  # noqa: E402
 from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
@@ -958,6 +1030,8 @@ api.include_router(program_router)
 api.include_router(community_router)
 api.include_router(social_router)
 api.include_router(admin_router)
+api.include_router(tickets_router)
+api.include_router(analytics_router)
 api.include_router(labs_router)
 api.include_router(notifications_router)
 api.include_router(search_router)

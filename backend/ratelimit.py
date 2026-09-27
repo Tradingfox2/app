@@ -49,9 +49,13 @@ LIMITS: dict[str, tuple[int, int]] = {
     "invite_create": (20, 3600),
     "invite_redeem": (15, 600),
     "report": (20, 3600),
+    "ticket": (10, 3600),
+    "ticket_message": (60, 300),
     "bookmark": (120, 60),
     "vote": (60, 60),
     "checkout": (10, 3600),
+    # One hit per request, and a request carries at most 25 events.
+    "analytics": (60, 60),
 }
 
 

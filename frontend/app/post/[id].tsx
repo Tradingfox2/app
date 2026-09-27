@@ -24,7 +24,7 @@ export default function PostScreen() {
     return () => { cancelled = true; };
   }, [id, t]));
 
-  return <SafeAreaView style={styles.safe}>
+  return <SafeAreaView style={styles.safe} testID="post-screen">
     <View style={styles.header}>
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <Text style={styles.title}>{t("POST")}</Text>
@@ -32,7 +32,7 @@ export default function PostScreen() {
     <ScrollView>
       {error ? <Text accessibilityRole="alert" style={styles.error} testID="post-error">{error}</Text> : null}
       {!post && !error ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} /> : null}
-      {post ? <PostCard post={post} initiallyOpen onChange={setPost} onRemoved={() => router.back()} onReposted={() => undefined} /> : null}
+      {post ? <PostCard post={post} initiallyOpen shareTargets onChange={setPost} onRemoved={() => router.back()} onReposted={() => undefined} /> : null}
     </ScrollView>
   </SafeAreaView>;
 }

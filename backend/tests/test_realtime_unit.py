@@ -19,6 +19,7 @@ def test_channel_names_namespace_by_domain():
     assert realtime.community_channel("c-1") == "community:c-1"
     assert realtime.chat_channel("ch-1") == "channel:ch-1"
     assert realtime.user_channel("u-1") == "user:u-1"
+    assert realtime.live_channel("s-1") == "live:s-1"
 
 
 def test_connection_token_is_verifiable_and_expires(monkeypatch):

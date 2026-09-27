@@ -1,30 +1,32 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Image, Linking, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import * as ExpoLinking from "expo-linking";
 import { useRouter } from "expo-router";
+import { track } from "@/src/analytics";
 import { api, mediaUrl, type Community, type LinkPreview, type MediaItem, type Poll, type Post, type PostComment, type WorkoutSummary } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { sharePost } from "@/src/share";
 import { ActionSheet, type SheetAction } from "./action-sheet";
 import { Avatar } from "./avatar";
 import { MediaGrid } from "./media";
 import { MentionInput } from "./mention-input";
 import { ReportSheet, type ReportTarget } from "./report-sheet";
 import { RichText } from "./rich-text";
+import { ShareBar } from "./share-bar";
 
-type Scope = "all" | "following" | "mine";
+type Scope = "all" | "following" | "mine" | "friends";
 export type FeedFilters = { author_id?: string; tag?: string; community_id?: string };
 
 /** Must match the backend default page size for `GET /feed`. */
 const PAGE_SIZE = 20;
 const MAX_ATTACHMENTS = 6;
 
-export function useFeed(filters: FeedFilters = {}) {
+export function useFeed(filters: FeedFilters = {}, initialScope: Scope = "all") {
   const { t } = useI18n();
-  const [scope, setScope] = useState<Scope>("all");
+  const [scope, setScope] = useState<Scope>(initialScope);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -85,9 +87,10 @@ const POLL_DURATIONS: [number, string][] = [[1, "1 h"], [24, "1 day"], [72, "3 d
  * The post composer. `communityId` pins it to one community's wall; without
  * it the author may choose public or any community they belong to.
  */
-export function Composer({ onPublished, communityId }: { onPublished: (post: Post) => void; communityId?: string }) {
+export function Composer({ onPublished, communityId, personal }: { onPublished: (post: Post) => void; communityId?: string; personal?: boolean }) {
   const { t } = useI18n();
   const [text, setText] = useState("");
+  const [friendsAudience, setFriendsAudience] = useState(true);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [busy, setBusy] = useState<"upload" | "publish" | null>(null);
   const [error, setError] = useState("");
@@ -131,8 +134,16 @@ export function Composer({ onPublished, communityId }: { onPublished: (post: Pos
       const post = await api.publish({
         content: text.trim(),
         media_ids: media.map(item => item.id),
-        ...(audience ? { community_id: audience } : {}),
+        ...(audience && !personal ? { community_id: audience } : {}),
+        ...(personal && friendsAudience ? { audience: "friends" as const } : {}),
         ...(poll ? { poll: { options: poll.options.map(option => option.trim()).filter(Boolean), duration_hours: poll.hours } } : {}),
+      });
+      // Best-effort: a failed analytics post must not fail the publish.
+      track("post_created", {
+        post_id: post.id,
+        has_media: media.length > 0,
+        has_poll: poll !== null,
+        ...(audience ? { community_id: audience } : {}),
       });
       setText(""); setMedia([]); setPoll(null); onPublished(post);
     } catch (cause) {
@@ -153,7 +164,11 @@ export function Composer({ onPublished, communityId }: { onPublished: (post: Pos
         <View style={styles.chips}>{POLL_DURATIONS.map(([hours, label]) => <Pressable key={hours} accessibilityRole="button" onPress={() => setPoll({ ...poll, hours })} style={[styles.chip, poll.hours === hours && styles.chipOn]} testID={`poll-duration-${hours}`}><Text style={[styles.chipText, poll.hours === hours && styles.chipTextOn]}>{t(label)}</Text></Pressable>)}</View>
       </View> : null}
       {media.length ? <View style={styles.thumbs}>{media.map(item => <View key={item.id} style={styles.thumbWrap}>{item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={22} color={colors.brand} /></View>}<Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setMedia(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={12} color={colors.brandOn} /></Pressable></View>)}</View> : null}
-      {picking && !communityId ? <View style={styles.chips} testID="audience-picker">
+      {personal ? <View style={styles.chips} testID="personal-audience">
+        <Pressable accessibilityRole="button" onPress={() => setFriendsAudience(true)} style={[styles.chip, friendsAudience && styles.chipOn]} testID="composer-audience-friends"><Text style={[styles.chipText, friendsAudience && styles.chipTextOn]}>{t("Friends")}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => setFriendsAudience(false)} style={[styles.chip, !friendsAudience && styles.chipOn]} testID="composer-audience-public"><Text style={[styles.chipText, !friendsAudience && styles.chipTextOn]}>{t("Public")}</Text></Pressable>
+      </View> : null}
+      {picking && !communityId && !personal ? <View style={styles.chips} testID="audience-picker">
         <Pressable accessibilityRole="button" onPress={() => { setAudience(null); setPicking(false); }} style={[styles.chip, !audience && styles.chipOn]} testID="audience-public"><Text style={[styles.chipText, !audience && styles.chipTextOn]}>{t("Public")}</Text></Pressable>
         {mine === null ? <ActivityIndicator color={colors.brand} /> : mine.map(row => <Pressable key={row.id} accessibilityRole="button" onPress={() => { setAudience(row.id); setPicking(false); }} style={[styles.chip, audience === row.id && styles.chipOn]} testID={`audience-${row.id}`}><Text style={[styles.chipText, audience === row.id && styles.chipTextOn]}>{row.name}</Text></Pressable>)}
       </View> : null}
@@ -165,7 +180,7 @@ export function Composer({ onPublished, communityId }: { onPublished: (post: Pos
         <Pressable accessibilityRole="button" accessibilityLabel={t(poll ? "Remove poll" : "Add poll")} testID="composer-poll" onPress={() => setPoll(poll ? null : { options: ["", ""], hours: 24 })} style={styles.iconButton}>
           <Ionicons name={poll ? "stats-chart" : "stats-chart-outline"} size={19} color={colors.brand} />
         </Pressable>
-        {!communityId ? <Pressable accessibilityRole="button" accessibilityLabel={t("Choose audience")} testID="composer-audience" onPress={() => void openAudience()} style={styles.audience}>
+        {!communityId && !personal ? <Pressable accessibilityRole="button" accessibilityLabel={t("Choose audience")} testID="composer-audience" onPress={() => void openAudience()} style={styles.audience}>
           <Ionicons name={audience ? "people" : "globe-outline"} size={14} color={colors.textMuted} /><Text style={styles.audienceText} numberOfLines={1}>{audienceName}</Text>
         </Pressable> : null}
         <Text style={styles.counter}>{text.length ? `${text.length}/4000` : ""}</Text>
@@ -184,9 +199,11 @@ type PostCardProps = {
   onReposted: (post: Post) => void;
   /** Open the comment thread straight away, as on a post's own screen. */
   initiallyOpen?: boolean;
+  /** Keep the copy / network share row visible, as on the post screen. */
+  shareTargets?: boolean;
 };
 
-export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen }: PostCardProps) {
+export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen, shareTargets }: PostCardProps) {
   const { t, formatDate, formatNumber } = useI18n();
   const { user } = useAuth();
   const router = useRouter();
@@ -196,6 +213,7 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
   const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [quoting, setQuoting] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(!!shareTargets);
   const [error, setError] = useState("");
   const busyRef = useRef(false);
   // A plain repost is a frame around someone else's post: every action on the
@@ -243,17 +261,21 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
     onChange({ ...post, ...updated }); setEditing(null);
   });
   const remove = () => guard(async () => { await api.deletePost(post.id); onRemoved(); });
-  const sharePost = () => {
-    const url = ExpoLinking.createURL(`/post/${shown.id}`);
-    void Share.share({ message: `${shown.content ? `${shown.content.slice(0, 120)}\n` : ""}${url}` }).catch(() => undefined);
+  const openPost = () => router.push({ pathname: "/post/[id]", params: { id: shown.id } });
+  const shareOut = () => {
+    setShareOpen(true);
+    const snippet = shown.content ? shown.content.slice(0, 120) : undefined;
+    void sharePost({ id: shown.id, title: shown.author?.full_name || "IronFlow", message: snippet }).then(result => {
+      if (result === "unavailable") setError(t("Could not open the share sheet. Use copy or a network button."));
+    });
   };
 
   const own = post.author_id === user?.id;
   const actions: SheetAction[] = [
     ...(own && post.can_edit && !plainRepost ? [{ key: "edit", label: t("Edit post"), icon: "create-outline" as const, onPress: () => setEditing(post.content) }] : []),
     { key: "save", label: t(shown.saved_by_me ? "Remove from saved" : "Save post"), icon: shown.saved_by_me ? "bookmark" as const : "bookmark-outline" as const, onPress: () => void toggleSave() },
-    { key: "share", label: t("Share"), icon: "share-outline" as const, onPress: sharePost },
-    { key: "open", label: t("Open post"), icon: "open-outline" as const, onPress: () => router.push({ pathname: "/post/[id]", params: { id: shown.id } }) },
+    { key: "share", label: t("Share"), icon: "share-outline" as const, onPress: shareOut },
+    { key: "open", label: t("Open post"), icon: "open-outline" as const, onPress: openPost },
     ...(!own ? [{ key: "report", label: t("Report post"), icon: "flag-outline" as const, onPress: () => setReporting({ target_type: "post", target_id: shown.id }) }] : []),
     ...(own ? [{ key: "delete", label: t("Delete post"), icon: "trash-outline" as const, destructive: true, onPress: () => void remove() }] : []),
   ];
@@ -263,10 +285,10 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
       {plainRepost ? <Text style={styles.repostLabel}><Ionicons name="repeat" size={12} color={colors.textMuted} /> {t("{name} reposted", { name: post.author?.full_name || t("Member") })}</Text> : null}
       <View style={styles.head}>
         <Pressable accessibilityRole="button" accessibilityLabel={shown.author?.full_name || t("Member")} onPress={() => shown.author && router.push({ pathname: "/user/[id]", params: { id: shown.author.id } })}><Avatar user={shown.author} /></Pressable>
-        <View style={{ flex: 1 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Open post")} testID={`post-open-${shown.id}`} onPress={openPost} style={{ flex: 1 }}>
           <Text style={styles.author}>{shown.author?.full_name || t("Member")}</Text>
-          <Text style={styles.time}>{formatDate(shown.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{shown.edited_at ? ` · ${t("edited")}` : ""}{shown.community_id ? ` · ${t("Community")}` : ""}</Text>
-        </View>
+          <Text style={styles.time}>{formatDate(shown.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{shown.edited_at ? ` · ${t("edited")}` : ""}{shown.audience === "friends" ? ` · ${t("Friends")}` : ""}{shown.community_id ? ` · ${t("Community")}` : ""}</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("More options")} testID={`post-menu-${post.id}`} onPress={() => setMenu(true)} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={18} color={colors.textDim} /></Pressable>
       </View>
       {post.original?.unavailable ? <Text style={styles.unavailable}>{t("This post is no longer available.")}</Text> : null}
@@ -289,8 +311,10 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
         <Pressable accessibilityRole="button" accessibilityLabel={shown.reposted_by_me ? t("Undo repost") : t("Repost")} accessibilityState={{ selected: !!shown.reposted_by_me }} disabled={busy} onPress={() => void toggleRepost()} style={styles.action}><Ionicons name="repeat" size={21} color={shown.reposted_by_me ? colors.brand : colors.textMuted} /><Text style={[styles.actionText, shown.reposted_by_me && styles.actionActive]}>{formatNumber(shown.repost_count)}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("Quote")} testID={`post-quote-${post.id}`} disabled={busy} onPress={() => setQuoting(quoting === null ? "" : null)} style={styles.action}><Ionicons name="chatbox-ellipses-outline" size={19} color={quoting !== null ? colors.brand : colors.textMuted} /></Pressable>
         <View style={{ flex: 1 }} />
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} accessibilityState={{ expanded: shareTargets || shareOpen }} testID={`post-share-${shown.id}`} onPress={() => setShareOpen(open => !open)} style={styles.action}><Ionicons name="share-outline" size={19} color={shareTargets || shareOpen ? colors.brand : colors.textMuted} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={shown.saved_by_me ? t("Remove from saved") : t("Save post")} testID={`post-save-${post.id}`} disabled={busy} onPress={() => void toggleSave()} style={styles.action}><Ionicons name={shown.saved_by_me ? "bookmark" : "bookmark-outline"} size={19} color={shown.saved_by_me ? colors.brand : colors.textMuted} /></Pressable>
       </View>
+      {shareTargets || shareOpen ? <ShareBar postId={shown.id} title={shown.author?.full_name || "IronFlow"} message={shown.content} /> : null}
       {quoting !== null ? <View style={styles.commentRow} testID={`quote-box-${post.id}`}>
         <MentionInput value={quoting} onChangeText={setQuoting} maxLength={4000} placeholder={t("Add your take...")} placeholderTextColor={colors.textDim} style={styles.commentInput} testID="quote-input" />
         <Pressable accessibilityRole="button" accessibilityLabel={t("Post quote")} testID="quote-send" disabled={busy || !quoting.trim()} onPress={() => void sendQuote()} style={[styles.iconButton, (busy || !quoting.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.brand} /></Pressable>

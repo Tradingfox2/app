@@ -70,6 +70,54 @@ export async function registerForPush(): Promise<string | null> {
   }
 }
 
+export type DevicePushResult =
+  | { status: "granted"; token: string | null }
+  | { status: "unsupported" }
+  | { status: "denied" }
+  | { status: "blocked" };
+
+/**
+ * Settings toggle: ask the OS, then register. `unsupported` is web or Expo Go,
+ * where there is no system prompt. `blocked` means the user must open Settings.
+ * A granted result with a null token means the OS allowed alerts but Expo's
+ * push service did not return a token (no EAS project id, or an emulator).
+ * `devicePushPermission` only reads the current OS state and does not prompt.
+ */
+export async function devicePushPermission(): Promise<"granted" | "denied" | "blocked" | "unsupported"> {
+  const Notifications = notifications();
+  if (!Notifications) return "unsupported";
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === "granted") return "granted";
+    return current.canAskAgain === false ? "blocked" : "denied";
+  } catch {
+    return "denied";
+  }
+}
+
+export async function enableDevicePush(): Promise<DevicePushResult> {
+  const Notifications = notifications();
+  if (!Notifications) return { status: "unsupported" };
+  try {
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", { name: "IronFlow", importance: Notifications.AndroidImportance.DEFAULT });
+    }
+    const current = await Notifications.getPermissionsAsync();
+    let status = current.status;
+    let canAskAgain = current.canAskAgain !== false;
+    if (status !== "granted") {
+      if (!canAskAgain) return { status: "blocked" };
+      const next = await Notifications.requestPermissionsAsync();
+      status = next.status;
+      canAskAgain = next.canAskAgain !== false;
+      if (status !== "granted") return { status: canAskAgain ? "denied" : "blocked" };
+    }
+  } catch {
+    return { status: "denied" };
+  }
+  return { status: "granted", token: await registerForPush() };
+}
+
 /** On sign-out: stop pushing the previous person's notifications to this phone. */
 export async function unregisterPush(): Promise<void> {
   if (!registeredToken) return;

@@ -17,6 +17,7 @@ import moderation
 import notifications
 import ratelimit
 import staff
+from routers import tickets
 from server import clean, current_user, db, new_id, now
 
 router = APIRouter()
@@ -474,6 +475,45 @@ async def review_membership(
         metadata={"approved": approved},
     )
     return clean(await db.community_members.find_one({"id": member_id}, {"_id": 0}))
+
+
+# --------------------------------------------------------------------------- #
+# Support tickets                                                              #
+# The queue is account and conversation data only — never health rows.        #
+# --------------------------------------------------------------------------- #
+@router.get("/admin/tickets")
+async def list_admin_tickets(
+    status: tickets.TicketStatus | None = None,
+    q: str | None = Query(default=None, max_length=80),
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict = Depends(staff.require("tickets.read")),
+):
+    return await tickets.list_for_staff(status, q, limit)
+
+
+@router.get("/admin/tickets/{ticket_id}")
+async def get_admin_ticket(ticket_id: str, user: dict = Depends(staff.require("tickets.read"))):
+    return await tickets.staff_detail(ticket_id)
+
+
+@router.patch("/admin/tickets/{ticket_id}")
+async def update_admin_ticket(
+    ticket_id: str,
+    body: tickets.TicketPatchIn,
+    user: dict = Depends(staff.require("tickets.write")),
+):
+    return await tickets.update_for_staff(ticket_id, body, user)
+
+
+@router.post("/admin/tickets/{ticket_id}/messages", status_code=201)
+async def reply_admin_ticket(
+    ticket_id: str,
+    body: tickets.MessageIn,
+    user: dict = Depends(staff.require("tickets.write")),
+):
+    ticket = await tickets.require_ticket(ticket_id)
+    # Staff can still leave a closing note after the member is locked out.
+    return await tickets.add_message(ticket, user, body, "staff")
 
 
 # --------------------------------------------------------------------------- #
