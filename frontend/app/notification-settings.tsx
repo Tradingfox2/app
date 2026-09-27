@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { api, type NotificationPrefs } from "@/src/api";
 import { useI18n } from "@/src/i18n";
+import { devicePushPermission, enableDevicePush, type DevicePushResult } from "@/src/push";
 import { colors, spacing } from "@/src/theme";
 
 /** Same order and keys as `notifications.CONFIGURABLE` on the server. */
@@ -34,10 +35,24 @@ export default function NotificationSettingsScreen() {
   const { t } = useI18n();
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [error, setError] = useState("");
+  const [pushHint, setPushHint] = useState("");
+  const [pushBlocked, setPushBlocked] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
     api.notificationPreferences().then(setPrefs).catch(cause => setError(cause instanceof Error ? cause.message : t("Something went wrong")));
   }, [t]);
+
+  useEffect(() => {
+    if (!prefs?.push) return;
+    let cancelled = false;
+    void devicePushPermission().then(state => {
+      if (cancelled || state !== "blocked") return;
+      setPushBlocked(true);
+      setPushHint(t("Notifications are blocked for IronFlow. Enable them in Settings, then turn Push on again."));
+    });
+    return () => { cancelled = true; };
+  }, [prefs?.push, t]);
 
   const update = async (change: { push?: boolean; types?: Record<string, boolean> }) => {
     if (!prefs) return;
@@ -46,6 +61,47 @@ export default function NotificationSettingsScreen() {
     setPrefs({ push: change.push ?? prefs.push, types: { ...prefs.types, ...(change.types ?? {}) } });
     try { setPrefs(await api.updateNotificationPreferences(change)); }
     catch (cause) { setPrefs(previous); setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+  };
+
+  const onPush = async (value: boolean) => {
+    if (!prefs || pushBusy) return;
+    if (!value) {
+      setPushHint("");
+      setPushBlocked(false);
+      await update({ push: false });
+      return;
+    }
+    setPushBusy(true);
+    setPushHint("");
+    setPushBlocked(false);
+    let result: DevicePushResult;
+    try {
+      result = await enableDevicePush();
+    } catch {
+      result = { status: "denied" };
+    }
+    setPushBusy(false);
+    switch (result.status) {
+      case "granted":
+        if (!result.token) setPushHint(t("Push is allowed, but this build could not register a device token."));
+        await update({ push: true });
+        return;
+      case "unsupported":
+        setPushHint(t("Requires a native build (not Expo Go)"));
+        await update({ push: true });
+        return;
+      case "denied":
+        setPushHint(t("Push stays off until this phone allows notifications."));
+        return;
+      case "blocked":
+        setPushHint(t("Notifications are blocked for IronFlow. Enable them in Settings, then turn Push on again."));
+        setPushBlocked(true);
+        return;
+      default: {
+        const exhaustive: never = result;
+        setError(String(exhaustive));
+      }
+    }
   };
 
   return <SafeAreaView style={styles.safe}>
@@ -61,8 +117,10 @@ export default function NotificationSettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>{t("Push notifications")}</Text>
             <Text style={styles.hint}>{t("Also send these to your phone.")}</Text>
+            {pushHint ? <Text style={styles.hint} testID="pref-push-hint">{pushHint}</Text> : null}
+            {pushBlocked ? <Pressable accessibilityRole="button" accessibilityLabel={t("OPEN SETTINGS")} onPress={() => void Linking.openSettings()} style={styles.settings} testID="pref-push-settings"><Text style={styles.settingsText}>{t("OPEN SETTINGS")}</Text></Pressable> : null}
           </View>
-          <Switch testID="pref-push" accessibilityLabel={t("Push notifications")} value={prefs.push} onValueChange={value => void update({ push: value })} trackColor={{ true: colors.brand }} />
+          <Switch testID="pref-push" accessibilityLabel={t("Push notifications")} disabled={pushBusy} value={prefs.push} onValueChange={value => void onPush(value)} trackColor={{ true: colors.brand }} />
         </View>
         <Text style={styles.section}>{t("TELL ME ABOUT")}</Text>
         {TYPES.map(([key, label]) => <View key={key} style={styles.row}>
@@ -84,6 +142,8 @@ const styles = StyleSheet.create({
   row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   label: { color: colors.text, fontSize: 14 },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  settings: { alignSelf: "flex-start", marginTop: spacing.xs },
+  settingsText: { color: colors.brand, fontSize: 12, fontWeight: "800" },
   section: { color: colors.textDim, fontSize: 10, fontWeight: "800", letterSpacing: 1.4, marginTop: spacing.lg },
   error: { color: colors.error },
 });

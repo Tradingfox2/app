@@ -30,6 +30,11 @@ export default function RootLayout() {
           <I18nProvider>
             <View style={{ flex: 1, backgroundColor: colors.bg }}>
               <StatusBar style="light" />
+              {/*
+                Cold start uses the initial URL; warm start uses later url events.
+                Expo Router owns both. app/+native-intent.ts rewrites ironflow://
+                and ironflow:/// post and live links onto /post/[id] and /live/[id].
+              */}
               <Stack
                 screenOptions={{
                   headerShown: false,
