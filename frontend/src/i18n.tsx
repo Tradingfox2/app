@@ -5,6 +5,7 @@ import { initReactI18next, useTranslation } from "react-i18next";
 import { useAuth } from "./auth-context";
 import type { SupportedLocale } from "./api";
 import { communityMessages } from "./community-locales";
+import { supportMessages } from "./support-locales";
 
 type Messages = Record<string, string>;
 
@@ -142,7 +143,7 @@ void i18n.use(initReactI18next).init({
   resources: Object.fromEntries(
     Object.entries(messages).map(([locale, translation]) => [
       locale,
-      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale] } },
+      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale] } },
     ]),
   ),
   lng: initialLocale,

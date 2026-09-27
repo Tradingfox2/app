@@ -100,6 +100,41 @@ export type AdminOverview = {
 
 export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
 
+/** Member support tickets. Bearer auth, same `/api` prefix as the rest of the client. */
+export const TICKET_CATEGORIES = ["billing", "account", "bug", "feature", "other"] as const;
+export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
+
+export type TicketSummary = {
+  id: string;
+  subject: string;
+  category: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TicketAuthorRole = "user" | "staff";
+
+export type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  author_id: string;
+  author_role: TicketAuthorRole;
+  body: string;
+  media_id?: string | null;
+  created_at: string;
+};
+
+export type Ticket = TicketSummary & {
+  user_id: string;
+  assignee_id: string | null;
+  messages?: TicketMessage[];
+};
+
+export function isTicketCategory(value: string): value is TicketCategory {
+  return (TICKET_CATEGORIES as readonly string[]).includes(value);
+}
+
 export type Membership = {
   id: string;
   community_id: string;
@@ -1095,4 +1130,14 @@ export const api = {
       body: JSON.stringify({ qr_payload, workout_id }),
     }),
   gymVisits: () => request<any[]>("/gyms/visits"),
+
+  tickets: () => request<TicketSummary[]>("/tickets"),
+  ticket: (id: string) => request<Ticket>(`/tickets/${encodeURIComponent(id)}`),
+  createTicket: (payload: { subject: string; category: TicketCategory; body?: string }) =>
+    request<Ticket>("/tickets", { method: "POST", body: JSON.stringify(payload) }),
+  addTicketMessage: (id: string, payload: { body: string; media_id?: string }) =>
+    request<TicketMessage>(`/tickets/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
