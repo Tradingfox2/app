@@ -16,7 +16,7 @@ function createdPost(content: string) {
   };
 }
 
-async function install(page: Page, published: { content: string }[]) {
+async function install(page: Page, published: { content: string }[], events: { name: string; props?: Record<string, string | boolean> }[]) {
   await page.addInitScript(() => {
     localStorage.setItem("ironflow_token", JSON.stringify("synthetic-test-token"));
     const calls: string[] = [];
@@ -53,13 +53,18 @@ async function install(page: Page, published: { content: string }[]) {
       return route.fulfill({ json: author && author !== me.id ? [] : rows });
     }
     if (path === "/posts/post-new/comments") return route.fulfill({ json: [] });
+    if (path === "/events" && method === "POST") {
+      events.push(route.request().postDataJSON());
+      return route.fulfill({ json: { accepted: 1, duplicates: 0 } });
+    }
     return route.fulfill({ json: [] });
   });
 }
 
 test("own profile publishes a post that shows on the feed and can be shared", async ({ page }) => {
   const published: { content: string }[] = [];
-  await install(page, published);
+  const events: { name: string; props?: Record<string, string | boolean> }[] = [];
+  await install(page, published, events);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   await page.goto("/profile");
@@ -102,4 +107,35 @@ test("own profile publishes a post that shows on the feed and can be shared", as
   await popupFor("post-share-facebook-post-new", `https://www.facebook.com/sharer/sharer.php?u=${encoded}`);
   await popupFor("post-share-whatsapp-post-new", `https://wa.me/?text=${encodeURIComponent(`Profile session\n${link}`)}`);
   await popupFor("post-share-linkedin-post-new", `https://www.linkedin.com/sharing/share-offsite/?url=${encoded}`);
+
+  const shared = events.filter(event => event.name === "post_shared").map(event => event.props);
+  expect(shared).toEqual([
+    { post_id: "post-new", channel: "copy" },
+    { post_id: "post-new", channel: "system_share" },
+    { post_id: "post-new", channel: "x" },
+    { post_id: "post-new", channel: "facebook" },
+    { post_id: "post-new", channel: "whatsapp" },
+    { post_id: "post-new", channel: "linkedin" },
+  ]);
+});
+
+test("a cancelled share sheet and a blocked network window do not emit post_shared", async ({ page }) => {
+  const events: { name: string; props?: Record<string, string | boolean> }[] = [];
+  await install(page, [], events);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async () => {
+        throw new DOMException("The user aborted a request.", "AbortError");
+      },
+    });
+    window.open = () => null;
+  });
+  await page.goto("/post/post-new");
+  const detail = page.getByTestId("post-screen");
+  await detail.getByTestId("post-share-sheet-post-new").click();
+  await expect(detail.getByText("Could not open the share sheet. Use copy or a network button.")).toBeVisible();
+  await detail.getByTestId("post-share-x-post-new").click();
+  await expect(detail.getByText("Could not open that share page.")).toBeVisible();
+  expect(events.filter(event => event.name === "post_shared")).toEqual([]);
 });
