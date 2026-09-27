@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import { api, type TicketSummary } from "@/src/api";
+import { api, TICKET_LIST_LIMIT, type TicketSummary } from "@/src/api";
 import { track } from "@/src/analytics";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
@@ -27,7 +27,7 @@ export function SupportTicketList({
   const load = useCallback(async () => {
     const current = ++revision.current;
     try {
-      const data = await api.tickets();
+      const data = await api.tickets({ limit: TICKET_LIST_LIMIT });
       if (current !== revision.current) return;
       if (!Array.isArray(data)) {
         setError(t("Could not load tickets"));
@@ -120,7 +120,7 @@ export function SupportTicketList({
 function StatusPill({ status }: { status: string }) {
   const { t } = useI18n();
   const tone = statusTone(status);
-  const color = tone === "warning" ? colors.warning : tone === "success" ? colors.success : tone === "muted" ? colors.textMuted : colors.brand;
+  const color = tone === "warning" ? colors.warning : tone === "muted" ? colors.textMuted : colors.brand;
   return (
     <View style={[styles.pill, { borderColor: color }]}>
       <Text style={[styles.pillText, { color }]}>{ticketStatusText(status, t)}</Text>

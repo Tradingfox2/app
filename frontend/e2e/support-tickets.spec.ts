@@ -36,9 +36,11 @@ type FixtureTicket = {
 function summary(ticket: FixtureTicket) {
   return {
     id: ticket.id,
+    user_id: ticket.user_id,
     subject: ticket.subject,
     category: ticket.category,
     status: ticket.status,
+    assignee_id: ticket.assignee_id,
     created_at: ticket.created_at,
     updated_at: ticket.updated_at,
   };
@@ -98,9 +100,10 @@ async function fixtures(
       };
       state.tickets.unshift(created);
       state.messages[created.id] = body.body ? [message("m-open", created.id, body.body)] : [];
+      const opening = state.messages[created.id] ?? [];
       return route.fulfill({
         status: 201,
-        json: { ...summary(created), user_id: me.id, assignee_id: null },
+        json: { ...summary(created), messages: opening },
       });
     }
     const detail = path.match(/^\/tickets\/([^/]+)$/);
@@ -153,9 +156,11 @@ test("creating a ticket posts the form and opens the id the API returned", async
   await page.getByTestId("support-empty-create").click();
   await expect(page).toHaveURL(/\/support\/new$/);
 
-  await page.getByTestId("support-subject").fill("Hi");
+  await page.getByTestId("support-subject").fill("   ");
   await expect(page.getByTestId("support-submit")).toBeDisabled();
-  await expect(page.getByTestId("support-subject-error")).toHaveText("Subject needs at least 3 characters.");
+  await page.getByTestId("support-subject").fill("H");
+  await expect(page.getByTestId("support-subject-error")).toHaveCount(0);
+  await expect(page.getByTestId("support-submit")).toBeDisabled();
 
   await page.getByTestId("support-subject").fill("Cannot update my card");
   await expect(page.getByTestId("support-submit")).toBeDisabled();
@@ -176,6 +181,7 @@ test("creating a ticket posts the form and opens the id the API returned", async
 
 test("the list shows tickets from the API and a reply posts onto the thread", async ({ page }) => {
   const replies: unknown[] = [];
+  const listUrls: string[] = [];
   const existing: FixtureTicket = {
     id: "t-1",
     user_id: me.id,
@@ -193,6 +199,7 @@ test("the list shows tickets from the API and a reply posts onto the thread", as
     },
   };
   await fixtures(page, state, async (route, path, method) => {
+    if (path === "/tickets" && method === "GET") listUrls.push(route.request().url());
     if (path === "/tickets/t-1/messages" && method === "POST") {
       replies.push(route.request().postDataJSON());
       return false;
@@ -201,6 +208,7 @@ test("the list shows tickets from the API and a reply posts onto the thread", as
   });
   await page.goto("/support");
   await expect(page.getByTestId("ticket-t-1")).toBeVisible();
+  expect(listUrls.some(url => new URL(url).searchParams.get("limit") === "100")).toBe(true);
   await expect(page.getByText("Pending", { exact: true })).toBeVisible();
   await page.getByTestId("ticket-t-1").click();
   await expect(page).toHaveURL(/\/support\/t-1$/);
@@ -229,6 +237,29 @@ test("a failed ticket list shows the API detail and retry recovers", async ({ pa
   fail = false;
   await page.getByTestId("support-retry").click();
   await expect(page.getByTestId("support-empty")).toBeVisible();
+});
+
+test("a closed ticket hides the reply box", async ({ page }) => {
+  const existing: FixtureTicket = {
+    id: "t-closed",
+    user_id: me.id,
+    subject: "Old billing question",
+    category: "account",
+    status: "closed",
+    assignee_id: null,
+    created_at: "2026-09-01T08:00:00Z",
+    updated_at: "2026-09-02T08:00:00Z",
+  };
+  await fixtures(page, {
+    tickets: [existing],
+    messages: { "t-closed": [message("m-closed", "t-closed", "Thanks, that fixed it.")] },
+  });
+  await page.goto("/support/t-closed");
+  await expect(page.getByTestId("support-status")).toHaveText("Closed · Account");
+  await expect(page.getByTestId("support-message-m-closed")).toContainText("Thanks, that fixed it.");
+  await expect(page.getByTestId("support-closed")).toHaveText("Ticket is closed");
+  await expect(page.getByTestId("support-reply")).toHaveCount(0);
+  await expect(page.getByTestId("support-reply-submit")).toHaveCount(0);
 });
 
 test("an unknown ticket shows the not-found detail", async ({ page }) => {

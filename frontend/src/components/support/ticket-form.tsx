@@ -73,7 +73,7 @@ export function SupportTicketForm({
         />
         {showSubjectError ? (
           <Text accessibilityRole="alert" testID="support-subject-error" style={supportStyles.hint}>
-            {t(issue === "long" ? "Subject is too long." : "Subject needs at least 3 characters.")}
+            {t(issue === "long" ? "Subject is too long." : "Enter a subject.")}
           </Text>
         ) : null}
 

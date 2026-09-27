@@ -104,11 +104,20 @@ export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
 export const TICKET_CATEGORIES = ["billing", "account", "bug", "feature", "other"] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
+/** Statuses stored by the ticket handlers. There is no priority field. */
+export const TICKET_STATUSES = ["open", "pending", "closed"] as const;
+export type TicketStatus = (typeof TICKET_STATUSES)[number];
+
+/** `GET /tickets` caps `limit` at 100. The list screen asks for that maximum. */
+export const TICKET_LIST_LIMIT = 100;
+
 export type TicketSummary = {
   id: string;
+  user_id: string;
   subject: string;
   category: string;
   status: string;
+  assignee_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -126,13 +135,15 @@ export type TicketMessage = {
 };
 
 export type Ticket = TicketSummary & {
-  user_id: string;
-  assignee_id: string | null;
   messages?: TicketMessage[];
 };
 
 export function isTicketCategory(value: string): value is TicketCategory {
   return (TICKET_CATEGORIES as readonly string[]).includes(value);
+}
+
+export function isTicketStatus(value: string): value is TicketStatus {
+  return (TICKET_STATUSES as readonly string[]).includes(value);
 }
 
 export type Membership = {
@@ -1141,11 +1152,17 @@ export const api = {
     }),
   gymVisits: () => request<any[]>("/gyms/visits"),
 
-  tickets: () => request<TicketSummary[]>("/tickets"),
+  tickets: (params?: { status?: TicketStatus; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return request<TicketSummary[]>(`/tickets${query ? `?${query}` : ""}`);
+  },
   ticket: (id: string) => request<Ticket>(`/tickets/${encodeURIComponent(id)}`),
-  createTicket: (payload: { subject: string; category: TicketCategory; body?: string }) =>
+  createTicket: (payload: { subject: string; category: TicketCategory; body?: string; media_id?: string | null }) =>
     request<Ticket>("/tickets", { method: "POST", body: JSON.stringify(payload) }),
-  addTicketMessage: (id: string, payload: { body: string; media_id?: string }) =>
+  addTicketMessage: (id: string, payload: { body: string; media_id?: string | null }) =>
     request<TicketMessage>(`/tickets/${encodeURIComponent(id)}/messages`, {
       method: "POST",
       body: JSON.stringify(payload),

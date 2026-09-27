@@ -64,9 +64,10 @@ export function SupportTicketDetail({
     return () => { revision.current += 1; };
   }, [load]));
 
+  const closed = ticket?.status === "closed";
   const send = async () => {
     const body = draft.trim();
-    if (!body || body.length > BODY_MAX || sending || !ticketId) return;
+    if (!body || body.length > BODY_MAX || sending || !ticketId || closed) return;
     setSending(true);
     setReplyError("");
     setReplySent(false);
@@ -136,7 +137,12 @@ export function SupportTicketDetail({
             </View>
           ))}
         </ScrollView>
-        {ticket ? (
+        {ticket && closed ? (
+          <View style={{ padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border }}>
+            <Text testID="support-closed" style={supportStyles.hint}>{t("Ticket is closed")}</Text>
+          </View>
+        ) : null}
+        {ticket && !closed ? (
           <View style={{ padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm }}>
             <TextInput
               value={draft}

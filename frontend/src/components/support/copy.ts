@@ -1,17 +1,17 @@
-import { isTicketCategory, type TicketAuthorRole, type TicketCategory } from "@/src/api";
+import { isTicketCategory, isTicketStatus, type TicketAuthorRole, type TicketCategory, type TicketStatus } from "@/src/api";
 
-export const SUBJECT_MIN = 3;
+/** Matches the ticket handlers: subject is 1–120 after trim, message body is 1–5000. */
+export const SUBJECT_MIN = 1;
 export const SUBJECT_MAX = 120;
-export const BODY_MAX = 4000;
+export const BODY_MAX = 5000;
 
-export type SubjectIssue = "empty" | "short" | "long";
+export type SubjectIssue = "empty" | "long";
 
 type Translate = (key: string) => string;
 
 export function subjectIssue(subject: string): SubjectIssue | null {
   const value = subject.trim();
-  if (value.length === 0) return "empty";
-  if (value.length < SUBJECT_MIN) return "short";
+  if (value.length < SUBJECT_MIN) return "empty";
   if (value.length > SUBJECT_MAX) return "long";
   return null;
 }
@@ -39,43 +39,40 @@ export function ticketCategoryText(category: string, t: Translate): string {
   return isTicketCategory(category) ? ticketCategoryLabel(category, t) : category;
 }
 
-export function ticketStatusText(status: string, t: Translate): string {
+export function ticketStatusLabel(status: TicketStatus, t: Translate): string {
   switch (status) {
     case "open":
-    case "new":
       return t("Open");
     case "pending":
       return t("Pending");
-    case "waiting":
-      return t("Waiting on support");
-    case "in_progress":
-      return t("In progress");
-    case "resolved":
-      return t("Resolved");
     case "closed":
       return t("Closed");
-    default:
-      return status.replaceAll("_", " ");
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
   }
 }
 
-export type StatusTone = "brand" | "warning" | "muted" | "success";
+export function ticketStatusText(status: string, t: Translate): string {
+  return isTicketStatus(status) ? ticketStatusLabel(status, t) : status.replaceAll("_", " ");
+}
+
+export type StatusTone = "brand" | "warning" | "muted";
 
 export function statusTone(status: string): StatusTone {
+  if (!isTicketStatus(status)) return "brand";
   switch (status) {
     case "open":
-    case "new":
       return "brand";
     case "pending":
-    case "waiting":
-    case "in_progress":
       return "warning";
-    case "resolved":
-      return "success";
     case "closed":
       return "muted";
-    default:
-      return "brand";
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
   }
 }
 
