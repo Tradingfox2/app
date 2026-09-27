@@ -223,6 +223,13 @@ export default function Profile() {
             </View>
             <Ionicons name="bookmark" size={28} color={colors.brand} />
           </Pressable>
+          <Pressable testID="open-support" style={styles.refCard} onPress={() => router.push("/support")}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refLabel}>{t("SUPPORT")}</Text>
+              <Text style={styles.refMeta}>{t("Questions about billing, your account, or the app.")}</Text>
+            </View>
+            <Ionicons name="help-buoy" size={28} color={colors.brand} />
+          </Pressable>
           {user?.staff_role ? (
             <Pressable testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>
               <View style={{ flex: 1 }}>
