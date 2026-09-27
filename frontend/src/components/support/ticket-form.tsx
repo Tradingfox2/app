@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { api, TICKET_CATEGORIES, type TicketCategory } from "@/src/api";
+import { track } from "@/src/analytics";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { BODY_MAX, SUBJECT_MAX, subjectIssue, ticketCategoryLabel } from "./copy";
@@ -14,6 +16,9 @@ export function SupportTicketForm({
   onCreated: (id: string) => void;
 }) {
   const { t } = useI18n();
+  useFocusEffect(useCallback(() => {
+    track("screen_view", { screen: "support/new" });
+  }, []));
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState<TicketCategory | null>(null);
   const [body, setBody] = useState("");

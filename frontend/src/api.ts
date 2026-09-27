@@ -1025,6 +1025,16 @@ export const api = {
   adminReviewReport: (id: string, resolution: string, note: string) =>
     request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
   adminAuditLog: () => request<AuditEntry[]>("/admin/audit-log"),
+  /** Authenticated product-event ingest. `track` in `./analytics` is the caller. */
+  ingestEvents: (body: {
+    name: string;
+    props?: Record<string, string | boolean | null>;
+    session_id?: string;
+    event_id?: string;
+  }) => request<{ accepted: number; duplicates: number }>("/events", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
 
   groupSessions: () => request<any[]>("/group-sessions"),
 

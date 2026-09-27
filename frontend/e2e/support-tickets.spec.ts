@@ -55,9 +55,17 @@ function message(id: string, ticketId: string, body: string, role: "user" | "sta
   };
 }
 
+function viewedScreens(events: unknown[]): string[] {
+  return events.flatMap(event => {
+    if (!event || typeof event !== "object") return [];
+    const body = event as { name?: string; props?: { screen?: string } };
+    return body.name === "screen_view" && typeof body.props?.screen === "string" ? [body.props.screen] : [];
+  });
+}
+
 async function fixtures(
   page: Page,
-  state: { tickets: FixtureTicket[]; messages: Record<string, FixtureMessage[]> },
+  state: { tickets: FixtureTicket[]; messages: Record<string, FixtureMessage[]>; events?: unknown[] },
   override?: (route: Route, path: string, method: string) => Promise<boolean>,
 ) {
   await page.addInitScript(() => localStorage.setItem("ironflow_token", JSON.stringify("synthetic-test-token")));
@@ -66,6 +74,10 @@ async function fixtures(
     const path = url.pathname.replace(/^\/api/, "");
     const method = route.request().method();
     if (override && await override(route, path, method)) return;
+    if (path === "/events" && method === "POST") {
+      state.events?.push(route.request().postDataJSON());
+      return route.fulfill({ json: { accepted: 1, duplicates: 0 } });
+    }
     if (path === "/auth/me") return route.fulfill({ json: me });
     if (path === "/notifications/unread-count") return route.fulfill({ json: { count: 0 } });
     if (path === "/tickets" && method === "GET") {
@@ -115,17 +127,21 @@ async function fixtures(
 }
 
 test("profile opens support and an empty list explains itself", async ({ page }) => {
-  await fixtures(page, { tickets: [], messages: {} });
+  const events: unknown[] = [];
+  await fixtures(page, { tickets: [], messages: {}, events });
   await page.goto("/profile");
+  await expect.poll(() => viewedScreens(events)).toContain("profile");
   await page.getByTestId("open-support").click();
   await expect(page).toHaveURL(/\/support$/);
   await expect(page.getByTestId("support-empty")).toHaveText("No tickets yet.");
+  await expect.poll(() => viewedScreens(events)).toContain("support");
+  expect(viewedScreens(events).every(screen => !screen.includes("?"))).toBe(true);
   await expect(page.getByText("Page could not be found.", { exact: true })).toHaveCount(0);
 });
 
 test("creating a ticket posts the form and opens the id the API returned", async ({ page }) => {
   const posts: unknown[] = [];
-  const state = { tickets: [] as FixtureTicket[], messages: {} as Record<string, FixtureMessage[]> };
+  const state = { tickets: [] as FixtureTicket[], messages: {} as Record<string, FixtureMessage[]>, events: [] as unknown[] };
   await fixtures(page, state, async (route, path, method) => {
     if (path === "/tickets" && method === "POST") {
       posts.push(route.request().postDataJSON());
@@ -154,6 +170,8 @@ test("creating a ticket posts the form and opens the id the API returned", async
   await expect(page.getByTestId("support-status")).toHaveText("Open · Billing");
   await expect(page.getByTestId("support-message-m-open")).toContainText("Charged twice for Pro");
   expect(posts).toEqual([{ subject: "Cannot update my card", category: "billing", body: "Charged twice for Pro" }]);
+  await expect.poll(() => viewedScreens(state.events)).toEqual(expect.arrayContaining(["support", "support/new", "support/[id]"]));
+  expect(viewedScreens(state.events).some(screen => screen.includes("t-new") || screen.includes("?"))).toBe(false);
 });
 
 test("the list shows tickets from the API and a reply posts onto the thread", async ({ page }) => {
@@ -214,8 +232,11 @@ test("a failed ticket list shows the API detail and retry recovers", async ({ pa
 });
 
 test("an unknown ticket shows the not-found detail", async ({ page }) => {
-  await fixtures(page, { tickets: [], messages: {} });
+  const events: unknown[] = [];
+  await fixtures(page, { tickets: [], messages: {}, events });
   await page.goto("/support/missing");
   await expect(page.getByTestId("support-detail-error")).toHaveText("Ticket not found");
   await expect(page.getByTestId("support-reply")).toHaveCount(0);
+  await expect.poll(() => viewedScreens(events)).toContain("support/[id]");
+  expect(viewedScreens(events).some(screen => screen.includes("missing"))).toBe(false);
 });

@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { api, type TicketSummary } from "@/src/api";
+import { track } from "@/src/analytics";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { statusTone, ticketCategoryText, ticketStatusText } from "./copy";
@@ -42,6 +43,9 @@ export function SupportTicketList({
     }
   }, [t]);
 
+  useFocusEffect(useCallback(() => {
+    track("screen_view", { screen: "support" });
+  }, []));
   useFocusEffect(useCallback(() => {
     setLoading(true);
     setError("");

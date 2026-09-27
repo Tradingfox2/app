@@ -4,10 +4,12 @@ import { colors } from "@/src/theme";
 import { ActivityIndicator, Platform, View } from "react-native";
 import { useAuth } from "@/src/auth-context";
 import { useI18n } from "@/src/i18n";
+import { useShellScreenView } from "@/src/screen-view";
 
 export default function TabsLayout() {
   const { user, loading } = useAuth();
   const { t } = useI18n();
+  useShellScreenView(!loading && !!user);
 
   if (loading) {
     return (

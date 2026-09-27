@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { api, type Ticket, type TicketMessage } from "@/src/api";
+import { track } from "@/src/analytics";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { BODY_MAX, ticketAuthorText, ticketCategoryText, ticketStatusText } from "./copy";
@@ -54,6 +55,9 @@ export function SupportTicketDetail({
     }
   }, [t, ticketId]);
 
+  useFocusEffect(useCallback(() => {
+    track("screen_view", { screen: "support/[id]" });
+  }, []));
   useFocusEffect(useCallback(() => {
     setLoading(true);
     void load();
