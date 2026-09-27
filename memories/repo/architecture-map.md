@@ -210,9 +210,8 @@ through the shared module.
   (24h and 7d) and is the only staff rollup. `ts` is server UTC. Actor, role,
   and source are not taken from the client body.
 - **Live source of truth:** Mongo `analytics_events`. FastAPI/Motor writes
-  and the admin rollup reads it. `supabase/migrations/005_analytics_events.sql`
-  is a schema mirror only (after `004_support_and_dual_media.sql`). No runtime
-  write to Postgres. Not SQLAlchemy.
+  and the admin rollup reads it. No Supabase migration: unlike 001–003, ops
+  does not apply a Postgres copy of this collection.
 - **Read ACL:** staff permission `analytics.read` on support, moderator, and
   admin. Product `admin` and approved coaches without `staff_role` are denied.
   UI: `AnalyticsPanel` on `/admin`, shown only when the overview lists the

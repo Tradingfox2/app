@@ -5,7 +5,7 @@ API itself) writes one row per event, and the staff console reads counts
 from those rows. There is no warehouse, no sampled chart, and no client-side
 metric.
 
-**Live source of truth is the MongoDB collection `analytics_events`: FastAPI/Motor writes it and the admin rollup reads it.** `supabase/migrations/005_analytics_events.sql` is a schema mirror only, the same dual-store pattern already used for other collections (SQL kept level with Mongo so a later copy is not a redesign). The API does not write analytics to Postgres at runtime. There is one live store, not two. SQLAlchemy and Alembic are not used.
+**Live source of truth is the MongoDB collection `analytics_events`: FastAPI/Motor writes it and the admin rollup reads it.** There is no Supabase migration for this collection and no runtime write to Postgres. SQLAlchemy and Alembic are not used.
 
 ## Envelope
 
@@ -156,7 +156,7 @@ cd backend && python -m pytest tests/test_analytics.py -q
 
 ## Handoffs
 
-- **schemaforge** — live store is Mongo `analytics_events`. `005_analytics_events.sql` is the schema mirror only (numbered after `004_support_and_dual_media.sql`). Change columns in both places. Do not add a second runtime write.
+- **schemaforge** — live store is Mongo `analytics_events` only. No SQL migration in this change. Other product tables keep their existing Supabase mirrors; this event log does not, because nothing applies or queries a Postgres copy.
 - **apismith** — ingest style is `POST /api/events` (single or `events[]`), actor from the token, idempotent `event_id`.
 - **screenwright** — emit `screen_view` from navigation via `track`. Do not put query parameters in `screen`.
 - **socialgraph** — `post_created` is live on the feed composer only. Add the workout-share call site, and `post_shared` when the share sheet finishes.

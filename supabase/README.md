@@ -12,8 +12,7 @@ supabase/
 ├── migrations/
 │   ├── 001_init.sql   -- tables, indexes, foreign keys
 │   ├── 002_rls.sql    -- Row Level Security policies + helper function
-│   ├── 003_community_social.sql
-│   └── 005_analytics_events.sql  -- schema mirror of Mongo `analytics_events` (not a second runtime store)
+│   └── 003_community_social.sql
 ├── seed.sql           -- 15 muscles + 50 exercises
 └── README.md
 ```
@@ -31,7 +30,6 @@ supabase/
 | `communities`, `community_members`, `posts` | Social layer |
 | `group_sessions`, `session_participants` | Live group coaching sessions |
 | `subscriptions`, `payouts`, `referrals` | Monetization layer |
-| `analytics_events` | Schema mirror of the Mongo collection. Live reads and writes stay in Mongo. See `docs/analytics-events.md`. |
 
 ## RLS model
 
