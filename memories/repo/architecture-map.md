@@ -203,6 +203,25 @@ through the shared module.
   *after* `user` and use `Annotated[..., Query()] = default`, because tests
   call handlers positionally.
 
+## Added 2026-09-27 (product analytics)
+
+- **`backend/analytics.py`** owns the `analytics_events` collection. `record()`
+  inserts one row; `counts()` is two `count_documents` per taxonomy name
+  (24h and 7d) and is the only staff rollup. `ts` is server UTC. Actor, role,
+  and source are not taken from the client body.
+- **Live source of truth:** Mongo `analytics_events`. FastAPI/Motor writes
+  and the admin rollup reads it. No Supabase migration for this collection.
+- **Read ACL:** staff permission `analytics.read` on support, moderator, and
+  admin. Product `admin` and approved coaches without `staff_role` are denied.
+  UI: `AnalyticsPanel` on `/admin`, shown only when the overview lists the
+  permission.
+- **Prove emit:** `frontend/src/analytics.ts` `track()` → `POST /api/events`.
+  The feed composer calls `track("post_created", …)` after a successful
+  `api.publish`. Do not also emit that event from `create_post`.
+- **Indexes:** unique `event_id`, compound `(name, ts)` named
+  `analytics_events_name_ts`, created from `analytics.ensure_indexes` in
+  `server.lifespan`.
+
 ## Added 2026-09-27 (support tickets + dual media foundations)
 
 - **Schema SoT:** `supabase/migrations/004_support_and_dual_media.sql`. Tables:

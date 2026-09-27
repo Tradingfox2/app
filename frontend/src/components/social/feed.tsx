@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as ExpoLinking from "expo-linking";
 import { useRouter } from "expo-router";
+import { track } from "@/src/analytics";
 import { api, mediaUrl, type Community, type LinkPreview, type MediaItem, type Poll, type Post, type PostComment, type WorkoutSummary } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
@@ -133,6 +134,13 @@ export function Composer({ onPublished, communityId }: { onPublished: (post: Pos
         media_ids: media.map(item => item.id),
         ...(audience ? { community_id: audience } : {}),
         ...(poll ? { poll: { options: poll.options.map(option => option.trim()).filter(Boolean), duration_hours: poll.hours } } : {}),
+      });
+      // Best-effort: a failed analytics post must not fail the publish.
+      track("post_created", {
+        post_id: post.id,
+        has_media: media.length > 0,
+        has_poll: poll !== null,
+        ...(audience ? { community_id: audience } : {}),
       });
       setText(""); setMedia([]); setPoll(null); onPublished(post);
     } catch (cause) {

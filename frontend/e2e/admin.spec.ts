@@ -56,6 +56,7 @@ test("support sees the queue read-only and cannot suspend", async ({ page }) => 
   await expect(page.getByTestId("admin-user-detail")).toBeVisible();
   await expect(page.getByTestId("admin-suspend")).toHaveCount(0);
   await expect(page.getByTestId("admin-role-admin")).toHaveCount(0);
+  await expect(page.getByTestId("admin-tab-analytics")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
@@ -88,6 +89,36 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
   await suspend.click();
   await expect.poll(() => suspensions).toEqual([{ reason: "Repeated dangerous advice" }]);
   await expect(page.getByText(/Suspended:/)).toBeVisible();
+});
+
+test("analytics tab renders the counts the API returned", async ({ page }) => {
+  const windows = {
+    "24h": { screen_view: 0, ticket_created: 0, ticket_replied: 0, post_created: 3, post_shared: 0, live_session_started: 0, live_session_joined: 0 },
+    "7d": { screen_view: 1, ticket_created: 0, ticket_replied: 0, post_created: 5, post_shared: 0, live_session_started: 0, live_session_joined: 0 },
+  };
+  await fixtures(page, support, async (route, path) => {
+    if (path === "/admin/overview") {
+      await route.fulfill({ json: {
+        users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+        queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5 },
+        activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+        permissions: [...PERMISSIONS.support, "analytics.read"],
+        staff_role: "support",
+      } });
+      return true;
+    }
+    if (path === "/admin/analytics") {
+      await route.fulfill({ json: { generated_at: "2026-09-27T12:00:00Z", windows } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/admin");
+  await page.getByTestId("admin-tab-analytics").click();
+  await expect(page.getByTestId("analytics-count-post_created-24h")).toHaveText("3");
+  await expect(page.getByTestId("analytics-count-post_created-7d")).toHaveText("5");
+  await expect(page.getByTestId("analytics-count-screen_view-7d")).toHaveText("1");
+  await expect(page.getByText("Counts are read from stored events. Nothing on this page is estimated.", { exact: true })).toBeVisible();
 });
 
 test("audit tab shows who did what", async ({ page }) => {
