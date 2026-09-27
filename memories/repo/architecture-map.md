@@ -202,3 +202,22 @@ through the shared module.
 - **Test harness:** new router params that take `Query(...)` defaults must go
   *after* `user` and use `Annotated[..., Query()] = default`, because tests
   call handlers positionally.
+
+## Added 2026-09-27 (support tickets + dual media foundations)
+
+- **Schema SoT:** `supabase/migrations/004_support_and_dual_media.sql`. Tables:
+  `admin_media`, `support_tickets`, `support_ticket_messages`. RLS enabled,
+  no client policies (deny-by-default, same as `public.media`). No priority
+  column, no `user_media_objects`, no `purpose` on `public.media`, no
+  attachments join table. Message attachments are nullable
+  `support_ticket_messages.media_id` → `public.media`.
+- **Bytes:** `backend/media_storage.py` remains the only writer.
+  `backend/media_repo.py` (`create_user_media`, `create_admin_media`) inserts
+  Mongo `media` / `admin_media` after `store`. Key prefixes:
+  `users/{user_id}/{media_id}.{ext}` and `admin/{staff_id}/{asset_id}.{ext}`.
+  Layout notes: `docs/STORAGE_LAYOUT.md`.
+- **Indexes:** startup in `server.py` lifespan mirrors the SQL partial indexes
+  on `admin_media` (`key` unique; staff+created_at and purpose+created_at where
+  `deleted_at` is null). `POST /media` in `routers/social.py` is unchanged.
+- **Smoke:** `backend/tests/test_dual_media_smoke.py` is sync (no
+  pytest-asyncio in this tree) and only touches a temp `MEDIA_ROOT`.
