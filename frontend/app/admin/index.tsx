@@ -3,19 +3,21 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole } from "@/src/api";
+import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole, SupportMessage, SupportTicket, SupportTicketDetail, SupportTicketStatus } from "@/src/api";
 import { AnalyticsPanel } from "@/src/components/admin/analytics-panel";
+import { track } from "@/src/analytics";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
-type Tab = "overview" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit" | "analytics";
+type Tab = "overview" | "analytics" | "support" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit";
 type CoachFilter = "pending" | "approved" | "rejected" | "suspended";
 type Status = "all" | "active" | "suspended" | "staff";
 
 const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: "overview", label: "OVERVIEW", icon: "grid-outline" },
   { id: "analytics", label: "ANALYTICS", icon: "pulse-outline" },
+  { id: "support", label: "SUPPORT", icon: "chatbubbles-outline" },
   { id: "reports", label: "REPORTS", icon: "flag-outline" },
   { id: "coaches", label: "COACHES", icon: "ribbon-outline" },
   { id: "joins", label: "JOIN REQUESTS", icon: "enter-outline" },
@@ -24,6 +26,12 @@ const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = 
   { id: "team", label: "TEAM", icon: "shield-checkmark-outline" },
   { id: "audit", label: "AUDIT", icon: "list-outline" },
 ];
+
+const TICKET_STATUSES: SupportTicketStatus[] = ["open", "pending", "closed"];
+
+function ticketLabel(person: { full_name: string | null; email: string | null } | null | undefined, fallback: string): string {
+  return person?.full_name || person?.email || fallback;
+}
 
 const RESOLUTIONS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: "dismissed", label: "DISMISS", icon: "close-circle-outline" },
@@ -54,6 +62,14 @@ export default function AdminConsole() {
   const [users, setUsers] = useState<AdminAccount[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditQuery, setAuditQuery] = useState("");
+  const [ticketStatus, setTicketStatus] = useState<SupportTicketStatus>("open");
+  const [ticketQuery, setTicketQuery] = useState("");
+  const [ticketSearch, setTicketSearch] = useState("");
+  const [tickets, setTickets] = useState<SupportTicket[] | null>(null);
+  const [ticketDetail, setTicketDetail] = useState<SupportTicketDetail | null>(null);
+  const [draftStatus, setDraftStatus] = useState<SupportTicketStatus>("open");
+  const [reply, setReply] = useState("");
+  const [ticketReload, setTicketReload] = useState(0);
   const [selected, setSelected] = useState<AdminAccount | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>("all");
@@ -98,8 +114,22 @@ export default function AdminConsole() {
     if (tab === "communities") void api.adminCommunities().then(rows => { if (!cancel) setCommunities(rows); }).catch(fail);
     if (tab === "team") void api.adminUsers("", "staff").then(rows => { if (!cancel) setTeam(rows.users); }).catch(fail);
     if (tab === "coaches") void api.adminCoaches(coachFilter).then(rows => { if (!cancel) setCoachDirectory(rows); }).catch(fail);
+    if (tab === "support") {
+      if (!overview.permissions.includes("tickets.read")) {
+        setTickets([]);
+        return () => { cancel = true; };
+      }
+      setError("");
+      setTickets(null);
+      void api.adminTickets(ticketStatus, ticketSearch).then(page => { if (!cancel) setTickets(page.tickets); }).catch(cause => {
+        if (!cancel) {
+          setTickets([]);
+          setError(cause instanceof Error ? cause.message : t("Something went wrong"));
+        }
+      });
+    }
     return () => { cancel = true; };
-  }, [tab, overview, joinStatus, coachFilter, t]);
+  }, [tab, overview, joinStatus, coachFilter, ticketStatus, ticketSearch, ticketReload, t]);
 
   useFocusEffect(useCallback(() => {
     busy.current = false; setWorking(false); setLoading(true); void load();
@@ -158,6 +188,37 @@ export default function AdminConsole() {
     setSelected(await api.adminUser(updated.id)); setReason("");
     setAudit(await api.adminAuditLog());
   });
+  const openTicket = (id: string) => act(async () => {
+    const detail = await api.adminTicket(id);
+    setTicketDetail(detail);
+    setDraftStatus(detail.status);
+    setReply("");
+  });
+  const rememberTicket = (detail: SupportTicketDetail) => {
+    setTicketDetail(detail);
+    setDraftStatus(detail.status);
+    setTickets(rows => rows ? rows.map(row => row.id === detail.id ? { ...row, status: detail.status, updated_at: detail.updated_at, assignee_id: detail.assignee_id, user: detail.user, assignee: detail.assignee } : row) : rows);
+  };
+  const saveTicketStatus = () => act(async () => {
+    if (!ticketDetail || draftStatus === ticketDetail.status) return;
+    await api.adminUpdateTicket(ticketDetail.id, { status: draftStatus });
+    rememberTicket(await api.adminTicket(ticketDetail.id));
+  });
+  const sendReply = () => act(async () => {
+    if (!ticketDetail) return;
+    const id = ticketDetail.id;
+    await api.adminReplyTicket(id, reply.trim());
+    track("ticket_replied", { ticket_id: id });
+    setReply("");
+    let statusError = "";
+    try {
+      await api.adminUpdateTicket(id, { status: "pending" });
+    } catch (cause) {
+      statusError = cause instanceof Error ? cause.message : t("Something went wrong");
+    }
+    rememberTicket(await api.adminTicket(id));
+    if (statusError) throw new Error(statusError);
+  });
 
   if (!loading && !overview) {
     return <SafeAreaView style={styles.safe}><View style={styles.locked}>
@@ -181,13 +242,17 @@ export default function AdminConsole() {
       </View>
 
       <View style={styles.tabs}>
-        {NAV.filter(item => item.id !== "analytics" || can("analytics.read")).map(item => {
+        {NAV.filter(item => {
+          if (item.id === "analytics") return can("analytics.read");
+          if (item.id === "support") return can("tickets.read");
+          return true;
+        }).map(item => {
           const count = item.id === "reports" ? overview?.queues.open_reports
             : item.id === "coaches" ? overview?.queues.pending_coach_applications
             : item.id === "joins" ? overview?.queues.pending_memberships
             : 0;
           return (
-            <Pressable key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => setTab(item.id)} style={[styles.tab, tab === item.id && styles.tabActive]}>
+            <Pressable key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => { if (tab === "support" && item.id !== "support") setTicketDetail(null); setTab(item.id); }} style={[styles.tab, tab === item.id && styles.tabActive]}>
               <Ionicons name={item.icon} size={16} color={tab === item.id ? colors.brand : colors.textMuted} />
               <Text style={[styles.tabText, tab === item.id && styles.tabTextActive]}>{t(item.label)}</Text>
               {count ? <View style={styles.badge}><Text style={styles.badgeText}>{count}</Text></View> : null}
@@ -198,7 +263,7 @@ export default function AdminConsole() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? <ActivityIndicator color={colors.brand} /> : null}
-        {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+        {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { setTicketReload(value => value + 1); void load(); }}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
 
         {tab === "overview" && overview ? <>
           <Text style={styles.section}>{t("QUEUES")}</Text>
@@ -442,6 +507,76 @@ export default function AdminConsole() {
           ))}
         </> : null}
 
+        {tab === "support" && can("tickets.read") ? <>
+          {ticketDetail ? <View testID="ticket-thread">
+            <Pressable accessibilityRole="button" testID="ticket-back" onPress={() => setTicketDetail(null)} style={styles.action}>
+              <Ionicons name="arrow-back" size={15} color={colors.text} />
+              <Text style={styles.actionText}>{t("BACK TO QUEUE")}</Text>
+            </Pressable>
+            <View style={styles.card}>
+              <View style={styles.cardHead}>
+                <Text style={styles.tag}>{t(ticketDetail.category.replace(/_/g, " ").toUpperCase())}</Text>
+                <Text style={styles.time}>{formatDate(ticketDetail.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
+              </View>
+              <Text style={styles.name}>{ticketDetail.subject}</Text>
+              <Text style={styles.meta}>{ticketLabel(ticketDetail.user, ticketDetail.user_id)} · {t(ticketDetail.status.toUpperCase())}</Text>
+              {ticketDetail.assignee_id ? <Text style={styles.meta}>{t("Assigned to {name}", { name: ticketLabel(ticketDetail.assignee, ticketDetail.assignee_id) })}</Text> : null}
+              {ticketDetail.messages.length === 0 ? <Text style={styles.hint}>{t("No messages on this ticket yet.")}</Text> : null}
+              {ticketDetail.messages.map((message: SupportMessage) => (
+                <View key={message.id} style={styles.note} testID={`ticket-message-${message.id}`}>
+                  <Text style={styles.meta}>{t(message.author_role === "staff" ? "STAFF" : "MEMBER")}{message.author ? ` · ${ticketLabel(message.author, message.author_id)}` : ""} · {formatDate(message.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
+                  <Text style={styles.noteText}>{message.body}</Text>
+                </View>
+              ))}
+              {can("tickets.write") ? <>
+                <Text style={styles.section}>{t("STATUS")}</Text>
+                <View style={styles.filters}>
+                  {TICKET_STATUSES.map(item => (
+                    <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: draftStatus === item }} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} style={[styles.chip, draftStatus === item && styles.chipActive]}>
+                      <Text style={[styles.chipText, draftStatus === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Pressable accessibilityRole="button" testID="ticket-save-status" disabled={working || draftStatus === ticketDetail.status} onPress={() => void saveTicketStatus()} style={[styles.action, (working || draftStatus === ticketDetail.status) && styles.disabled]}>
+                  <Text style={styles.actionText}>{t("SAVE STATUS")}</Text>
+                </Pressable>
+                <Text style={styles.section}>{t("REPLY")}</Text>
+                <TextInput value={reply} onChangeText={setReply} maxLength={5000} multiline placeholder={t("Reply to the member")} placeholderTextColor={colors.textDim} style={[styles.input, styles.replyInput]} testID="ticket-reply" />
+                <Pressable accessibilityRole="button" testID="ticket-send-reply" disabled={working || reply.trim().length === 0} onPress={() => void sendReply()} style={[styles.action, (working || reply.trim().length === 0) && styles.disabled]}>
+                  <Ionicons name="send-outline" size={15} color={colors.text} />
+                  <Text style={styles.actionText}>{t("SEND REPLY")}</Text>
+                </Pressable>
+                <Text style={styles.hint}>{t("A reply marks the ticket pending so the member knows staff has answered.")}</Text>
+              </> : <Text style={styles.hint}>{t("Read-only: replying to tickets needs the support role.")}</Text>}
+            </View>
+          </View> : <>
+            <View style={styles.filters}>
+              {TICKET_STATUSES.map(item => (
+                <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: ticketStatus === item }} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} style={[styles.chip, ticketStatus === item && styles.chipActive]}>
+                  <Text style={[styles.chipText, ticketStatus === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.searchRow}>
+              <TextInput value={ticketQuery} onChangeText={setTicketQuery} onSubmitEditing={() => setTicketSearch(ticketQuery.trim())} maxLength={80} placeholder={t("Search by subject, email, or ticket id")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-ticket-search" />
+              <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => setTicketSearch(ticketQuery.trim())} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Pressable>
+            </View>
+            {!can("tickets.read") ? <Text style={styles.hint}>{t("Reading tickets needs the support role.")}</Text> : null}
+            {tickets === null && !error ? <ActivityIndicator color={colors.brand} /> : null}
+            {can("tickets.read") && tickets && tickets.length === 0 && !error ? <Text style={styles.hint}>{t("The support queue is empty.")}</Text> : null}
+            {(tickets || []).map(ticket => (
+              <Pressable key={ticket.id} accessibilityRole="button" testID={`admin-ticket-${ticket.id}`} onPress={() => void openTicket(ticket.id)} style={styles.row}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.name}>{ticket.subject}</Text>
+                  <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())} · {formatDate(ticket.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
+                </View>
+                <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(ticket.status.toUpperCase())}</Text></View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
+              </Pressable>
+            ))}
+          </>}
+        </> : null}
+
         {tab === "analytics" && can("analytics.read") ? <AnalyticsPanel /> : null}
 
         {tab === "audit" ? <>
@@ -489,6 +624,7 @@ const styles = StyleSheet.create({
   actionText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, disabled: { opacity: 0.4 },
   link: { color: colors.brand, fontSize: 12, fontWeight: "800", marginTop: spacing.sm },
   input: { minHeight: 44, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, color: colors.text, marginBottom: spacing.sm },
+  replyInput: { minHeight: 88, paddingVertical: spacing.sm, textAlignVertical: "top" },
   searchRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   searchBtn: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginVertical: spacing.sm },

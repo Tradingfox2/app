@@ -109,6 +109,48 @@ export type AdminOverview = {
   staff_role: StaffRole | null;
 };
 
+export type SupportTicketStatus = "open" | "pending" | "closed";
+
+/** Account snippet on staff ticket reads. Response-only; not stored on the ticket. */
+export type SupportPerson = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+export type SupportTicket = {
+  id: string;
+  user_id: string;
+  subject: string;
+  category: string;
+  status: SupportTicketStatus;
+  assignee_id: string | null;
+  created_at: string;
+  updated_at: string;
+  user: SupportPerson | null;
+  assignee: SupportPerson | null;
+};
+
+export type SupportMessage = {
+  id: string;
+  ticket_id: string;
+  author_id: string;
+  author_role: "user" | "staff";
+  body: string;
+  media_id: string | null;
+  created_at: string;
+  /** Present on staff thread reads. Null when that account is gone. */
+  author?: SupportPerson | null;
+};
+
+export type SupportTicketDetail = SupportTicket & { messages: SupportMessage[] };
+
+/** Staff queue. `count` is the number of rows in `tickets` (the page), not a second total. */
+export type SupportTicketList = {
+  tickets: SupportTicket[];
+  count: number;
+};
+
 export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
 
 export type Membership = {
@@ -1060,6 +1102,13 @@ export const api = {
   adminSetStaffRole: (id: string, staff_role: StaffRole | null, reason: string) =>
     request<AdminAccount>(`/admin/users/${id}/staff-role`, { method: "PATCH", body: JSON.stringify({ staff_role, reason }) }),
   adminReports: (status: "open" | "resolved" = "open") => request<ModerationReport[]>(`/admin/reports?status=${status}`),
+  adminTickets: (status: SupportTicketStatus, q = "") =>
+    request<SupportTicketList>(`/admin/tickets?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+  adminTicket: (id: string) => request<SupportTicketDetail>(`/admin/tickets/${id}`),
+  adminUpdateTicket: (id: string, patch: { status?: SupportTicketStatus; assignee_id?: string | null }) =>
+    request<SupportTicketDetail>(`/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  adminReplyTicket: (id: string, body: string) =>
+    request<SupportMessage>(`/admin/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
   adminMemberships: (status: "pending" | "banned" | "removed" = "pending") =>
     request<AdminMembership[]>(`/admin/memberships?status=${status}`),
   adminReviewMembership: (id: string, status: "active" | "rejected", reason: string) =>
