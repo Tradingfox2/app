@@ -78,7 +78,7 @@ Not used.
 - No `android.permission.RECORD_AUDIO`.
 - `expo-camera` is not listed under `plugins`, so prebuild will not add a microphone string for the QR scanner.
 - `frontend/app/checkin.tsx` uses `CameraView` for barcodes only.
-- Live sessions today store an external `join_url` (Zoom, Meet, YouTube). `frontend/app/live/[id].tsx` fetches that session; it does not capture the microphone. The livestream room should add the permission in the change that starts capture.
+- The live room is `frontend/app/live/[id].tsx`, owned by the livestream work. This change does not add that screen and does not add a microphone string. Add `NSMicrophoneUsageDescription` and `RECORD_AUDIO` only in the change that starts capture.
 
 ## What a rebuild is for
 

@@ -2519,14 +2519,6 @@ async def list_live_sessions(channel_id: str, user: dict = Depends(current_user)
     return {"upcoming": await _live_view(upcoming, user["id"]), "past": await _live_view(past, user["id"])}
 
 
-@router.get("/live-sessions/{session_id}")
-async def get_live_session(session_id: str, user: dict = Depends(current_user)):
-    """One session for `ironflow://live/{id}`. Same view as the channel list."""
-    session, channel = await _live_session_or_404(session_id)
-    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
-    return (await _live_view([session], user["id"]))[0]
-
-
 @router.post("/live-sessions/{session_id}/rsvp", status_code=201)
 async def rsvp_live_session(session_id: str, user: dict = Depends(current_user)):
     session, channel = await _live_session_or_404(session_id)
