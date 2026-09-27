@@ -169,3 +169,54 @@ export const communityMessages: Record<SupportedLocale, Messages> = {
     "TRAIN TOGETHER": "ALLENARSI INSIEME", "Find your people. Build momentum.": "Trova il tuo gruppo. Mantieni lo slancio.", "Join focused training groups, learn from coaches, and keep the conversation moving between sessions.": "Unisciti a gruppi mirati, impara dai coach e confrontati tra una sessione e l'altra.", "Become a coach": "Diventa coach", CREATE: "CREA", "BECOME A COACH": "DIVENTA COACH", DISCOVER: "SCOPRI", MINE: "I MIEI GRUPPI", RANKINGS: "CLASSIFICHE", "TRENDING COMMUNITIES": "COMMUNITY IN EVIDENZA", "YOUR COMMUNITIES": "LE TUE COMMUNITY", members: "membri", communities: "community", APPROVAL: "APPROVAZIONE", OPEN: "APERTA", PENDING: "IN ATTESA", ACTIVE: "ATTIVA", "No communities yet": "Nessuna community", "You have not joined a community yet": "Non hai ancora aderito a una community", "TOP COACHES": "MIGLIORI COACH", "TOP COMMUNITIES": "MIGLIORI COMMUNITY", "NEW COMMUNITY": "NUOVA COMMUNITY", "Build a home for your coaching.": "Crea uno spazio per il tuo coaching.", NAME: "NOME", "Community name": "Nome della community", DESCRIPTION: "DESCRIZIONE", MEMBERSHIP: "ISCRIZIONE", PAID: "A PAGAMENTO", "PUBLIC DISCOVERY": "VISIBILITÀ PUBBLICA", "CREATE COMMUNITY": "CREA COMMUNITY", "COACH ONBOARDING": "REGISTRAZIONE COACH", "Turn expertise into a community.": "Trasforma la competenza in community.", "COACHING BIO": "PROFILO COACH", SPECIALTIES: "SPECIALITÀ", "SUBMIT FOR REVIEW": "INVIA PER REVISIONE", "PARTNER DASHBOARD": "DASHBOARD PARTNER", "ACTIVE MEMBERS": "MEMBRI ATTIVI", COMMUNITIES: "COMMUNITY", "AVAILABLE BALANCE": "SALDO DISPONIBILE", "OPEN COMMUNITY": "COMMUNITY APERTA", "APPLICATION REQUIRED": "CANDIDATURA RICHIESTA", "PAID MEMBERSHIP": "ISCRIZIONE A PAGAMENTO", "JOIN THE GROUP": "UNISCITI AL GRUPPO", "REQUEST PENDING": "RICHIESTA IN ATTESA", CONTINUE: "CONTINUA", REQUEST: "RICHIEDI", CHANNELS: "CANALI", CHANNEL: "CANALE", "MEMBER CHAT": "CHAT MEMBRI", "Start the conversation": "Inizia la conversazione", "Message the channel...": "Scrivi nel canale...", You: "Tu", Member: "Membro", "MANAGE COMMUNITY": "GESTISCI COMMUNITY", "JOIN REQUESTS": "RICHIESTE DI ACCESSO", "No pending requests": "Nessuna richiesta in attesa", DEFAULT: "PREDEFINITO", "ALL MEMBERS": "TUTTI I MEMBRI", OWNER: "PROPRIETARIO", MODERATOR: "MODERATORE"
   }
 };
+
+const postShareMessages: Record<Exclude<SupportedLocale, "en">, Messages> = {
+  fr: {
+    "Copy link": "Copier le lien",
+    "Copied": "Copié",
+    "Could not copy the link": "Impossible de copier le lien",
+    "Share on X": "Partager sur X",
+    "Share on Facebook": "Partager sur Facebook",
+    "Share on WhatsApp": "Partager sur WhatsApp",
+    "Share on LinkedIn": "Partager sur LinkedIn",
+    "Could not open the share sheet. Use copy or a network button.": "Impossible d’ouvrir la feuille de partage. Copiez le lien ou utilisez un réseau.",
+    "Could not open that share page.": "Impossible d’ouvrir cette page de partage.",
+  },
+  de: {
+    "Copy link": "Link kopieren",
+    "Copied": "Kopiert",
+    "Could not copy the link": "Link konnte nicht kopiert werden",
+    "Share on X": "Auf X teilen",
+    "Share on Facebook": "Auf Facebook teilen",
+    "Share on WhatsApp": "Auf WhatsApp teilen",
+    "Share on LinkedIn": "Auf LinkedIn teilen",
+    "Could not open the share sheet. Use copy or a network button.": "Teilen-Dialog konnte nicht geöffnet werden. Link kopieren oder ein Netzwerk wählen.",
+    "Could not open that share page.": "Diese Teilen-Seite konnte nicht geöffnet werden.",
+  },
+  es: {
+    "Copy link": "Copiar enlace",
+    "Copied": "Copiado",
+    "Could not copy the link": "No se pudo copiar el enlace",
+    "Share on X": "Compartir en X",
+    "Share on Facebook": "Compartir en Facebook",
+    "Share on WhatsApp": "Compartir en WhatsApp",
+    "Share on LinkedIn": "Compartir en LinkedIn",
+    "Could not open the share sheet. Use copy or a network button.": "No se pudo abrir la hoja de compartir. Copia el enlace o usa una red.",
+    "Could not open that share page.": "No se pudo abrir esa página para compartir.",
+  },
+  it: {
+    "Copy link": "Copia link",
+    "Copied": "Copiato",
+    "Could not copy the link": "Impossibile copiare il link",
+    "Share on X": "Condividi su X",
+    "Share on Facebook": "Condividi su Facebook",
+    "Share on WhatsApp": "Condividi su WhatsApp",
+    "Share on LinkedIn": "Condividi su LinkedIn",
+    "Could not open the share sheet. Use copy or a network button.": "Impossibile aprire il foglio di condivisione. Copia il link o usa un social.",
+    "Could not open that share page.": "Impossibile aprire quella pagina di condivisione.",
+  },
+};
+
+for (const locale of Object.keys(postShareMessages) as (keyof typeof postShareMessages)[]) {
+  Object.assign(communityMessages[locale], postShareMessages[locale]);
+}

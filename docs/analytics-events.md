@@ -36,7 +36,7 @@ health data are not accepted.
 | `ticket_created` | `ticket_id` | Client or server when a support ticket is created. Owner: opsdesk. | Taxonomy only. No ticket collection exists yet. |
 | `ticket_replied` | `ticket_id` | Client or server when staff or the member replies. Owner: opsdesk. | Taxonomy only. |
 | `post_created` | `post_id`, `has_media`, `has_poll`, `community_id` (omit when the post is public) | Client, after `POST /api/posts` succeeds. | **Yes.** Feed composer in `frontend/src/components/social/feed.tsx` calls `track("post_created", …)`. |
-| `post_shared` | `post_id`, `channel` (`system_share` or a destination id) | Client, when the share sheet completes. Owner: socialgraph. | Taxonomy only |
+| `post_shared` | `post_id`, `channel` (`system_share`, `copy`, `x`, `facebook`, `whatsapp`, `linkedin`) | Client, after a share succeeds. Owner: socialgraph. | **Yes.** `frontend/src/share.ts` calls `track("post_shared", { post_id, channel })` when the system sheet completes (`system_share`), a copy succeeds (`copy`), or a network composer opens. Dismiss, cancel, and failure do not emit. |
 | `live_session_started` | `session_id`, `channel_id` | Server, inside `start_live_session`, source `server`. Owner: community. | Taxonomy only |
 | `live_session_joined` | `session_id` | Client or server when a member opens the join link or RSVPs into a live session. Owner: community. | Taxonomy only |
 
@@ -159,7 +159,7 @@ cd backend && python -m pytest tests/test_analytics.py -q
 - **schemaforge** — live store is Mongo `analytics_events` only. No SQL migration in this change. Other product tables keep their existing Supabase mirrors; this event log does not, because nothing applies or queries a Postgres copy.
 - **apismith** — ingest style is `POST /api/events` (single or `events[]`), actor from the token, idempotent `event_id`.
 - **screenwright** — emit `screen_view` from navigation via `track`. Do not put query parameters in `screen`.
-- **socialgraph** — `post_created` is live on the feed composer only. Add the workout-share call site, and `post_shared` when the share sheet finishes.
+- **socialgraph** — `post_created` is live on the feed composer. `post_shared` is live in `frontend/src/share.ts` (feed menu, share bar, and post detail). Workout share (`frontend/app/workout/[id].tsx`) still needs `track("post_created", …)` after a successful publish.
 - **community** — emit `live_session_started` with `analytics.record(..., source="server")` from `start_live_session`, and `live_session_joined` from the join / RSVP path. One emit per occurrence.
 - **opsdesk** — the Analytics tab lives on `/admin`. When a ticket model exists, emit `ticket_created` and `ticket_replied`. Do not point this tab at `admin/overview` activity counts; those count domain documents, not events.
 

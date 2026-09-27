@@ -203,6 +203,28 @@ through the shared module.
   *after* `user` and use `Annotated[..., Query()] = default`, because tests
   call handlers positionally.
 
+## Added 2026-09-27 (post share-out)
+
+- **Post URL owner:** `frontend/src/share.ts`. `buildPostUrl` / `sharePost` /
+  `copyPostLink` / `openShareTarget`. Share links use `ironflow://post/{id}`,
+  or `{origin}/post/{id}` when `EXPO_PUBLIC_WEB_ORIGIN` or
+  `EXPO_PUBLIC_WEB_URL` is set. `app.json` schemes are `frontend` and
+  `ironflow`. Incoming links are rewritten in `frontend/src/linking.ts`.
+  Documented in `docs/post-deep-links.md`.
+- **Share UI:** `src/components/social/share-bar.tsx`, used by `PostCard`
+  (feed overflow Share and the share icon; always open on `app/post/[id].tsx`).
+  Targets are real composers (X, Facebook, WhatsApp, LinkedIn) via
+  `Linking.openURL` / `window.open`. No success toast.
+- **Own profile wall** (`app/user/[id].tsx`) reuses `Composer` and
+  `POST /posts`. Follow stays on `api.follow` / `social_graph.py`.
+- **`post_shared`:** `share.ts` calls `track("post_shared", { post_id, channel })`
+  only after the system sheet returns shared, copy succeeds, or a network
+  composer opens. `channel` is `system_share`, `copy`, `x`, `facebook`,
+  `whatsapp`, or `linkedin`. Dismiss and failure do not emit.
+- **Not built:** universal links / Android app links (need a real host),
+  native clipboard module (`expo-clipboard`). Web copy uses the Clipboard API.
+  Share does not call a new backend route.
+
 ## Added 2026-09-27 (product analytics)
 
 - **`backend/analytics.py`** owns the `analytics_events` collection. `record()`
@@ -217,7 +239,8 @@ through the shared module.
   permission.
 - **Prove emit:** `frontend/src/analytics.ts` `track()` → `POST /api/events`.
   The feed composer calls `track("post_created", …)` after a successful
-  `api.publish`. Do not also emit that event from `create_post`.
+  `api.publish`. `share.ts` calls `track("post_shared", …)` after a successful
+  share. Do not also emit `post_created` from `create_post`.
 - **Indexes:** unique `event_id`, compound `(name, ts)` named
   `analytics_events_name_ts`, created from `analytics.ensure_indexes` in
   `server.lifespan`.

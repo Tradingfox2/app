@@ -1,20 +1,21 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Image, Linking, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import * as ExpoLinking from "expo-linking";
 import { useRouter } from "expo-router";
 import { track } from "@/src/analytics";
 import { api, mediaUrl, type Community, type LinkPreview, type MediaItem, type Poll, type Post, type PostComment, type WorkoutSummary } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { sharePost } from "@/src/share";
 import { ActionSheet, type SheetAction } from "./action-sheet";
 import { Avatar } from "./avatar";
 import { MediaGrid } from "./media";
 import { MentionInput } from "./mention-input";
 import { ReportSheet, type ReportTarget } from "./report-sheet";
 import { RichText } from "./rich-text";
+import { ShareBar } from "./share-bar";
 
 type Scope = "all" | "following" | "mine";
 export type FeedFilters = { author_id?: string; tag?: string; community_id?: string };
@@ -192,9 +193,11 @@ type PostCardProps = {
   onReposted: (post: Post) => void;
   /** Open the comment thread straight away, as on a post's own screen. */
   initiallyOpen?: boolean;
+  /** Keep the copy / network share row visible, as on the post screen. */
+  shareTargets?: boolean;
 };
 
-export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen }: PostCardProps) {
+export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen, shareTargets }: PostCardProps) {
   const { t, formatDate, formatNumber } = useI18n();
   const { user } = useAuth();
   const router = useRouter();
@@ -204,6 +207,7 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
   const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [quoting, setQuoting] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(!!shareTargets);
   const [error, setError] = useState("");
   const busyRef = useRef(false);
   // A plain repost is a frame around someone else's post: every action on the
@@ -251,17 +255,21 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
     onChange({ ...post, ...updated }); setEditing(null);
   });
   const remove = () => guard(async () => { await api.deletePost(post.id); onRemoved(); });
-  const sharePost = () => {
-    const url = ExpoLinking.createURL(`/post/${shown.id}`);
-    void Share.share({ message: `${shown.content ? `${shown.content.slice(0, 120)}\n` : ""}${url}` }).catch(() => undefined);
+  const openPost = () => router.push({ pathname: "/post/[id]", params: { id: shown.id } });
+  const shareOut = () => {
+    setShareOpen(true);
+    const snippet = shown.content ? shown.content.slice(0, 120) : undefined;
+    void sharePost({ id: shown.id, title: shown.author?.full_name || "IronFlow", message: snippet }).then(result => {
+      if (result === "unavailable") setError(t("Could not open the share sheet. Use copy or a network button."));
+    });
   };
 
   const own = post.author_id === user?.id;
   const actions: SheetAction[] = [
     ...(own && post.can_edit && !plainRepost ? [{ key: "edit", label: t("Edit post"), icon: "create-outline" as const, onPress: () => setEditing(post.content) }] : []),
     { key: "save", label: t(shown.saved_by_me ? "Remove from saved" : "Save post"), icon: shown.saved_by_me ? "bookmark" as const : "bookmark-outline" as const, onPress: () => void toggleSave() },
-    { key: "share", label: t("Share"), icon: "share-outline" as const, onPress: sharePost },
-    { key: "open", label: t("Open post"), icon: "open-outline" as const, onPress: () => router.push({ pathname: "/post/[id]", params: { id: shown.id } }) },
+    { key: "share", label: t("Share"), icon: "share-outline" as const, onPress: shareOut },
+    { key: "open", label: t("Open post"), icon: "open-outline" as const, onPress: openPost },
     ...(!own ? [{ key: "report", label: t("Report post"), icon: "flag-outline" as const, onPress: () => setReporting({ target_type: "post", target_id: shown.id }) }] : []),
     ...(own ? [{ key: "delete", label: t("Delete post"), icon: "trash-outline" as const, destructive: true, onPress: () => void remove() }] : []),
   ];
@@ -271,10 +279,10 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
       {plainRepost ? <Text style={styles.repostLabel}><Ionicons name="repeat" size={12} color={colors.textMuted} /> {t("{name} reposted", { name: post.author?.full_name || t("Member") })}</Text> : null}
       <View style={styles.head}>
         <Pressable accessibilityRole="button" accessibilityLabel={shown.author?.full_name || t("Member")} onPress={() => shown.author && router.push({ pathname: "/user/[id]", params: { id: shown.author.id } })}><Avatar user={shown.author} /></Pressable>
-        <View style={{ flex: 1 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Open post")} testID={`post-open-${shown.id}`} onPress={openPost} style={{ flex: 1 }}>
           <Text style={styles.author}>{shown.author?.full_name || t("Member")}</Text>
           <Text style={styles.time}>{formatDate(shown.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{shown.edited_at ? ` · ${t("edited")}` : ""}{shown.community_id ? ` · ${t("Community")}` : ""}</Text>
-        </View>
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("More options")} testID={`post-menu-${post.id}`} onPress={() => setMenu(true)} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={18} color={colors.textDim} /></Pressable>
       </View>
       {post.original?.unavailable ? <Text style={styles.unavailable}>{t("This post is no longer available.")}</Text> : null}
@@ -297,8 +305,10 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen 
         <Pressable accessibilityRole="button" accessibilityLabel={shown.reposted_by_me ? t("Undo repost") : t("Repost")} accessibilityState={{ selected: !!shown.reposted_by_me }} disabled={busy} onPress={() => void toggleRepost()} style={styles.action}><Ionicons name="repeat" size={21} color={shown.reposted_by_me ? colors.brand : colors.textMuted} /><Text style={[styles.actionText, shown.reposted_by_me && styles.actionActive]}>{formatNumber(shown.repost_count)}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("Quote")} testID={`post-quote-${post.id}`} disabled={busy} onPress={() => setQuoting(quoting === null ? "" : null)} style={styles.action}><Ionicons name="chatbox-ellipses-outline" size={19} color={quoting !== null ? colors.brand : colors.textMuted} /></Pressable>
         <View style={{ flex: 1 }} />
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} accessibilityState={{ expanded: shareTargets || shareOpen }} testID={`post-share-${shown.id}`} onPress={() => setShareOpen(open => !open)} style={styles.action}><Ionicons name="share-outline" size={19} color={shareTargets || shareOpen ? colors.brand : colors.textMuted} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={shown.saved_by_me ? t("Remove from saved") : t("Save post")} testID={`post-save-${post.id}`} disabled={busy} onPress={() => void toggleSave()} style={styles.action}><Ionicons name={shown.saved_by_me ? "bookmark" : "bookmark-outline"} size={19} color={shown.saved_by_me ? colors.brand : colors.textMuted} /></Pressable>
       </View>
+      {shareTargets || shareOpen ? <ShareBar postId={shown.id} title={shown.author?.full_name || "IronFlow"} message={shown.content} /> : null}
       {quoting !== null ? <View style={styles.commentRow} testID={`quote-box-${post.id}`}>
         <MentionInput value={quoting} onChangeText={setQuoting} maxLength={4000} placeholder={t("Add your take...")} placeholderTextColor={colors.textDim} style={styles.commentInput} testID="quote-input" />
         <Pressable accessibilityRole="button" accessibilityLabel={t("Post quote")} testID="quote-send" disabled={busy || !quoting.trim()} onPress={() => void sendQuote()} style={[styles.iconButton, (busy || !quoting.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.brand} /></Pressable>
