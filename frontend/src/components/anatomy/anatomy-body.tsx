@@ -98,16 +98,19 @@ export function AnatomyBody({
   const svgRef = useRef<unknown>(null);
   const [svgNode, setSvgNode] = useState<SVGSVGElement | null>(null);
   const [glow, setGlow] = useState(1);
+  const [sweep, setSweep] = useState(0);
 
   useEffect(() => {
     if (reduceMotion || !selectedMuscle) {
       setGlow(1);
+      setSweep(0);
       return;
     }
     const startedAt = Date.now();
     const id = setInterval(() => {
-      const progress = Math.min((Date.now() - startedAt) / 600, 1);
+      const progress = Math.min((Date.now() - startedAt) / 560, 1);
       setGlow(0.65 + 0.35 * Math.sin(progress * Math.PI));
+      setSweep(progress);
       if (progress === 1) clearInterval(id);
     }, 50);
     return () => clearInterval(id);
@@ -211,6 +214,7 @@ export function AnatomyBody({
               animateFibers={animateFibers && !activation?.[definition.slug]}
               reduceMotion={reduceMotion}
               glow={glow}
+              sweep={selectedMuscle === definition.slug ? sweep : 0}
               onPress={() => handleMusclePress(definition.slug)}
             />
           ))}

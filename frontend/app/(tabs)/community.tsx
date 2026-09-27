@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api, COMMUNITY_CATEGORIES, type CommunityCategory, Community, User } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
@@ -96,14 +97,17 @@ export default function CommunityScreen() {
             <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t("COMMUNITY")}</Text>
           </View>
           <Pressable accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
-            <Ionicons name="chatbubbles-outline" size={20} color={colors.brand} />
+            <HeaderMark name="messages" />
             {dmUnread ? <View style={styles.headerBadge} testID="dm-unread-badge"><Text style={styles.headerBadgeText}>{dmUnread > 99 ? "99+" : dmUnread}</Text></View> : null}
           </Pressable>
           <Pressable accessibilityLabel={t("Saved posts")} testID="open-saved" style={styles.headerAction} onPress={() => router.push("/saved")}>
-            <Ionicons name="bookmark-outline" size={20} color={colors.brand} />
+            <HeaderMark name="saved" />
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}><Ionicons name="search" size={20} color={colors.brand} /></Pressable><Pressable accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
-            <Ionicons name={isCoach ? "analytics" : "ribbon"} size={20} color={colors.brand} />
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}>
+            <HeaderMark name="search" />
+          </Pressable>
+          <Pressable accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
+            <HeaderMark name={isCoach ? "dashboard" : "coach"} />
           </Pressable>
         </View>
 
@@ -257,6 +261,58 @@ export default function CommunityScreen() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function HeaderMark({ name }: { name: "messages" | "saved" | "search" | "coach" | "dashboard" }) {
+  const color = colors.brand;
+  const frame = { width: 26, height: 26, viewBox: "0 0 24 24" };
+  if (name === "messages") {
+    return (
+      <Svg {...frame}>
+        <Path
+          d="M6 5.2h9.4c1.8 0 3.2 1.4 3.2 3.2v5c0 1.8-1.4 3.2-3.2 3.2h-4.1L8.1 20.4c-.4.3-1-.1-1-.6v-3.2H6c-1.8 0-3.2-1.4-3.2-3.2v-5C2.8 6.6 4.2 5.2 6 5.2Z"
+          fill={color}
+        />
+        <Circle cx="8.2" cy="10.8" r="1.05" fill={colors.bg} />
+        <Circle cx="11.6" cy="10.8" r="1.05" fill={colors.bg} />
+        <Circle cx="15" cy="10.8" r="1.05" fill={colors.bg} />
+      </Svg>
+    );
+  }
+  if (name === "saved") {
+    return (
+      <Svg {...frame}>
+        <Path
+          d="M6.2 3.6h11.6c.8 0 1.4.6 1.4 1.4v15.6L12 17.1 4.8 20.6V5c0-.8.6-1.4 1.4-1.4Z"
+          fill={color}
+        />
+      </Svg>
+    );
+  }
+  if (name === "search") {
+    return (
+      <Svg {...frame}>
+        <Circle cx="10.4" cy="10.4" r="5.3" stroke={color} strokeWidth={2.6} fill="none" />
+        <Path d="M14.5 14.5 20 20" stroke={color} strokeWidth={2.6} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  if (name === "dashboard") {
+    return (
+      <Svg {...frame}>
+        <Rect x="3.5" y="13" width="4.2" height="7" rx="1.1" fill={color} />
+        <Rect x="9.9" y="8" width="4.2" height="12" rx="1.1" fill={color} />
+        <Rect x="16.3" y="4" width="4.2" height="16" rx="1.1" fill={color} />
+      </Svg>
+    );
+  }
+  return (
+    <Svg {...frame}>
+      <Circle cx="9" cy="8.2" r="3.4" fill={color} />
+      <Path d="M3.4 20.2v-.5c0-3.2 2.5-5.4 5.6-5.4s5.6 2.2 5.6 5.4v.5H3.4Z" fill={color} />
+      <Path d="m16.2 2.4 1.15 2.7 2.9.25-2.2 1.9.7 2.85-2.55-1.55-2.55 1.55.7-2.85-2.2-1.9 2.9-.25 1.15-2.7Z" fill={color} />
+    </Svg>
   );
 }
 

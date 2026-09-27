@@ -1,15 +1,27 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { AdminAccount, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole } from "@/src/api";
+import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
-type Tab = "overview" | "reports" | "coaches" | "users" | "audit";
+type Tab = "overview" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit";
+type CoachFilter = "pending" | "approved" | "rejected" | "suspended";
 type Status = "all" | "active" | "suspended" | "staff";
+
+const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { id: "overview", label: "OVERVIEW", icon: "grid-outline" },
+  { id: "reports", label: "REPORTS", icon: "flag-outline" },
+  { id: "coaches", label: "COACHES", icon: "ribbon-outline" },
+  { id: "joins", label: "JOIN REQUESTS", icon: "enter-outline" },
+  { id: "communities", label: "COMMUNITIES", icon: "people-outline" },
+  { id: "users", label: "USERS", icon: "person-outline" },
+  { id: "team", label: "TEAM", icon: "shield-checkmark-outline" },
+  { id: "audit", label: "AUDIT", icon: "list-outline" },
+];
 
 const RESOLUTIONS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: "dismissed", label: "DISMISS", icon: "close-circle-outline" },
@@ -21,13 +33,25 @@ export default function AdminConsole() {
   const { user } = useAuth();
   const { t, formatDate, formatNumber } = useI18n();
   const router = useRouter();
+  const leave = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)/profile");
+  };
   const [tab, setTab] = useState<Tab>("overview");
   const [applications, setApplications] = useState<CoachApplicationReview[]>([]);
+  const [coachFilter, setCoachFilter] = useState<CoachFilter>("pending");
+  const [coachDirectory, setCoachDirectory] = useState<AdminCoach[] | null>(null);
   const [note, setNote] = useState("");
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [reports, setReports] = useState<ModerationReport[]>([]);
+  const [reportStatus, setReportStatus] = useState<"open" | "resolved">("open");
+  const [joins, setJoins] = useState<AdminMembership[]>([]);
+  const [joinStatus, setJoinStatus] = useState<"pending" | "banned" | "removed">("pending");
+  const [communities, setCommunities] = useState<AdminCommunity[]>([]);
+  const [team, setTeam] = useState<AdminAccount[]>([]);
   const [users, setUsers] = useState<AdminAccount[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [auditQuery, setAuditQuery] = useState("");
   const [selected, setSelected] = useState<AdminAccount | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>("all");
@@ -62,6 +86,19 @@ export default function AdminConsole() {
     }
   }, [t]);
 
+  useEffect(() => {
+    if (!overview) return;
+    let cancel = false;
+    const fail = (cause: unknown) => {
+      if (!cancel) setError(cause instanceof Error ? cause.message : t("Something went wrong"));
+    };
+    if (tab === "joins") void api.adminMemberships(joinStatus).then(rows => { if (!cancel) setJoins(rows); }).catch(fail);
+    if (tab === "communities") void api.adminCommunities().then(rows => { if (!cancel) setCommunities(rows); }).catch(fail);
+    if (tab === "team") void api.adminUsers("", "staff").then(rows => { if (!cancel) setTeam(rows.users); }).catch(fail);
+    if (tab === "coaches") void api.adminCoaches(coachFilter).then(rows => { if (!cancel) setCoachDirectory(rows); }).catch(fail);
+    return () => { cancel = true; };
+  }, [tab, overview, joinStatus, coachFilter, t]);
+
   useFocusEffect(useCallback(() => {
     busy.current = false; setWorking(false); setLoading(true); void load();
     return () => { revision.current += 1; };
@@ -74,8 +111,21 @@ export default function AdminConsole() {
     catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
     finally { busy.current = false; setWorking(false); }
   };
-  const search = () => act(async () => { setUsers((await api.adminUsers(query, status)).users); });
-  const openUser = (id: string) => act(async () => { setSelected(await api.adminUser(id)); setReason(""); });
+  const search = (next: Status = status) => act(async () => { setUsers((await api.adminUsers(query, next)).users); });
+  const loadReports = (next: "open" | "resolved") => act(async () => {
+    setReportStatus(next);
+    setReports(await api.adminReports(next));
+  });
+  const openUser = (id: string) => act(async () => { setTab("users"); setSelected(await api.adminUser(id)); setReason(""); });
+  const decideJoin = (row: AdminMembership, decision: "active" | "rejected") => act(async () => {
+    await api.adminReviewMembership(row.id, decision, reason.trim());
+    setJoins(rows => rows.filter(item => item.id !== row.id));
+    setReason("");
+    if (joinStatus === "pending") {
+      setOverview(current => current ? { ...current, queues: { ...current.queues, pending_memberships: Math.max(0, current.queues.pending_memberships - 1) } } : current);
+    }
+    setAudit(await api.adminAuditLog());
+  });
   const resolve = (report: ModerationReport, resolution: string) => act(async () => {
     await api.adminReviewReport(report.id, resolution, reason.trim());
     setReports(rows => rows.filter(row => row.id !== report.id)); setReason("");
@@ -84,6 +134,7 @@ export default function AdminConsole() {
   const reviewApplication = (application: CoachApplicationReview, status: "approved" | "rejected") => act(async () => {
     await api.reviewCoachApplication(application.id, status, reason.trim() || undefined);
     setApplications(rows => rows.filter(row => row.id !== application.id));
+    setCoachDirectory(rows => rows ? rows.filter(row => row.application_id !== application.id) : rows);
     setReason("");
     setAudit(await api.adminAuditLog());
   });
@@ -111,7 +162,7 @@ export default function AdminConsole() {
       <Ionicons name="lock-closed" size={40} color={colors.textDim} />
       <Text style={styles.lockedText}>{t("This console is for the IronFlow staff team.")}</Text>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-      <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.primary}><Text style={styles.primaryText}>{t("BACK")}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={leave} style={styles.primary}><Text style={styles.primaryText}>{t("BACK")}</Text></Pressable>
     </View></SafeAreaView>;
   }
 
@@ -119,7 +170,7 @@ export default function AdminConsole() {
   return (
     <SafeAreaView style={styles.safe} testID="admin-console">
       <View style={styles.header}>
-        <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} hitSlop={8} onPress={leave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("STAFF CONSOLE")}</Text>
           <Text style={styles.headerMeta}>{user?.email} · {t((overview?.staff_role || "").toUpperCase() || "STAFF")}</Text>
@@ -127,15 +178,21 @@ export default function AdminConsole() {
         {working ? <ActivityIndicator color={colors.brand} /> : null}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-        {(["overview", "reports", "coaches", "users", "audit"] as Tab[]).map(item => (
-          <Pressable key={item} testID={`admin-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabActive]}>
-            <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{t(item.toUpperCase())}</Text>
-            {item === "reports" && reports.length ? <View style={styles.badge}><Text style={styles.badgeText}>{reports.length}</Text></View> : null}
-            {item === "coaches" && applications.length ? <View style={styles.badge}><Text style={styles.badgeText}>{applications.length}</Text></View> : null}
-          </Pressable>
-        ))}
-      </ScrollView>
+      <View style={styles.tabs}>
+        {NAV.map(item => {
+          const count = item.id === "reports" ? overview?.queues.open_reports
+            : item.id === "coaches" ? overview?.queues.pending_coach_applications
+            : item.id === "joins" ? overview?.queues.pending_memberships
+            : 0;
+          return (
+            <Pressable key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => setTab(item.id)} style={[styles.tab, tab === item.id && styles.tabActive]}>
+              <Ionicons name={item.icon} size={16} color={tab === item.id ? colors.brand : colors.textMuted} />
+              <Text style={[styles.tabText, tab === item.id && styles.tabTextActive]}>{t(item.label)}</Text>
+              {count ? <View style={styles.badge}><Text style={styles.badgeText}>{count}</Text></View> : null}
+            </Pressable>
+          );
+        })}
+      </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? <ActivityIndicator color={colors.brand} /> : null}
@@ -144,27 +201,57 @@ export default function AdminConsole() {
         {tab === "overview" && overview ? <>
           <Text style={styles.section}>{t("QUEUES")}</Text>
           <View style={styles.grid}>
-            {[["open_reports", "Open reports"], ["pending_coach_applications", "Coach applications"], ["pending_memberships", "Join requests"]].map(([key, label]) => (
-              <View key={key} style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.queues[key as keyof typeof overview.queues])}</Text><Text style={styles.metricLabel}>{t(label)}</Text></View>
+            {([
+              ["open_reports", "Open reports", "reports"],
+              ["pending_coach_applications", "Coach applications", "coaches"],
+              ["pending_memberships", "Join requests", "joins"],
+            ] as const).map(([key, label, destination]) => (
+              <Pressable key={key} accessibilityRole="button" onPress={() => { if (destination === "coaches") { setCoachDirectory(null); setCoachFilter("pending"); } setTab(destination); }} style={styles.metric}>
+                <Text style={styles.metricValue}>{formatNumber(overview.queues[key])}</Text>
+                <Text style={styles.metricLabel}>{t(label)}</Text>
+              </Pressable>
             ))}
           </View>
           <Text style={styles.section}>{t("MEMBERS")}</Text>
           <View style={styles.grid}>
-            {[["total", "Total"], ["new_7d", "New (7 days)"], ["suspended", "Suspended"], ["coaches", "Approved coaches"]].map(([key, label]) => (
-              <View key={key} style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.users[key as keyof typeof overview.users])}</Text><Text style={styles.metricLabel}>{t(label)}</Text></View>
+            {([
+              ["total", "Total", "all"],
+              ["suspended", "Suspended", "suspended"],
+            ] as const).map(([key, label, filter]) => (
+              <Pressable key={key} accessibilityRole="button" onPress={() => { setStatus(filter); setTab("users"); void search(filter); }} style={styles.metric}>
+                <Text style={styles.metricValue}>{formatNumber(overview.users[key])}</Text>
+                <Text style={styles.metricLabel}>{t(label)}</Text>
+              </Pressable>
             ))}
+            <Pressable accessibilityRole="button" onPress={() => { setCoachDirectory(null); setCoachFilter("approved"); setTab("coaches"); }} style={styles.metric}>
+              <Text style={styles.metricValue}>{formatNumber(overview.users.coaches)}</Text>
+              <Text style={styles.metricLabel}>{t("Approved coaches")}</Text>
+            </Pressable>
+            <View style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.users.new_7d)}</Text><Text style={styles.metricLabel}>{t("New (7 days)")}</Text></View>
           </View>
           <Text style={styles.section}>{t("LAST 24 HOURS")}</Text>
           <View style={styles.grid}>
-            {[["workouts_24h", "Workouts"], ["posts_24h", "Posts"], ["messages_24h", "Messages"], ["communities", "Communities"]].map(([key, label]) => (
-              <View key={key} style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.activity[key as keyof typeof overview.activity])}</Text><Text style={styles.metricLabel}>{t(label)}</Text></View>
+            {(["workouts_24h", "posts_24h", "messages_24h"] as const).map(key => (
+              <View key={key} style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.activity[key])}</Text><Text style={styles.metricLabel}>{t(key === "workouts_24h" ? "Workouts" : key === "posts_24h" ? "Posts" : "Messages")}</Text></View>
             ))}
+            <Pressable accessibilityRole="button" onPress={() => setTab("communities")} style={styles.metric}>
+              <Text style={styles.metricValue}>{formatNumber(overview.activity.communities)}</Text>
+              <Text style={styles.metricLabel}>{t("Communities")}</Text>
+            </Pressable>
           </View>
           <Text style={styles.hint}>{t("Your permissions:")} {overview.permissions.join(", ")}</Text>
           <Text style={styles.hint}>{t("Health data (labs, biomarkers) and private messages are never shown in this console.")}</Text>
         </> : null}
 
         {tab === "reports" ? <>
+          <View style={styles.filters}>
+            {(["open", "resolved"] as const).map(item => (
+              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: reportStatus === item }} onPress={() => void loadReports(item)} style={[styles.chip, reportStatus === item && styles.chipActive]}>
+                <Text style={[styles.chipText, reportStatus === item && styles.chipTextActive]}>{t(item === "open" ? "OPEN" : "RESOLVED")}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {reportStatus === "resolved" ? <Text style={styles.hint}>{t("Resolved reports stay here so a decision can be checked later.")}</Text> : null}
           {reports.length === 0 && !loading ? <Text style={styles.hint}>{t("The moderation queue is empty.")}</Text> : null}
           {reports.length ? <TextInput value={reason} onChangeText={setReason} maxLength={1000} placeholder={t("Decision note (stored in the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
           {reports.map(report => (
@@ -176,43 +263,62 @@ export default function AdminConsole() {
               <Text style={styles.meta}>{t("{type} by {name}", { type: t(report.target_type), name: report.reported_user?.full_name || report.reported_user?.email || t("Unknown") })}</Text>
               {report.content_snapshot ? <Text style={styles.snapshot}>“{report.content_snapshot}”</Text> : null}
               {report.detail ? <Text style={styles.meta}>{t("Reporter said:")} {report.detail}</Text> : null}
-              {can("reports.resolve") ? <View style={styles.actions}>
+              {reportStatus === "resolved" && report.resolution ? <Text style={styles.meta}>{t(report.resolution.replace(/_/g, " ").toUpperCase())}</Text> : null}
+              {reportStatus === "open" ? (can("reports.resolve") ? <View style={styles.actions}>
                 {RESOLUTIONS.map(option => (
                   <Pressable key={option.key} accessibilityRole="button" testID={`resolve-${option.key}-${report.id}`} disabled={working} onPress={() => void resolve(report, option.key)} style={[styles.action, working && styles.disabled]}>
                     <Ionicons name={option.icon} size={15} color={option.key === "content_removed" ? colors.error : colors.text} />
                     <Text style={styles.actionText}>{t(option.label)}</Text>
                   </Pressable>
                 ))}
-              </View> : <Text style={styles.hint}>{t("Read-only: resolving reports needs the moderator role.")}</Text>}
+              </View> : <Text style={styles.hint}>{t("Read-only: resolving reports needs the moderator role.")}</Text>) : null}
               {report.reported_user ? <Pressable accessibilityRole="button" onPress={() => void openUser(report.reported_user!.id)}><Text style={styles.link}>{t("Open account")}</Text></Pressable> : null}
             </View>
           ))}
         </> : null}
 
         {tab === "coaches" ? <>
-          {applications.length === 0 && !loading ? <Text style={styles.hint}>{t("No coach applications waiting.")}</Text> : null}
-          {applications.length ? <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Review note (sent to the applicant)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
-          {applications.map(application => (
-            <View key={application.id} style={styles.card} testID={`application-${application.id}`}>
+          <View style={styles.filters}>
+            {([
+              ["pending", "Waiting list"],
+              ["approved", "Approved coaches"],
+              ["suspended", "Banned coaches"],
+              ["rejected", "Rejected coaches"],
+            ] as const).map(([item, label]) => (
+              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: coachFilter === item }} onPress={() => { setCoachDirectory(null); setCoachFilter(item); }} style={[styles.chip, coachFilter === item && styles.chipActive]}>
+                <Text style={[styles.chipText, coachFilter === item && styles.chipTextActive]}>{t(label)}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {coachFilter === "suspended" ? <Text style={styles.hint}>{t("A banned coach has a suspended account. Open the account to suspend or reinstate.")}</Text> : null}
+          {coachDirectory === null && !error ? <ActivityIndicator color={colors.brand} /> : null}
+          {coachDirectory && coachFilter === "pending" && coachDirectory.length > 0 ? <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Review note (sent to the applicant)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
+          {coachDirectory && coachDirectory.length === 0 ? <Text style={styles.hint}>{t(coachFilter === "pending" ? "No coach applications waiting." : coachFilter === "approved" ? "No approved coaches." : coachFilter === "suspended" ? "No banned coaches." : "No rejected coaches.")}</Text> : null}
+          {(coachDirectory || []).map(coach => (
+            <View key={coach.application_id || coach.user_id} style={styles.card} testID={`application-${coach.application_id || coach.user_id}`}>
               <View style={styles.cardHead}>
-                <Text style={styles.tag}>{t("COACH APPLICATION")}</Text>
-                <Text style={styles.time}>{formatDate(application.created_at, { day: "numeric", month: "short" })}</Text>
+                <Text style={styles.tag}>{t(coachFilter === "pending" ? "COACH APPLICATION" : coachFilter === "approved" ? "Approved coaches" : coachFilter === "suspended" ? "Banned coaches" : "Rejected coaches")}</Text>
+                {coach.created_at ? <Text style={styles.time}>{formatDate(coach.created_at, { day: "numeric", month: "short" })}</Text> : null}
               </View>
-              <Text style={styles.meta}>{application.applicant?.full_name || application.applicant?.email || t("Unknown")}</Text>
-              <Text style={styles.snapshot}>{application.bio}</Text>
-              {application.specialties?.length ? <Text style={styles.meta}>{t("SPECIALTIES")}: {application.specialties.join(", ")}</Text> : null}
-              {application.credentials?.length ? <Text style={styles.meta}>{t("CREDENTIALS · ONE PER LINE")}: {application.credentials.join(", ")}</Text> : null}
-              {can("coaches.review") ? <View style={styles.actions}>
-                <Pressable accessibilityRole="button" testID={`reject-application-${application.id}`} disabled={working} onPress={() => void reviewApplication(application, "rejected")} style={[styles.action, working && styles.disabled]}>
+              <Text style={styles.name}>{coach.full_name || coach.email || t("Unknown")}</Text>
+              <Text style={styles.meta}>{coach.email}</Text>
+              {coach.suspended_at ? <Text style={styles.suspendedNote}>{t("SUSPENDED")}</Text> : null}
+              {coach.bio ? <Text style={styles.snapshot}>{coach.bio}</Text> : null}
+              {coach.specialties?.length ? <Text style={styles.meta}>{t("SPECIALTIES")}: {coach.specialties.join(", ")}</Text> : null}
+              {coach.credentials?.length ? <Text style={styles.meta}>{t("CREDENTIALS · ONE PER LINE")}: {coach.credentials.join(", ")}</Text> : null}
+              {coach.review_note ? <Text style={styles.meta}>{coach.review_note}</Text> : null}
+              {!coach.application_id ? <Text style={styles.hint}>{t("No application on file.")}</Text> : null}
+              {coachFilter === "pending" && coach.application_id ? (can("coaches.review") ? <View style={styles.actions}>
+                <Pressable accessibilityRole="button" testID={`reject-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "rejected")} style={[styles.action, working && styles.disabled]}>
                   <Ionicons name="close" size={15} color={colors.error} />
                   <Text style={styles.actionText}>{t("Reject")}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" testID={`approve-application-${application.id}`} disabled={working} onPress={() => void reviewApplication(application, "approved")} style={[styles.action, working && styles.disabled]}>
+                <Pressable accessibilityRole="button" testID={`approve-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "approved")} style={[styles.action, working && styles.disabled]}>
                   <Ionicons name="checkmark" size={15} color={colors.brand} />
                   <Text style={styles.actionText}>{t("Approve")}</Text>
                 </Pressable>
-              </View> : <Text style={styles.hint}>{t("Read-only: reviewing coaches needs the admin role.")}</Text>}
-              <Pressable accessibilityRole="button" onPress={() => void openUser(application.user_id)}><Text style={styles.link}>{t("Open account")}</Text></Pressable>
+              </View> : <Text style={styles.hint}>{t("Read-only: reviewing coaches needs the admin role.")}</Text>) : null}
+              <Pressable accessibilityRole="button" onPress={() => void openUser(coach.user_id)}><Text style={styles.link}>{t("Open account")}</Text></Pressable>
             </View>
           ))}
         </> : null}
@@ -224,7 +330,7 @@ export default function AdminConsole() {
           </View>
           <View style={styles.filters}>
             {(["all", "active", "suspended", "staff"] as Status[]).map(item => (
-              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => { setStatus(item); }} style={[styles.chip, status === item && styles.chipActive]}>
+              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => { setStatus(item); void search(item); }} style={[styles.chip, status === item && styles.chipActive]}>
                 <Text style={[styles.chipText, status === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
               </Pressable>
             ))}
@@ -273,9 +379,74 @@ export default function AdminConsole() {
           </View> : null}
         </> : null}
 
+        {tab === "joins" ? <>
+          <View style={styles.filters}>
+            {(["pending", "banned", "removed"] as const).map(item => (
+              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: joinStatus === item }} onPress={() => setJoinStatus(item)} style={[styles.chip, joinStatus === item && styles.chipActive]}>
+                <Text style={[styles.chipText, joinStatus === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.hint}>{t("Accept or decline a request here. Paid communities still need verified billing.")}</Text>
+          {joinStatus === "pending" && joins.length ? <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Reason (required, saved to the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
+          {joins.length === 0 && !loading ? <Text style={styles.hint}>{t(joinStatus === "pending" ? "No join requests waiting." : "Nothing in this list.")}</Text> : null}
+          {joins.map(row => (
+            <View key={row.id} style={styles.card} testID={`admin-join-${row.id}`}>
+              <Text style={styles.name}>{row.user?.full_name || row.user?.email || t("Unknown")}</Text>
+              <Text style={styles.meta}>{row.user?.email}</Text>
+              <Text style={styles.meta}>{row.community?.name || t("Unknown")} · {formatDate(row.created_at, { day: "numeric", month: "short" })}</Text>
+              {joinStatus === "pending" ? (can("content.moderate") ? <View style={styles.actions}>
+                <Pressable accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "rejected")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
+                  <Ionicons name="close" size={15} color={colors.error} />
+                  <Text style={styles.actionText}>{t("Reject")}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "active")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
+                  <Ionicons name="checkmark" size={15} color={colors.brand} />
+                  <Text style={styles.actionText}>{t("Approve")}</Text>
+                </Pressable>
+              </View> : <Text style={styles.hint}>{t("Read-only: reviewing requests needs the moderator role.")}</Text>) : null}
+              <View style={styles.actions}>
+                <Pressable accessibilityRole="button" onPress={() => void openUser(row.user_id)} style={styles.action}><Text style={styles.actionText}>{t("Open account")}</Text></Pressable>
+                {row.community ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/community/[id]", params: { id: row.community_id } })} style={styles.action}><Text style={styles.actionText}>{t("OPEN COMMUNITY")}</Text></Pressable> : null}
+              </View>
+            </View>
+          ))}
+        </> : null}
+
+        {tab === "communities" ? <>
+          {communities.length === 0 && !loading ? <Text style={styles.hint}>{t("No communities yet")}</Text> : null}
+          {communities.map(group => (
+            <Pressable key={group.id} accessibilityRole="button" testID={`admin-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.name}>{group.name}</Text>
+                <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {t(group.status.toUpperCase())} · {t("{count} members", { count: formatNumber(group.member_count) })}{group.pending_count ? ` · ${formatNumber(group.pending_count)} ${t("PENDING")}` : ""}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
+            </Pressable>
+          ))}
+        </> : null}
+
+        {tab === "team" ? <>
+          {team.length === 0 && !loading ? <Text style={styles.hint}>{t("No staff yet. Open a member and assign Support, Moderator or Admin.")}</Text> : null}
+          <Pressable accessibilityRole="button" onPress={() => setTab("users")} style={styles.action}><Text style={styles.actionText}>{t("HIRE")}</Text></Pressable>
+          {team.map(account => (
+            <Pressable key={account.id} accessibilityRole="button" onPress={() => { setTab("users"); void openUser(account.id); }} style={styles.row}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.name}>{account.full_name || account.email}</Text>
+                <Text style={styles.meta}>{account.email}</Text>
+              </View>
+              {account.staff_role ? <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(account.staff_role.toUpperCase())}</Text></View> : null}
+            </Pressable>
+          ))}
+        </> : null}
+
         {tab === "audit" ? <>
           <Text style={styles.hint}>{t("Append-only record of every staff action.")}</Text>
-          {audit.map(entry => (
+          <TextInput value={auditQuery} onChangeText={setAuditQuery} maxLength={80} placeholder={t("Filter the journal")} placeholderTextColor={colors.textDim} style={styles.input} />
+          {audit.filter(entry => {
+            const haystack = `${entry.action} ${entry.actor_email || ""} ${entry.reason || ""} ${entry.target_type}`.toLowerCase();
+            return haystack.includes(auditQuery.trim().toLowerCase());
+          }).map(entry => (
             <View key={entry.id} style={styles.auditRow}>
               <Text style={styles.auditAction}>{entry.action}</Text>
               <Text style={styles.meta}>{entry.actor_email} → {entry.target_type}:{entry.target_id.slice(0, 8)}</Text>
@@ -295,9 +466,9 @@ const styles = StyleSheet.create({
   header: { minHeight: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerTitle: { ...type.section, color: colors.text }, headerMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  tabs: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
-  tab: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabActive: { borderBottomColor: colors.brand }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 1 }, tabTextActive: { color: colors.text },
+  tabs: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
+  tab: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface },
+  tabActive: { borderColor: colors.brand, backgroundColor: colors.brandDim }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 0.4 }, tabTextActive: { color: colors.text },
   badge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   badgeText: { color: colors.text, fontSize: 10, fontWeight: "900" },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.sm },

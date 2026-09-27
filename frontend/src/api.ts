@@ -69,6 +69,27 @@ export type AuditEntry = {
   created_at: string;
 };
 
+export type AdminMembership = {
+  id: string;
+  community_id: string;
+  user_id: string;
+  status: string;
+  created_at: string;
+  user: { id: string; full_name: string | null; email: string } | null;
+  community: { id: string; name: string; join_policy?: string } | null;
+};
+
+export type AdminCommunity = {
+  id: string;
+  name: string;
+  status: string;
+  join_policy?: string;
+  created_at: string;
+  member_count: number;
+  pending_count: number;
+  owner: { id: string; full_name: string | null; email: string } | null;
+};
+
 export type AdminOverview = {
   users: { total: number; new_7d: number; suspended: number; coaches: number };
   queues: { open_reports: number; pending_coach_applications: number; pending_memberships: number };
@@ -359,6 +380,21 @@ export type CoachApplication = {
   specialties?: string[];
   credentials?: string[];
   review_note?: string | null;
+};
+
+export type AdminCoach = {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  coach_status: string | null;
+  suspended_at: string | null;
+  application_id: string | null;
+  bio: string | null;
+  specialties: string[];
+  credentials: string[];
+  review_note: string | null;
+  created_at: string | null;
 };
 
 export type CoachApplicationReview = {
@@ -763,6 +799,8 @@ export const api = {
   archiveChannel: (channelId: string) => request<void>(`/channels/${channelId}`, { method: "DELETE" }),
   coachApplications: (status: "pending" | "approved" | "rejected" = "pending") =>
     request<CoachApplicationReview[]>(`/admin/coach-applications?status=${status}`),
+  adminCoaches: (status: "pending" | "approved" | "rejected" | "suspended") =>
+    request<AdminCoach[]>(`/admin/coaches?status=${status}`),
   reviewCoachApplication: (id: string, status: "approved" | "rejected", review_note?: string) =>
     request<CoachApplicationReview>(`/admin/coach-applications/${id}`, {
       method: "PATCH",
@@ -944,6 +982,11 @@ export const api = {
   adminSetStaffRole: (id: string, staff_role: StaffRole | null, reason: string) =>
     request<AdminAccount>(`/admin/users/${id}/staff-role`, { method: "PATCH", body: JSON.stringify({ staff_role, reason }) }),
   adminReports: (status: "open" | "resolved" = "open") => request<ModerationReport[]>(`/admin/reports?status=${status}`),
+  adminMemberships: (status: "pending" | "banned" | "removed" = "pending") =>
+    request<AdminMembership[]>(`/admin/memberships?status=${status}`),
+  adminReviewMembership: (id: string, status: "active" | "rejected", reason: string) =>
+    request<AdminMembership>(`/admin/memberships/${id}`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
+  adminCommunities: () => request<AdminCommunity[]>("/admin/communities"),
   adminReviewReport: (id: string, resolution: string, note: string) =>
     request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
   adminAuditLog: () => request<AuditEntry[]>("/admin/audit-log"),

@@ -81,7 +81,7 @@ export default function CheckinScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="checkin-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t("GYM CHECK-IN")}</Text>
@@ -102,6 +102,8 @@ export default function CheckinScreen() {
             />
             <Pressable
               testID="cancel-scan-btn"
+              accessibilityRole="button"
+              accessibilityLabel={t("CANCEL")}
               onPress={() => setScanning(false)}
               style={styles.cancelBtn}
             >
@@ -118,6 +120,8 @@ export default function CheckinScreen() {
               </Text>
               <Pressable
                 testID="scan-btn"
+                accessibilityRole="button"
+                accessibilityLabel={t("SCAN QR CODE")}
                 onPress={startScan}
                 style={styles.cta}
               >
@@ -140,6 +144,8 @@ export default function CheckinScreen() {
                 </Text>
                 <Pressable
                   testID="open-settings-btn"
+                  accessibilityRole="button"
+                  accessibilityLabel={t("OPEN SETTINGS")}
                   onPress={() => Linking.openSettings()}
                   style={styles.settingsBtn}
                 >
@@ -185,6 +191,8 @@ export default function CheckinScreen() {
                 {(Platform.OS === "web" || error === "settings") && (
                   <Pressable
                     testID={`checkin-${g.id}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t("CHECK IN")} ${g.name}`}
                     onPress={() => checkin(g.qr_payload)}
                     disabled={busy}
                     style={styles.gymBtn}

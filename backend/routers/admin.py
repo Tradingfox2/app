@@ -54,6 +54,11 @@ class NoteIn(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
+class MembershipDecisionIn(BaseModel):
+    status: Literal["active", "rejected"]
+    reason: str = Field(min_length=5, max_length=500)
+
+
 ACCOUNT_FIELDS = {
     "_id": 0, "id": 1, "email": 1, "full_name": 1, "role": 1, "coach_status": 1,
     "staff_role": 1, "avatar_url": 1, "preferred_locale": 1, "created_at": 1,
@@ -187,6 +192,60 @@ async def overview(user: dict = Depends(staff.require("users.read"))):
         "permissions": sorted(staff.permissions_for(user)),
         "staff_role": user.get("staff_role"),
     }
+
+
+def _coach_directory_row(person: dict | None, application: dict | None) -> dict:
+    person = person or {}
+    application = application or {}
+    return clean({
+        "user_id": person.get("id") or application.get("user_id"),
+        "full_name": person.get("full_name"),
+        "email": person.get("email"),
+        "role": person.get("role"),
+        "coach_status": person.get("coach_status") or application.get("status"),
+        "suspended_at": person.get("suspended_at"),
+        "application_id": application.get("id"),
+        "bio": application.get("bio"),
+        "specialties": application.get("specialties") or [],
+        "credentials": application.get("credentials") or [],
+        "review_note": application.get("review_note"),
+        "created_at": application.get("created_at") or person.get("created_at"),
+    }) or {}
+
+
+@router.get("/admin/coaches")
+async def list_coach_directory(
+    status: Literal["pending", "approved", "rejected", "suspended"] = "approved",
+    user: dict = Depends(staff.require("coaches.review")),
+):
+    """Coach lists behind the overview card.
+
+    Approved matches the overview count (role coach + approved), including
+    coaches who were approved before applications were stored. Banned means
+    the account is suspended. Waiting and rejected come from applications.
+    """
+    rows: list[dict] = []
+    if status in {"pending", "rejected"}:
+        async for application in db.coach_applications.find(
+            {"status": status}, {"_id": 0}
+        ).sort("created_at", 1).limit(100):
+            person = await db.users.find_one({"id": application["user_id"]}, ACCOUNT_FIELDS)
+            rows.append(_coach_directory_row(person, application))
+        return rows
+    if status == "approved":
+        query: dict = {"role": "coach", "coach_status": "approved"}
+    else:
+        query = {
+            "suspended_at": {"$ne": None},
+            "$or": [
+                {"role": "coach"},
+                {"coach_status": {"$in": ["pending", "approved", "rejected"]}},
+            ],
+        }
+    async for person in db.users.find(query, ACCOUNT_FIELDS).sort("created_at", -1).limit(100):
+        application = await db.coach_applications.find_one({"user_id": person["id"]}, {"_id": 0})
+        rows.append(_coach_directory_row(clean(person), application))
+    return rows
 
 
 # --------------------------------------------------------------------------- #
@@ -326,6 +385,95 @@ async def review_report(report_id: str, body: ReportReviewIn, user: dict = Depen
                       "target_id": report_id},
         )
     return clean(await db.reports.find_one({"id": report_id}, {"_id": 0}))
+
+
+# --------------------------------------------------------------------------- #
+# Communities and join requests                                                #
+# Staff with content.moderate can accept or decline a pending request here.    #
+# Paid communities still require verified billing, same rule as managers.      #
+# --------------------------------------------------------------------------- #
+@router.get("/admin/memberships")
+async def list_memberships(
+    status: Literal["pending", "banned", "removed"] = "pending",
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict = Depends(staff.require("users.read")),
+):
+    rows = [
+        clean(row)
+        async for row in db.community_members.find(
+            {"status": status},
+            {"_id": 0, "stripe_customer_id": 0, "stripe_subscription_id": 0},
+        ).sort("created_at", 1).limit(limit)
+    ]
+    for row in rows:
+        person = await db.users.find_one(
+            {"id": row.get("user_id")}, {"_id": 0, "id": 1, "full_name": 1, "email": 1})
+        group = await db.communities.find_one(
+            {"id": row.get("community_id")}, {"_id": 0, "id": 1, "name": 1, "join_policy": 1})
+        row["user"] = clean(person) if person else None
+        row["community"] = clean(group) if group else None
+    return rows
+
+
+@router.get("/admin/communities")
+async def list_communities(
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict = Depends(staff.require("users.read")),
+):
+    rows = [
+        clean(row)
+        async for row in db.communities.find(
+            {},
+            {"_id": 0, "id": 1, "name": 1, "status": 1, "join_policy": 1, "owner_id": 1, "created_at": 1},
+        ).sort("created_at", -1).limit(limit)
+    ]
+    for row in rows:
+        row["member_count"] = await db.community_members.count_documents(
+            {"community_id": row["id"], "status": "active"})
+        row["pending_count"] = await db.community_members.count_documents(
+            {"community_id": row["id"], "status": "pending"})
+        owner = await db.users.find_one(
+            {"id": row.get("owner_id")}, {"_id": 0, "id": 1, "full_name": 1, "email": 1})
+        row["owner"] = clean(owner) if owner else None
+    return rows
+
+
+@router.patch("/admin/memberships/{member_id}")
+async def review_membership(
+    member_id: str,
+    body: MembershipDecisionIn,
+    user: dict = Depends(staff.require("content.moderate")),
+):
+    member = await db.community_members.find_one({"id": member_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(404, "Membership not found")
+    if member.get("status") != "pending":
+        raise HTTPException(409, "Only a pending request can be reviewed here")
+    if member.get("role") == "owner":
+        raise HTTPException(409, "Owner membership cannot be changed")
+    community = await db.communities.find_one({"id": member["community_id"]}, {"_id": 0, "id": 1, "name": 1, "join_policy": 1})
+    if not community:
+        raise HTTPException(404, "Community not found")
+    if body.status == "active" and community.get("join_policy") == "paid":
+        raise HTTPException(402, "Only verified billing can activate paid memberships")
+    updates = {"status": body.status, "updated_at": now(), "reviewed_by": user["id"]}
+    if body.status == "active":
+        updates["joined_at"] = now()
+    await db.community_members.update_one({"id": member_id}, {"$set": updates})
+    await staff.audit(
+        user, f"community.member_{body.status}", target_type="community_member",
+        target_id=member_id, reason=body.reason.strip(),
+        metadata={"community_id": member["community_id"], "user_id": member["user_id"], "from": "pending"},
+    )
+    approved = body.status == "active"
+    await notifications.notify(
+        member["user_id"], notifications.MEMBERSHIP, actor=user,
+        title=(f"You joined {community['name']}" if approved
+               else f"Your request to join {community['name']} was declined"),
+        target_type="community", target_id=community["id"],
+        metadata={"approved": approved},
+    )
+    return clean(await db.community_members.find_one({"id": member_id}, {"_id": 0}))
 
 
 # --------------------------------------------------------------------------- #

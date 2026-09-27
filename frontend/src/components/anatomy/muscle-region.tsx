@@ -33,6 +33,55 @@ const ACTIVATION_COLORS: Record<ActivationLevel, string> = {
   stabilizer: colors.blaze,
 };
 
+const fiberGuides = new Map<string, string>();
+
+/** Interior strokes along the muscle's long axis. Clipped to the region so they read as fibers. */
+function fiberGuide(id: string, path: string): string {
+  const cached = fiberGuides.get(id);
+  if (cached !== undefined) return cached;
+  const nums = path.match(/-?\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 4) {
+    fiberGuides.set(id, "");
+    return "";
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = Number(nums[i]);
+    const y = Number(nums[i + 1]);
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  const width = maxX - minX;
+  const height = maxY - minY;
+  if (width < 8 || height < 8) {
+    fiberGuides.set(id, "");
+    return "";
+  }
+  const vertical = height >= width;
+  const count = 5;
+  const lines: string[] = [];
+  for (let i = 1; i <= count; i += 1) {
+    const t = i / (count + 1);
+    if (vertical) {
+      const x = minX + width * t;
+      const lean = width * 0.12;
+      lines.push(`M ${x - lean} ${minY} L ${x + lean} ${maxY}`);
+    } else {
+      const y = minY + height * t;
+      const lean = height * 0.12;
+      lines.push(`M ${minX} ${y + lean} L ${maxX} ${y - lean}`);
+    }
+  }
+  const guide = lines.join(" ");
+  fiberGuides.set(id, guide);
+  return guide;
+}
+
 type MuscleRegionProps = {
   definition: MusclePathDefinition;
   loadPercent: number;
@@ -42,6 +91,8 @@ type MuscleRegionProps = {
   animateFibers: boolean;
   reduceMotion: boolean;
   glow?: number;
+  /** 0–1 progress of the one-shot fiber sweep after selection. */
+  sweep?: number;
   bloomFilter?: string;
   onPress?: () => void;
 };
@@ -55,6 +106,7 @@ export function MuscleRegion({
   animateFibers,
   reduceMotion,
   glow = 1,
+  sweep = 0,
   onPress,
 }: MuscleRegionProps) {
   const state = loadState(loadPercent);
@@ -76,6 +128,9 @@ export function MuscleRegion({
       }
     : {};
   const pulse = reduceMotion || !lit ? 1 : 0.78 + glow * 0.22;
+  const guide = fiberGuide(definition.id, definition.path);
+  const sweeping = selected && !reduceMotion && sweep > 0 && sweep < 1;
+  const showFibers = Boolean(guide) && (animateFibers || selected);
 
   return (
     <G>
@@ -119,19 +174,20 @@ export function MuscleRegion({
         {...pressProps}
       />
 
-      {animateFibers && !lit && (
+      {showFibers ? (
         <G clipPath={`url(#${clipId})`} pointerEvents="none">
           <Path
-            d={definition.path}
-            stroke="#64748B"
-            strokeWidth={2}
+            d={guide}
+            stroke={lit ? "#FFF4EA" : "#E7C4B0"}
+            strokeWidth={sweeping ? 2.4 : 1.35}
             strokeLinecap="round"
             fill="none"
-            strokeOpacity={0.22}
-            strokeDasharray="7 5"
+            strokeOpacity={sweeping ? 0.85 : lit ? 0.45 : 0.34}
+            strokeDasharray={sweeping ? "14 36" : undefined}
+            strokeDashoffset={sweeping ? (1 - sweep) * 50 : 0}
           />
         </G>
-      )}
+      ) : null}
     </G>
   );
 }
