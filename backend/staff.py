@@ -16,11 +16,12 @@ StaffRole = Literal["support", "moderator", "admin"]
 
 # Least privilege: each role inherits the one before it.
 PERMISSIONS: dict[str, set[str]] = {
-    "support": {"users.read", "reports.read", "audit.read"},
-    "moderator": {"users.read", "reports.read", "audit.read", "reports.resolve",
-                  "content.moderate", "users.suspend"},
-    "admin": {"users.read", "reports.read", "audit.read", "reports.resolve",
-              "content.moderate", "users.suspend", "staff.manage", "coaches.review"},
+    "support": {"users.read", "reports.read", "audit.read", "analytics.read"},
+    "moderator": {"users.read", "reports.read", "audit.read", "analytics.read",
+                  "reports.resolve", "content.moderate", "users.suspend"},
+    "admin": {"users.read", "reports.read", "audit.read", "analytics.read",
+              "reports.resolve", "content.moderate", "users.suspend", "staff.manage",
+              "coaches.review"},
 }
 STAFF_ROLES = tuple(PERMISSIONS)
 

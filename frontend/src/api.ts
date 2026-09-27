@@ -90,6 +90,14 @@ export type AdminCommunity = {
   owner: { id: string; full_name: string | null; email: string } | null;
 };
 
+export type AnalyticsSummary = {
+  generated_at: string;
+  windows: {
+    "24h": Record<string, number>;
+    "7d": Record<string, number>;
+  };
+};
+
 export type AdminOverview = {
   users: { total: number; new_7d: number; suspended: number; coaches: number };
   queues: { open_reports: number; pending_coach_applications: number; pending_memberships: number };
@@ -990,6 +998,17 @@ export const api = {
   adminReviewReport: (id: string, resolution: string, note: string) =>
     request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
   adminAuditLog: () => request<AuditEntry[]>("/admin/audit-log"),
+  adminAnalytics: () => request<AnalyticsSummary>("/admin/analytics"),
+  /** Authenticated product-event ingest. `track` in `./analytics` is the caller. */
+  ingestEvents: (body: {
+    name: string;
+    props?: Record<string, string | boolean | null>;
+    session_id?: string;
+    event_id?: string;
+  }) => request<{ accepted: number; duplicates: number }>("/events", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
 
   groupSessions: () => request<any[]>("/group-sessions"),
 
