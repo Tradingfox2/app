@@ -2,7 +2,8 @@
 
 Mongo collections are `tickets` and `ticket_messages`. Field names match the
 SQL columns on `public.support_tickets` and `public.support_ticket_messages`
-(see supabase/migrations/004_support_tickets.sql). There is no priority.
+in supabase/migrations/004_support_and_dual_media.sql (schemaforge). There is
+no priority.
 
 A member only ever sees their own rows. A missing ticket and someone else's
 ticket are both 404 on read, so the id cannot be used to confirm that another

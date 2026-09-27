@@ -1,9 +1,12 @@
 # Support tickets API
 
 Member and staff endpoints for the support queue. Persistence is MongoDB
-(`tickets`, `ticket_messages`) through the FastAPI handlers. SQL source of
-truth for the same fields is `public.support_tickets` and
-`public.support_ticket_messages` in `supabase/migrations/004_support_tickets.sql`.
+(`tickets`, `ticket_messages`) through the FastAPI handlers. Field names match
+`public.support_tickets` and `public.support_ticket_messages` in
+`supabase/migrations/004_support_and_dual_media.sql` (schemaforge,
+[PR #3](https://github.com/Tradingfox2/app/pull/3)). Message `media_id` is
+nullable and references `public.media`. This API does not ship or edit that
+migration.
 
 There is no `priority` field. Clients must not send one; it is ignored and
 never stored.
