@@ -227,10 +227,12 @@ through the shared module.
 
 ## Added 2026-09-27 (product analytics)
 
-- **`backend/analytics.py`** owns the Mongo `analytics_events` collection.
-  `record()` inserts one row; `counts()` is two `count_documents` per taxonomy
-  name (24h and 7d). `ts` is server UTC. Actor, role, and source are not taken
-  from the client body. No SQL migration: `004` is support tickets and dual media.
+- **`backend/analytics.py`** owns the `analytics_events` collection. `record()`
+  inserts one row; `counts()` is two `count_documents` per taxonomy name
+  (24h and 7d) and is the only staff rollup. `ts` is server UTC. Actor, role,
+  and source are not taken from the client body.
+- **Live source of truth:** Mongo `analytics_events`. FastAPI/Motor writes
+  and the admin rollup reads it. No Supabase migration for this collection.
 - **Read ACL:** staff permission `analytics.read` on support, moderator, and
   admin. Product `admin` and approved coaches without `staff_role` are denied.
   UI: `AnalyticsPanel` on `/admin`, shown only when the overview lists the

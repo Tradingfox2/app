@@ -5,10 +5,7 @@ API itself) writes one row per event, and the staff console reads counts
 from those rows. There is no warehouse, no sampled chart, and no client-side
 metric.
 
-The live store is the MongoDB collection `analytics_events`, written by
-FastAPI through Motor (`backend/analytics.py`). SQLAlchemy and Alembic are
-not used. This branch does not add a Postgres migration for the event log:
-`004` is already `004_support_and_dual_media.sql`.
+**Live source of truth is the MongoDB collection `analytics_events`: FastAPI/Motor writes it and the admin rollup reads it.** There is no Supabase migration for this collection and no runtime write to Postgres. SQLAlchemy and Alembic are not used.
 
 ## Envelope
 
@@ -159,10 +156,10 @@ cd backend && python -m pytest tests/test_analytics.py -q
 
 ## Handoffs
 
-- **schemaforge** — the live store is the Mongo collection. Do not add an analytics SQL migration under `004`; that number is support tickets and dual media.
+- **schemaforge** — live store is Mongo `analytics_events` only. No SQL migration in this change. Other product tables keep their existing Supabase mirrors; this event log does not, because nothing applies or queries a Postgres copy.
 - **apismith** — ingest style is `POST /api/events` (single or `events[]`), actor from the token, idempotent `event_id`.
 - **screenwright** — emit `screen_view` from navigation via `track`. Do not put query parameters in `screen`.
-- **socialgraph** — `post_created` is live on the feed composer. `post_shared` is live in `frontend/src/share.ts` (feed menu, share bar, and post detail all go through it). Workout share (`frontend/app/workout/[id].tsx`) still needs `track("post_created", …)` after a successful publish.
+- **socialgraph** — `post_created` is live on the feed composer. `post_shared` is live in `frontend/src/share.ts` (feed menu, share bar, and post detail). Workout share (`frontend/app/workout/[id].tsx`) still needs `track("post_created", …)` after a successful publish.
 - **community** — emit `live_session_started` with `analytics.record(..., source="server")` from `start_live_session`, and `live_session_joined` from the join / RSVP path. One emit per occurrence.
 - **opsdesk** — the Analytics tab lives on `/admin`. When a ticket model exists, emit `ticket_created` and `ticket_replied`. Do not point this tab at `admin/overview` activity counts; those count domain documents, not events.
 
