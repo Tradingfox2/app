@@ -22,6 +22,7 @@ import permissions
 import ratelimit
 import realtime
 import social_graph
+import insights
 import staff
 
 router = APIRouter()
@@ -1965,15 +1966,26 @@ async def channel_typing(channel_id: str, user: dict = Depends(current_user)):
 
 @router.get("/realtime/subscription-token")
 async def realtime_subscription_token(channel: str = Query(..., max_length=100), user: dict = Depends(current_user)):
-    """A Centrifugo subscription token for one chat channel.
+    """A Centrifugo subscription token for one chat channel or live room.
 
-    The same VIEW_CHANNEL check as reading the messages over HTTP, so a hidden
-    channel stays hidden on the socket too. Only `channel:{id}` rooms are
-    subscribable; a member's own `user:{id}` channel comes with the connection.
+    The same VIEW_CHANNEL check as reading over HTTP, so a hidden channel stays
+    hidden on the socket too. Subscribable rooms are `channel:{id}` and
+    `live:{session_id}`. A member's own `user:{id}` channel comes with the
+    connection token and is not requested here.
     """
+    live_prefix = realtime.live_channel("")
+    if channel.startswith(live_prefix):
+        session_id = channel[len(live_prefix):]
+        if not session_id:
+            raise HTTPException(422, "Missing live session id")
+        _session, row = await _live_session_or_404(session_id)
+        await _require(row["community_id"], user["id"], permissions.VIEW_CHANNEL, row)
+        if not realtime.is_configured():
+            return {"enabled": False, "token": None}
+        return {"enabled": True, "token": realtime.subscription_token(user["id"], channel)}
     prefix = realtime.chat_channel("")
     if not channel.startswith(prefix):
-        raise HTTPException(422, "Only chat channels take a subscription token")
+        raise HTTPException(422, "Only chat channels and live rooms take a subscription token")
     row = await db.channels.find_one({"id": channel[len(prefix):], "status": "active"}, {"_id": 0})
     if not row:
         raise HTTPException(404, "Channel not found")
@@ -2422,15 +2434,16 @@ async def adopt_program(message_id: str, user: dict = Depends(current_user)):
 
 
 # --------------------------------------------------------------------------- #
-# Live channels — scheduled sessions with RSVPs                                #
+# Live channels — scheduled sessions, RSVPs, and an in-app room                #
 # --------------------------------------------------------------------------- #
 class LiveSessionIn(BaseModel):
     title: str = Field(min_length=3, max_length=120)
     description: str = Field(default="", max_length=1000)
     starts_at: datetime
     duration_min: int = Field(default=60, ge=10, le=480)
-    #: Where the session actually happens (Zoom, Meet, YouTube…). The app does
-    #: not stream video itself; it schedules, gathers and reminds.
+    #: Optional external room (Zoom, Meet, YouTube). The in-app room is
+    #: presence and chat on Centrifugo `live:{session_id}`; the app does not
+    #: stream video itself.
     join_url: str | None = Field(default=None, max_length=500)
 
     @field_validator("join_url")
@@ -2455,7 +2468,31 @@ class LiveSessionIn(BaseModel):
         return value
 
 
+class LiveChatIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("content")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Say something")
+        return value
+
+
 LIVE_OPEN = ("scheduled", "live")
+
+
+def _live_channel_name(session: dict) -> str:
+    return session.get("realtime_channel") or realtime.live_channel(session["id"])
+
+
+def _refuse_unless_live(session: dict) -> None:
+    if session["status"] == "live":
+        return
+    if session["status"] in ("ended", "cancelled"):
+        raise HTTPException(409, "This session has ended")
+    raise HTTPException(409, "This session has not started")
 
 
 async def _live_session_or_404(session_id: str) -> tuple[dict, dict]:
@@ -2482,6 +2519,56 @@ async def _live_view(sessions: list[dict], viewer_id: str) -> list[dict]:
                    "rsvped": row["id"] in mine}) for row in sessions]
 
 
+async def _live_participants(session_id: str) -> list[dict]:
+    rows = [
+        row async for row in db.live_participants.find(
+            {"session_id": session_id}, {"_id": 0}
+        ).sort("joined_at", 1)
+    ]
+    people = await _people([row["user_id"] for row in rows])
+    return [
+        {"user_id": row["user_id"], "joined_at": row["joined_at"], "user": people.get(row["user_id"])}
+        for row in rows
+    ]
+
+
+def _subscription_token(user_id: str, channel: str) -> str | None:
+    """Mint a join token when Centrifugo is configured. None is a valid answer."""
+    if not realtime.is_configured():
+        return None
+    try:
+        return realtime.subscription_token(user_id, channel)
+    except RuntimeError:
+        logger.warning("Live room token skipped: realtime secret is not configured")
+        return None
+
+
+async def _live_room(session: dict, viewer_id: str) -> dict:
+    channel_name = _live_channel_name(session)
+    participants = await _live_participants(session["id"])
+    view = (await _live_view([session], viewer_id))[0]
+    view["realtime_channel"] = channel_name
+    return {
+        "session": view,
+        "participants": participants,
+        "realtime_channel": channel_name,
+        "subscription_token": _subscription_token(viewer_id, channel_name),
+        "joined": any(row["user_id"] == viewer_id for row in participants),
+    }
+
+
+async def _emit_live(name: str, session: dict, actor_id: str) -> None:
+    await insights.emit(
+        name, actor_id=actor_id, session_id=session["id"],
+        metadata={
+            "channel_id": session["channel_id"],
+            "community_id": session.get("community_id"),
+            "title": session.get("title"),
+            "host_id": session.get("host_id"),
+        },
+    )
+
+
 async def _tell_rsvps(session: dict, actor: dict, title: str) -> None:
     async for row in db.live_rsvps.find({"session_id": session["id"]}, {"_id": 0, "user_id": 1}):
         await notifications.notify(
@@ -2495,10 +2582,12 @@ async def _tell_rsvps(session: dict, actor: dict, title: str) -> None:
 async def schedule_live_session(channel_id: str, body: LiveSessionIn, user: dict = Depends(current_user)):
     channel = await _kind_channel_or_404(channel_id, "live")
     await _require(channel["community_id"], user["id"], permissions.START_LIVE_SESSION, channel)
+    session_id = new_id()
     session = {
-        "id": new_id(), "channel_id": channel_id, "community_id": channel["community_id"],
+        "id": session_id, "channel_id": channel_id, "community_id": channel["community_id"],
         "host_id": user["id"], **body.model_dump(), "status": "scheduled",
         "started_at": None, "ended_at": None, "created_at": now(),
+        "realtime_channel": realtime.live_channel(session_id),
     }
     await db.live_sessions.insert_one(dict(session))
     # The announcement lands in the channel like any message, so it is seen,
@@ -2560,7 +2649,10 @@ async def start_live_session(session_id: str, user: dict = Depends(current_user)
     if not updated:
         raise HTTPException(409, "This session already started")
     await _tell_rsvps(updated, user, f"{updated['title']} is live now")
-    await realtime.publish(realtime.chat_channel(channel["id"]), {"type": "live.started", "session_id": session_id})
+    await _emit_live("live_session_started", updated, user["id"])
+    payload = {"type": "live.started", "session_id": session_id}
+    await realtime.publish(realtime.chat_channel(channel["id"]), payload)
+    await realtime.publish(_live_channel_name(updated), payload)
     return (await _live_view([updated], user["id"]))[0]
 
 
@@ -2573,8 +2665,87 @@ async def end_live_session(session_id: str, user: dict = Depends(current_user)):
         {"$set": {"status": "ended", "ended_at": now()}}, projection={"_id": 0}, return_document=True)
     if not updated:
         raise HTTPException(409, "Only a live session can end")
-    await realtime.publish(realtime.chat_channel(channel["id"]), {"type": "live.ended", "session_id": session_id})
+    await _emit_live("live_session_ended", updated, user["id"])
+    payload = {"type": "live.ended", "session_id": session_id}
+    await realtime.publish(realtime.chat_channel(channel["id"]), payload)
+    await realtime.publish(_live_channel_name(updated), payload)
     return (await _live_view([updated], user["id"]))[0]
+
+
+@router.get("/live-sessions/{session_id}")
+async def get_live_session(session_id: str, user: dict = Depends(current_user)):
+    """The room snapshot: status, who has joined, and where to subscribe.
+
+    Does not admit the caller. Join is a separate write so opening a scheduled
+    or ended session cannot mark someone present.
+    """
+    session, channel = await _live_session_or_404(session_id)
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    return await _live_room(session, user["id"])
+
+
+@router.post("/live-sessions/{session_id}/join")
+async def join_live_session(session_id: str, user: dict = Depends(current_user)):
+    """Admit a member into a session that is live. Ended sessions are refused.
+
+    Idempotent: joining twice does not duplicate the participant or the
+    `live_session_joined` event. The optional `subscription_token` is a
+    Centrifugo JWT for `live:{session_id}` when realtime is configured.
+    """
+    session, channel = await _live_session_or_404(session_id)
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    _refuse_unless_live(session)
+    fresh = False
+    try:
+        await db.live_participants.insert_one({
+            "id": new_id(), "session_id": session_id, "user_id": user["id"], "joined_at": now(),
+        })
+        fresh = True
+    except DuplicateKeyError:
+        pass
+    if fresh:
+        await _emit_live("live_session_joined", session, user["id"])
+        person = (await _people([user["id"]])).get(user["id"]) or {
+            "id": user["id"], "full_name": user.get("full_name"), "avatar_url": None,
+        }
+        await realtime.publish(_live_channel_name(session), {
+            "type": "presence.joined", "user_id": user["id"], "user": person,
+        })
+    return await _live_room(session, user["id"])
+
+
+@router.get("/live-sessions/{session_id}/messages")
+async def list_live_messages(session_id: str, user: dict = Depends(current_user)):
+    session, channel = await _live_session_or_404(session_id)
+    await _require(channel["community_id"], user["id"], permissions.VIEW_CHANNEL, channel)
+    rows = [
+        row async for row in db.live_messages.find(
+            {"session_id": session_id}, {"_id": 0}
+        ).sort("created_at", 1).limit(200)
+    ]
+    people = await _people(list({row["author_id"] for row in rows}))
+    return [clean({**row, "author": people.get(row["author_id"])}) for row in rows]
+
+
+@router.post("/live-sessions/{session_id}/messages", status_code=201)
+async def post_live_message(session_id: str, body: LiveChatIn, user: dict = Depends(current_user)):
+    """Session chat. Only a member who has joined, and only while the session is live."""
+    await ratelimit.hit("message", user["id"])
+    session, channel = await _live_session_or_404(session_id)
+    await _require(channel["community_id"], user["id"], permissions.SEND_MESSAGE, channel)
+    _refuse_unless_live(session)
+    admitted = await db.live_participants.find_one(
+        {"session_id": session_id, "user_id": user["id"]}, {"_id": 1})
+    if not admitted:
+        raise HTTPException(409, "Join the session before chatting")
+    doc = {
+        "id": new_id(), "session_id": session_id, "author_id": user["id"],
+        "content": body.content, "created_at": now(),
+    }
+    await db.live_messages.insert_one(dict(doc))
+    view = clean({**doc, "author": (await _people([user["id"]])).get(user["id"])})
+    await realtime.publish(_live_channel_name(session), {"type": "chat.message", "message": view})
+    return view
 
 
 @router.delete("/live-sessions/{session_id}", status_code=204)
