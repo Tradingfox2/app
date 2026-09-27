@@ -146,6 +146,9 @@ export default function Profile() {
             {user ? <Pressable accessibilityRole="button" testID="view-my-profile" onPress={() => router.push({ pathname: "/user/[id]", params: { id: user.id } })} style={styles.logoutBtn}>
               <Ionicons name="person-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("VIEW PROFILE")}</Text>
             </Pressable> : null}
+            {user ? <Pressable accessibilityRole="button" testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.logoutBtn}>
+              <Ionicons name="people-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("FRIENDS")}</Text>
+            </Pressable> : null}
           </View>
           <Pressable
             testID="logout-btn"

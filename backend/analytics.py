@@ -31,6 +31,7 @@ EventName = Literal[
     "post_shared",
     "live_session_started",
     "live_session_joined",
+    "story_created",
 ]
 Source = Literal["client", "server"]
 
@@ -43,6 +44,7 @@ EVENT_NAMES: tuple[EventName, ...] = (
     "post_shared",
     "live_session_started",
     "live_session_joined",
+    "story_created",
 )
 
 #: Keys a caller may attach. Anything else is dropped so a post body, an
@@ -55,8 +57,9 @@ ALLOWED_PROPS: dict[str, frozenset[str]] = {
     "post_shared": frozenset({"post_id", "channel"}),
     "live_session_started": frozenset({"session_id", "channel_id"}),
     "live_session_joined": frozenset({"session_id"}),
+    "story_created": frozenset({"story_id", "has_media", "highlight"}),
 }
-BOOL_PROPS = frozenset({"has_media", "has_poll"})
+BOOL_PROPS = frozenset({"has_media", "has_poll", "highlight"})
 PRODUCT_ROLES = frozenset({"athlete", "coach", "admin"})
 SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _MAX_PROP_LEN = 80

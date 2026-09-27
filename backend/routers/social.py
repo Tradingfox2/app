@@ -28,6 +28,7 @@ AUTHOR_FIELDS = {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1}
 HASHTAG_PATTERN = re.compile(r"(?<![\w&/#])#(\w{1,50})", re.UNICODE)
 MAX_TAGS = 10
 POST_EDIT_WINDOW = timedelta(hours=24)
+STORY_TTL = timedelta(hours=24)
 
 
 def _aware(value: datetime) -> datetime:
@@ -63,6 +64,19 @@ class PostIn(BaseModel):
     workout_id: str | None = None
     media_ids: list[str] = Field(default_factory=list, max_length=6)
     poll: PollIn | None = None
+    #: `friends` is accepted followers only. Omitted or `public` keeps the
+    #: existing feed. A community post cannot also be friends-only.
+    audience: Literal["public", "friends"] = "public"
+
+
+class StoryIn(BaseModel):
+    """A workout story. Highlights stay on the profile; other stories last 24h."""
+    caption: str = Field(default="", max_length=300)
+    media_ids: list[str] = Field(default_factory=list, max_length=4)
+    workout_id: str
+    audience: Literal["friends", "public"] = "friends"
+    highlight: bool = False
+    highlight_title: str | None = Field(default=None, max_length=40)
 
 
 class PostEditIn(BaseModel):
@@ -155,28 +169,53 @@ async def _can_view_post(post: dict, user_id: str) -> bool:
         return True
     if author_id and await social_graph.blocked_between(user_id, author_id):
         return False
+    # Friends-only is the accepted-follow edge, on top of account privacy.
+    # A missing audience is public — posts written before the field existed.
+    if post.get("audience") == "friends" and not await social_graph.follows_actively(user_id, author_id):
+        return False
     if post.get("community_id"):
         return post["community_id"] in await _member_community_ids(user_id)
     return await social_graph.can_view_profile(user_id, author_id)
 
 
-async def _visible_post_query(viewer_id: str) -> dict:
+async def _followed_ids(viewer_id: str) -> list[str]:
+    return [
+        row["followee_id"]
+        async for row in db.follows.find(
+            {"follower_id": viewer_id, "status": social_graph.ACTIVE},
+            {"_id": 0, "followee_id": 1},
+        )
+    ]
+
+
+async def _visible_post_query(viewer_id: str, *, friends: bool = False) -> dict:
     """Every post this viewer may see — the base both the feed and search use.
 
     The Mongo form of `_can_view_post`: community posts for members only,
     public posts minus private authors the viewer does not follow, and nothing
     from anyone blocked in either direction. Feed-only narrowing (muting,
     scope) is layered on by the caller.
+
+    `friends=False` (search, the public feed, trending tags) drops
+    friends-audience posts entirely, so that surface stays what it was.
+    `friends=True` (friends feed, a profile wall) keeps a friends post only
+    for the author and their accepted followers.
     """
     community_ids = await _member_community_ids(viewer_id)
     hidden_private = await _private_hidden_author_ids(viewer_id)
     public_posts: dict = {"community_id": None}
     if hidden_private:
         public_posts["author_id"] = {"$nin": hidden_private}
-    query: dict = {
-        "status": {"$ne": "deleted"},
-        "$or": [public_posts, {"community_id": {"$in": community_ids}}],
-    }
+    clauses: list[dict] = [{"$or": [public_posts, {"community_id": {"$in": community_ids}}]}]
+    if friends:
+        followed = await _followed_ids(viewer_id)
+        clauses.append({"$or": [
+            {"audience": {"$ne": "friends"}},
+            {"author_id": {"$in": [*followed, viewer_id]}},
+        ]})
+    else:
+        clauses.append({"audience": {"$ne": "friends"}})
+    query: dict = {"status": {"$ne": "deleted"}, "$and": clauses}
     blocked = await social_graph.blocked_ids(viewer_id)
     if blocked:
         query["author_id"] = {"$nin": blocked}
@@ -246,6 +285,7 @@ async def _decorate(posts: list[dict], viewer_id: str) -> list[dict]:
         post.setdefault("repost_count", 0)
         post.setdefault("media", [])
         post.setdefault("tags", [])
+        post.setdefault("audience", "public")
         post.setdefault("link_preview", None)
         post.setdefault("edited_at", None)
         poll = post.get("poll")
@@ -319,7 +359,7 @@ async def upload_media(file: UploadFile = File(...), user: dict = Depends(curren
 # --------------------------------------------------------------------------- #
 @router.get("/feed")
 async def feed(
-    scope: Literal["all", "following", "mine"] = "all",
+    scope: Literal["all", "following", "mine", "friends"] = "all",
     before: str | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     user: dict = Depends(current_user),
@@ -327,7 +367,9 @@ async def feed(
     tag: Annotated[str | None, Query(max_length=50)] = None,
     community_id: Annotated[str | None, Query(max_length=64)] = None,
 ):
-    query = await _visible_post_query(user["id"])
+    # A profile wall and the friends feed may include friends-audience posts.
+    # The public scopes must not, or the community feed would change.
+    query = await _visible_post_query(user["id"], friends=scope == "friends" or bool(author_id))
     if tag:
         query["tags"] = tag.lstrip("#").lower()
     if community_id:
@@ -346,6 +388,15 @@ async def feed(
             query["community_id"] = None  # a profile shows the public wall, as its post count does
     elif scope == "mine":
         query["author_id"] = user["id"]
+    elif scope == "friends":
+        # Self plus accepted followees, wall posts only. Muted people leave
+        # this feed the same way they leave FOLLOWING.
+        following = await _followed_ids(user["id"])
+        excluded = set(query.get("author_id", {}).get("$nin", []))
+        excluded |= set(await social_graph.muted_ids(user["id"]))
+        excluded.discard(user["id"])
+        query["author_id"] = {"$in": [uid for uid in (*following, user["id"]) if uid not in excluded]}
+        query["community_id"] = None
     else:
         # Blocked people are already excluded; muted people leave the feed too.
         # (Muting is feed-only — search still finds them, as on X.)
@@ -418,6 +469,8 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         raise HTTPException(422, "A post needs text, media, a workout or a poll")
     if body.poll and not body.content.strip():
         raise HTTPException(422, "A poll needs a question")
+    if body.audience == "friends" and body.community_id:
+        raise HTTPException(422, "A community post uses the community's audience")
     workout_summary = await _workout_summary(body.workout_id, user) if body.workout_id else None
     if body.community_id:
         if body.community_id not in await _member_community_ids(user["id"]):
@@ -438,6 +491,7 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         # Only the first link, and never alongside media: the media is the card.
         "link_preview": None if media else await _preview_for(content),
         "edited_at": None,
+        "audience": body.audience,
         "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": timestamp,
     }
     await db.posts.insert_one(post)
@@ -972,12 +1026,23 @@ async def public_profile(user_id: str, user: dict = Depends(current_user)):
         raise HTTPException(404, "User not found")
     followers, following = await social_graph.counts(user_id)
     state = await social_graph.follow_state(user["id"], user_id)
-    extra = await db.users.find_one({"id": user_id}, {"_id": 0, "bio": 1, "role": 1, "coach_status": 1}) or {}
+    extra = await db.users.find_one(
+        {"id": user_id},
+        {"_id": 0, "bio": 1, "role": 1, "coach_status": 1, "cover_url": 1, "sports": 1, "about": 1},
+    ) or {}
     profile["bio"] = extra.get("bio") or ""
+    profile["cover_url"] = extra.get("cover_url")
+    profile["sports"] = list(extra.get("sports") or [])
     profile["is_coach"] = extra.get("role") == "coach" and extra.get("coach_status", "approved") == "approved"
     profile["followers"] = followers
     profile["following"] = following
-    profile["posts"] = await db.posts.count_documents({"author_id": user_id, "status": {"$ne": "deleted"}, "community_id": None})
+    post_filter: dict = {"author_id": user_id, "status": {"$ne": "deleted"}, "community_id": None}
+    # A non-follower must not learn how many friends-only posts exist.
+    if user["id"] != user_id and not await social_graph.follows_actively(user["id"], user_id):
+        post_filter["audience"] = {"$ne": "friends"}
+    profile["posts"] = await db.posts.count_documents(post_filter)
+    can_view = await social_graph.can_view_profile(user["id"], user_id)
+    profile["about"] = (extra.get("about") or "") if can_view else ""
     profile["follow_state"] = state
     profile["followed_by_me"] = state == "following"
     profile["is_private"] = await social_graph.is_private(user_id)
@@ -986,7 +1051,7 @@ async def public_profile(user_id: str, user: dict = Depends(current_user)):
     profile["is_muted"] = bool(await db.mutes.find_one(
         {"muter_id": user["id"], "muted_id": user_id}, {"_id": 1}))
     # A private account shows its header but withholds posts until accepted.
-    profile["can_view_posts"] = await social_graph.can_view_profile(user["id"], user_id)
+    profile["can_view_posts"] = can_view
     profile["can_message"] = (
         not await social_graph.blocked_between(user["id"], user_id)
         and await _can_message(user["id"], user_id)
@@ -1131,3 +1196,155 @@ async def dm_typing(peer_id: str, user: dict = Depends(current_user)):
     if await social_graph.blocked_between(user["id"], peer_id):
         return
     await realtime.publish(realtime.user_channel(peer_id), {"type": "dm.typing", "peer_id": user["id"]})
+
+
+# --------------------------------------------------------------------------- #
+# Profile photos, workout stories, highlights                                  #
+# --------------------------------------------------------------------------- #
+async def _wall_visible(viewer_id: str, author_id: str) -> None:
+    """403 when the viewer cannot see this person's wall. Same rule as posts."""
+    if not await db.users.find_one({"id": author_id}, {"_id": 1}):
+        raise HTTPException(404, "User not found")
+    if author_id != viewer_id and await social_graph.blocked_between(viewer_id, author_id):
+        raise HTTPException(403, "This account is unavailable")
+    if not await social_graph.can_view_profile(viewer_id, author_id):
+        raise HTTPException(403, "This account is private")
+
+
+def _friends_only_clause(viewer_id: str, author_id: str, follows: bool) -> dict:
+    """Non-followers do not receive friends-audience rows."""
+    if viewer_id == author_id or follows:
+        return {}
+    return {"audience": {"$ne": "friends"}}
+
+
+@router.get("/users/{user_id}/photos")
+async def profile_photos(user_id: str, user: dict = Depends(current_user)):
+    """Images already attached to this person's wall posts. No separate album."""
+    await _wall_visible(user["id"], user_id)
+    follows = user["id"] == user_id or await social_graph.follows_actively(user["id"], user_id)
+    query = {
+        "author_id": user_id, "status": {"$ne": "deleted"}, "community_id": None,
+        "media.kind": "image", **_friends_only_clause(user["id"], user_id, follows),
+    }
+    photos: list[dict] = []
+    async for post in db.posts.find(query, {"_id": 0, "id": 1, "media": 1}).sort("created_at", -1).limit(40):
+        for item in post.get("media") or []:
+            if item.get("kind") == "image":
+                photos.append({"post_id": post["id"], "id": item.get("id"), "url": item.get("url"), "kind": "image"})
+            if len(photos) >= 60:
+                return photos
+    return photos
+
+
+def _story_view(row: dict, author: dict | None) -> dict:
+    view = clean(dict(row)) or {}
+    view["author"] = author
+    view.setdefault("media", [])
+    view.setdefault("audience", "friends")
+    view.setdefault("highlight", False)
+    return view
+
+
+async def _list_stories(author_id: str, user: dict, *, highlight: bool) -> list[dict]:
+    await _wall_visible(user["id"], author_id)
+    follows = user["id"] == author_id or await social_graph.follows_actively(user["id"], author_id)
+    query: dict = {
+        "author_id": author_id,
+        "status": {"$ne": "deleted"},
+        "highlight": True if highlight else {"$ne": True},
+        **_friends_only_clause(user["id"], author_id, follows),
+    }
+    if not highlight:
+        query["expires_at"] = {"$gt": now()}
+    author = await _author(author_id)
+    rows = [
+        _story_view(row, author)
+        async for row in db.stories.find(query, {"_id": 0}).sort("created_at", -1 if highlight else 1).limit(50)
+    ]
+    return rows
+
+
+@router.get("/users/{user_id}/stories")
+async def user_stories(user_id: str, user: dict = Depends(current_user)):
+    """Active 24h workout stories. Highlights are a separate list."""
+    return await _list_stories(user_id, user, highlight=False)
+
+
+@router.get("/users/{user_id}/highlights")
+async def user_highlights(user_id: str, user: dict = Depends(current_user)):
+    return await _list_stories(user_id, user, highlight=True)
+
+
+@router.get("/stories/feed")
+async def story_feed(user: dict = Depends(current_user)):
+    """Unexpired stories from you and people you follow. One group per author."""
+    followed = await _followed_ids(user["id"])
+    blocked = set(await social_graph.blocked_ids(user["id"]))
+    authors = [uid for uid in (user["id"], *followed) if uid not in blocked]
+    if not authors:
+        return []
+    rows = [
+        row async for row in db.stories.find(
+            {
+                "author_id": {"$in": authors},
+                "status": {"$ne": "deleted"},
+                "highlight": {"$ne": True},
+                "expires_at": {"$gt": now()},
+            },
+            {"_id": 0},
+        ).sort("created_at", 1).limit(200)
+    ]
+    followed_set = set(followed)
+    visible = [
+        row for row in rows
+        if row["author_id"] == user["id"]
+        or row.get("audience") != "friends"
+        or row["author_id"] in followed_set
+    ]
+    people = await _people(row["author_id"] for row in visible)
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for row in visible:
+        author_id = row["author_id"]
+        if author_id not in groups:
+            groups[author_id] = {"author": people.get(author_id), "stories": []}
+            order.append(author_id)
+        groups[author_id]["stories"].append(_story_view(row, people.get(author_id)))
+    order.sort(key=lambda uid: (uid != user["id"], uid))
+    return [groups[uid] for uid in order]
+
+
+@router.post("/stories", status_code=201)
+async def create_story(body: StoryIn, user: dict = Depends(current_user)):
+    await ratelimit.hit("post", user["id"])
+    summary = await _workout_summary(body.workout_id, user)
+    media = await _owned_media(body.media_ids, user["id"])
+    title = (body.highlight_title or "").strip() or (summary.get("title") or "Workout")
+    timestamp = now()
+    doc = {
+        "id": new_id(),
+        "author_id": user["id"],
+        "caption": body.caption.strip(),
+        "media": media,
+        "workout_id": body.workout_id,
+        "workout_summary": summary,
+        "audience": body.audience,
+        "highlight": body.highlight,
+        "highlight_title": title if body.highlight else None,
+        "expires_at": None if body.highlight else timestamp + STORY_TTL,
+        "status": "active",
+        "created_at": timestamp,
+    }
+    await db.stories.insert_one(dict(doc))
+    return _story_view(doc, await _author(user["id"]))
+
+
+@router.delete("/stories/{story_id}", status_code=204)
+async def delete_story(story_id: str, user: dict = Depends(current_user)):
+    story = await db.stories.find_one({"id": story_id, "status": {"$ne": "deleted"}}, {"_id": 0, "author_id": 1})
+    if not story or story["author_id"] != user["id"]:
+        raise HTTPException(404, "Story not found")
+    await db.stories.update_one(
+        {"id": story_id}, {"$set": {"status": "deleted", "deleted_at": now()}},
+    )
