@@ -39,6 +39,7 @@ health data are not accepted.
 | `post_shared` | `post_id`, `channel` (`system_share`, `copy`, `x`, `facebook`, `whatsapp`, `linkedin`) | Client, after a share succeeds. Owner: socialgraph. | **Yes.** `frontend/src/share.ts` calls `track("post_shared", { post_id, channel })` when the system sheet completes (`system_share`), a copy succeeds (`copy`), or a network composer opens. Dismiss, cancel, and failure do not emit. |
 | `live_session_started` | `session_id`, `channel_id` | Server, inside `start_live_session`, source `server`. Owner: community. | Taxonomy only |
 | `live_session_joined` | `session_id` | Client or server when a member opens the join link or RSVPs into a live session. Owner: community. | Taxonomy only |
+| `story_created` | `story_id`, `has_media`, `highlight` | Client, after `POST /api/stories` succeeds. Owner: personal space. | **Yes.** The story form in `frontend/app/story-new.tsx` calls `track("story_created", …)`. |
 
 Emit each occurrence once. The feed composer is the client path. Do not
 also record `post_created` on the server for that same publish, or the

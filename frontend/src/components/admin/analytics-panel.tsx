@@ -12,6 +12,7 @@ const LABELS: Record<string, string> = {
   post_shared: "Posts shared",
   live_session_started: "Live sessions started",
   live_session_joined: "Live sessions joined",
+  story_created: "Stories created",
 };
 
 /**

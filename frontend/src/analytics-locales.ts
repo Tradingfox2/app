@@ -17,6 +17,7 @@ export const analyticsMessages: Record<SupportedLocale, Messages> = {
     "Posts shared": "Publications partagées",
     "Live sessions started": "Séances en direct commencées",
     "Live sessions joined": "Séances en direct rejointes",
+    "Stories created": "Stories créées",
     "Could not load analytics": "Impossible de charger les statistiques",
   },
   de: {
@@ -32,6 +33,7 @@ export const analyticsMessages: Record<SupportedLocale, Messages> = {
     "Posts shared": "Beiträge geteilt",
     "Live sessions started": "Live-Einheiten gestartet",
     "Live sessions joined": "Live-Einheiten beigetreten",
+    "Stories created": "Stories erstellt",
     "Could not load analytics": "Analyse konnte nicht geladen werden",
   },
   es: {
@@ -47,6 +49,7 @@ export const analyticsMessages: Record<SupportedLocale, Messages> = {
     "Posts shared": "Publicaciones compartidas",
     "Live sessions started": "Sesiones en directo iniciadas",
     "Live sessions joined": "Sesiones en directo a las que se unió",
+    "Stories created": "Stories creadas",
     "Could not load analytics": "No se pudo cargar la analítica",
   },
   it: {
@@ -62,6 +65,7 @@ export const analyticsMessages: Record<SupportedLocale, Messages> = {
     "Posts shared": "Post condivisi",
     "Live sessions started": "Sessioni live avviate",
     "Live sessions joined": "Sessioni live raggiunte",
+    "Stories created": "Storie create",
     "Could not load analytics": "Impossibile caricare le analisi",
   },
 };

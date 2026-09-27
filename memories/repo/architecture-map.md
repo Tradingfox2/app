@@ -245,6 +245,31 @@ through the shared module.
   `analytics_events_name_ts`, created from `analytics.ensure_indexes` in
   `server.lifespan`.
 
+## Added 2026-09-27 (athlete personal space)
+
+- **Schema:** `supabase/migrations/005_athlete_personal_space.sql`. Users gain
+  `cover_url`, `sports text[]`, `about`. Posts gain `audience` (`public` |
+  `friends`; missing means public). `public.stories` mirrors Mongo `stories`
+  (24h workout stories, or `highlight` rows with no `expires_at`). RLS on,
+  no client policies.
+- **Visibility:** friends means an accepted follow (`social_graph.follows_actively`).
+  `routers/social.py` `_can_view_post` enforces it. `_visible_post_query(friends=False)`
+  is what search, trending tags, and feed scopes `all` / `following` / `mine`
+  use, so friends posts stay off the public community feed. Profile walls and
+  `GET /feed?scope=friends` pass `friends=True`.
+- **Stories:** `POST /stories` requires a finished workout owned by the caller
+  (`_workout_summary`). `GET /stories/feed`, `GET /users/{id}/stories`,
+  `GET /users/{id}/highlights`, `DELETE /stories/{id}`. Photos on the wall are
+  images already on that person's non-community posts (`GET /users/{id}/photos`).
+- **Profile fields:** `PATCH /auth/me` accepts `about`, `sports`, `cover_media_id`,
+  `remove_cover`. Cover must be the caller's own image in `media`. About is
+  withheld when `can_view_profile` is false.
+- **UI:** `app/user/[id].tsx` wall (cover, sports, posts / photos / about,
+  highlights). `app/friends.tsx` friends feed. `app/story-new.tsx` and
+  `app/story/[authorId].tsx`. Personal composer defaults to `audience: "friends"`.
+  `track("story_created")` after a successful create. Community composer unchanged.
+- **Tests:** `backend/tests/test_personal_space.py`. UI: `frontend/e2e/personal-space.spec.ts`.
+
 ## Added 2026-09-27 (support tickets + dual media foundations)
 
 - **Schema SoT:** `supabase/migrations/004_support_and_dual_media.sql`. Tables:

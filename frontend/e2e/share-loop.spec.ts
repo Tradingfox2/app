@@ -74,7 +74,7 @@ test("own profile publishes a post that shows on the feed and can be shared", as
   await page.getByTestId("composer-text").fill("Profile session");
   await page.getByTestId("feed-publish").click();
   await expect(page.getByTestId("post-post-new")).toBeVisible();
-  expect(published).toEqual([{ content: "Profile session", media_ids: [] }]);
+  expect(published).toEqual([{ content: "Profile session", media_ids: [], audience: "friends" }]);
 
   await page.goto("/community");
   await expect(page.getByTestId("feed").getByText("Profile session", { exact: true })).toBeVisible();

@@ -24,6 +24,9 @@ export type User = {
   is_private?: boolean;
   staff_role?: StaffRole | null;
   bio?: string;
+  cover_url?: string | null;
+  sports?: string[];
+  about?: string;
 };
 
 export type StaffRole = "support" | "moderator" | "admin";
@@ -270,6 +273,10 @@ export type PublicProfile = MentionedUser & {
   can_message: boolean;
   bio?: string;
   is_coach?: boolean;
+  cover_url?: string | null;
+  sports?: string[];
+  /** Empty when the viewer cannot see this person's wall. */
+  about?: string;
 };
 
 export type AppNotification = {
@@ -481,6 +488,8 @@ export type Post = {
   poll?: Poll | null;
   link_preview?: LinkPreview | null;
   edited_at?: string | null;
+  /** Missing on older posts; the server treats that as public. */
+  audience?: "public" | "friends";
 };
 
 export type Poll = {
@@ -494,6 +503,25 @@ export type Poll = {
 };
 
 export type LinkPreview = { url: string; title: string; description: string; image_url: string | null; site_name: string };
+
+export type Story = {
+  id: string;
+  author_id: string;
+  author: MentionedUser | null;
+  caption: string;
+  media: MediaItem[];
+  workout_id: string | null;
+  workout_summary: WorkoutSummary | null;
+  audience: "friends" | "public";
+  highlight: boolean;
+  highlight_title: string | null;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type StoryGroup = { author: MentionedUser | null; stories: Story[] };
+
+export type ProfilePhoto = { post_id: string; id: string; url: string; kind: "image" };
 
 export type WorkoutSummary = {
   workout_id: string;
@@ -686,7 +714,11 @@ export const api = {
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ activity_ranking_opt_in }) }),
   updatePrivacy: (is_private: boolean) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ is_private }) }),
-  updateProfileDetails: (body: { full_name?: string; bio?: string; avatar_media_id?: string; remove_avatar?: boolean }) =>
+  updateProfileDetails: (body: {
+    full_name?: string; bio?: string; about?: string; sports?: string[];
+    avatar_media_id?: string; remove_avatar?: boolean;
+    cover_media_id?: string; remove_cover?: boolean;
+  }) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 
   dashboard: () => request<any>("/dashboard"),
@@ -939,7 +971,7 @@ export const api = {
       window_days: number;
     }>("/community-rankings"),
   // Social feed
-  feed: (scope: "all" | "following" | "mine" = "all", before?: string, filters: { author_id?: string; tag?: string; community_id?: string } = {}) => {
+  feed: (scope: "all" | "following" | "mine" | "friends" = "all", before?: string, filters: { author_id?: string; tag?: string; community_id?: string } = {}) => {
     const qs = new URLSearchParams({ scope });
     if (before) qs.set("before", before);
     for (const [key, value] of Object.entries(filters)) if (value) qs.set(key, value);
@@ -961,7 +993,7 @@ export const api = {
   likeComment: (id: string) => request<{ liked: boolean; like_count: number }>(`/comments/${id}/like`, { method: "POST" }),
   unlikeComment: (id: string) => request<{ liked: boolean; like_count: number }>(`/comments/${id}/like`, { method: "DELETE" }),
   /** Omit `workout_id` entirely when unset: the publish body is asserted exactly in e2e. */
-  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string; poll?: { options: string[]; duration_hours: number } }) =>
+  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string; poll?: { options: string[]; duration_hours: number }; audience?: "public" | "friends" }) =>
     request<Post>("/posts", { method: "POST", body: JSON.stringify(payload) }),
   deletePost: (id: string) => request<void>(`/posts/${id}`, { method: "DELETE" }),
   likePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "POST" }),
@@ -981,6 +1013,13 @@ export const api = {
   unfollow: (userId: string) =>
     request<{ state: FollowState; user_id: string; following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
   publicProfile: (userId: string) => request<PublicProfile>(`/users/${userId}/profile`),
+  profilePhotos: (userId: string) => request<ProfilePhoto[]>(`/users/${userId}/photos`),
+  userStories: (userId: string) => request<Story[]>(`/users/${userId}/stories`),
+  userHighlights: (userId: string) => request<Story[]>(`/users/${userId}/highlights`),
+  storyFeed: () => request<StoryGroup[]>("/stories/feed"),
+  createStory: (body: { workout_id: string; caption?: string; media_ids?: string[]; audience?: "friends" | "public"; highlight?: boolean; highlight_title?: string }) =>
+    request<Story>("/stories", { method: "POST", body: JSON.stringify(body) }),
+  deleteStory: (id: string) => request<void>(`/stories/${id}`, { method: "DELETE" }),
 
   followRequests: () => request<FollowRequest[]>("/follow-requests"),
   approveFollowRequest: (followerId: string) =>
