@@ -95,8 +95,8 @@ export default function Home() {
   const [previewMuscle, setPreviewMuscle] = useState<MuscleSlug | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [coach, setCoach] = useState<{ connected: boolean; model: string } | null>(null);
-  const [coachTip, setCoachTip] = useState<{ tip: string; source: string } | null>(null);
+  const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
+  const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -108,11 +108,11 @@ export default function Home() {
     }
     api
       .coachStatus()
-      .then((s) => setCoach({ connected: s.connected, model: s.model }))
+      .then((s) => setCoach({ connected: s.connected }))
       .catch(() => setCoach(null));
     api
       .coachTip()
-      .then((t) => setCoachTip({ tip: t.tip, source: t.source }))
+      .then((tip) => setCoachTip({ tip: tip.tip }))
       .catch(() => setCoachTip(null));
   }, []);
 
@@ -276,25 +276,12 @@ export default function Home() {
         >
           <View style={styles.cardHead}>
             <Text style={styles.tipTitle}>{t("COACH TIP")}</Text>
-            {coach && (
+            {coach && !coach.connected ? (
               <View style={styles.coachBadge}>
-                <View
-                  style={[
-                    styles.coachDot,
-                    { backgroundColor: coach.connected ? colors.brand : colors.warning },
-                  ]}
-                />
-                <Text style={styles.coachBadgeTxt}>
-                  {coach.connected
-                    ? `AI · ${
-                        coachTip?.source && coachTip.source !== "library"
-                          ? coachTip.source.split(":").pop()
-                          : coach.model
-                      }`
-                    : t("AI OFFLINE")}
-                </Text>
+                <View style={[styles.coachDot, { backgroundColor: colors.warning }]} />
+                <Text style={styles.coachBadgeTxt}>{t("AI OFFLINE")}</Text>
               </View>
-            )}
+            ) : null}
           </View>
           <Text style={styles.tipTxt} testID="coach-tip-text">
             {coachTip?.tip ??

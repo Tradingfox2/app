@@ -232,9 +232,6 @@ export default function ProgramScreen() {
 
   const week = program?.weeks.find((w) => w.week_index === weekIdx) ?? program?.weeks[0];
   const rec = programDoc?.recovery_snapshot;
-  const modelLabel: string | null = programDoc?.model
-    ? String(programDoc.model).split(":").pop() ?? null
-    : null;
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="program-screen">
@@ -385,11 +382,6 @@ export default function ProgramScreen() {
               {week && (
                 <View style={styles.phaseRow}>
                   <Text style={styles.phaseTxt}>{t(PHASE_LABELS[week.phase] ?? week.phase)}</Text>
-                  {modelLabel ? (
-                    <Text style={styles.modelTxt} testID="program-model">
-                      {t("Built by {model}", { model: modelLabel })}
-                    </Text>
-                  ) : null}
                 </View>
               )}
 
@@ -520,7 +512,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   phaseTxt: { color: colors.brand, fontWeight: "900", letterSpacing: 3, fontSize: 12 },
-  modelTxt: { color: colors.textMuted, fontSize: 11, fontWeight: "600" },
   startDayBtn: {
     marginTop: spacing.md,
     minHeight: 44,
