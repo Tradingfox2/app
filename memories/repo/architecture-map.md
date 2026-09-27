@@ -206,16 +206,60 @@ through the shared module.
 ## Added 2026-09-27 (post share-out)
 
 - **Post URL owner:** `frontend/src/share.ts`. `buildPostUrl` / `sharePost` /
-  `copyPostLink` / `openShareTarget`. Scheme is `ironflow` (`app.json`).
-  HTTPS only when `EXPO_PUBLIC_WEB_ORIGIN` or `EXPO_PUBLIC_WEB_URL` is an
-  http(s) origin; otherwise `ironflow://post/{id}`. Documented in
-  `docs/post-deep-links.md`.
+  `copyPostLink` / `openShareTarget`. Share links use `ironflow://post/{id}`,
+  or `{origin}/post/{id}` when `EXPO_PUBLIC_WEB_ORIGIN` or
+  `EXPO_PUBLIC_WEB_URL` is set. `app.json` schemes are `frontend` and
+  `ironflow`. Incoming links are rewritten in `frontend/src/linking.ts`.
+  Documented in `docs/post-deep-links.md`.
 - **Share UI:** `src/components/social/share-bar.tsx`, used by `PostCard`
   (feed overflow Share and the share icon; always open on `app/post/[id].tsx`).
   Targets are real composers (X, Facebook, WhatsApp, LinkedIn) via
   `Linking.openURL` / `window.open`. No success toast.
 - **Own profile wall** (`app/user/[id].tsx`) reuses `Composer` and
   `POST /posts`. Follow stays on `api.follow` / `social_graph.py`.
+- **`post_shared`:** `share.ts` calls `track("post_shared", { post_id, channel })`
+  only after the system sheet returns shared, copy succeeds, or a network
+  composer opens. `channel` is `system_share`, `copy`, `x`, `facebook`,
+  `whatsapp`, or `linkedin`. Dismiss and failure do not emit.
 - **Not built:** universal links / Android app links (need a real host),
   native clipboard module (`expo-clipboard`). Web copy uses the Clipboard API.
   Share does not call a new backend route.
+
+## Added 2026-09-27 (product analytics)
+
+- **`backend/analytics.py`** owns the `analytics_events` collection. `record()`
+  inserts one row; `counts()` is two `count_documents` per taxonomy name
+  (24h and 7d) and is the only staff rollup. `ts` is server UTC. Actor, role,
+  and source are not taken from the client body.
+- **Live source of truth:** Mongo `analytics_events`. FastAPI/Motor writes
+  and the admin rollup reads it. No Supabase migration for this collection.
+- **Read ACL:** staff permission `analytics.read` on support, moderator, and
+  admin. Product `admin` and approved coaches without `staff_role` are denied.
+  UI: `AnalyticsPanel` on `/admin`, shown only when the overview lists the
+  permission.
+- **Prove emit:** `frontend/src/analytics.ts` `track()` → `POST /api/events`.
+  The feed composer calls `track("post_created", …)` after a successful
+  `api.publish`. `share.ts` calls `track("post_shared", …)` after a successful
+  share. Do not also emit `post_created` from `create_post`.
+- **Indexes:** unique `event_id`, compound `(name, ts)` named
+  `analytics_events_name_ts`, created from `analytics.ensure_indexes` in
+  `server.lifespan`.
+
+## Added 2026-09-27 (support tickets + dual media foundations)
+
+- **Schema SoT:** `supabase/migrations/004_support_and_dual_media.sql`. Tables:
+  `admin_media`, `support_tickets`, `support_ticket_messages`. RLS enabled,
+  no client policies (deny-by-default, same as `public.media`). No priority
+  column, no `user_media_objects`, no `purpose` on `public.media`, no
+  attachments join table. Message attachments are nullable
+  `support_ticket_messages.media_id` → `public.media`.
+- **Bytes:** `backend/media_storage.py` remains the only writer.
+  `backend/media_repo.py` (`create_user_media`, `create_admin_media`) inserts
+  Mongo `media` / `admin_media` after `store`. Key prefixes:
+  `users/{user_id}/{media_id}.{ext}` and `admin/{staff_id}/{asset_id}.{ext}`.
+  Layout notes: `docs/STORAGE_LAYOUT.md`.
+- **Indexes:** startup in `server.py` lifespan mirrors the SQL partial indexes
+  on `admin_media` (`key` unique; staff+created_at and purpose+created_at where
+  `deleted_at` is null). `POST /media` in `routers/social.py` is unchanged.
+- **Smoke:** `backend/tests/test_dual_media_smoke.py` is sync (no
+  pytest-asyncio in this tree) and only touches a temp `MEDIA_ROOT`.

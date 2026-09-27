@@ -82,6 +82,11 @@ export default function NotificationsScreen() {
       setRows(current => current.map(item => item.id === row.id ? { ...item, read_at: new Date().toISOString() } : item));
       api.markNotificationRead(row.id).catch(() => void load(unreadOnly));
     }
+    const sessionId = row.metadata?.session_id;
+    if (row.type === "live_session" && typeof sessionId === "string") {
+      router.push({ pathname: "/live/[id]", params: { id: sessionId } });
+      return;
+    }
     const channelId = row.metadata?.channel_id;
     if (typeof channelId === "string") {
       router.push({ pathname: "/channel/[id]", params: { id: channelId } });

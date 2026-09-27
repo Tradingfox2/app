@@ -363,6 +363,10 @@ async def lifespan(app: FastAPI):
     await db.program_adoptions.create_index([("message_id", 1), ("user_id", 1)], unique=True)
     await db.live_sessions.create_index([("channel_id", 1), ("status", 1), ("starts_at", 1)])
     await db.live_rsvps.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.live_participants.create_index([("session_id", 1), ("user_id", 1)], unique=True)
+    await db.live_messages.create_index([("session_id", 1), ("created_at", 1)])
+    await db.insight_events.create_index([("session_id", 1), ("created_at", -1)])
+    await db.insight_events.create_index([("name", 1), ("created_at", -1)])
     await db.post_saves.create_index([("user_id", 1), ("post_id", 1)], unique=True)
     await db.post_saves.create_index([("user_id", 1), ("created_at", -1)])
     await db.comment_likes.create_index([("comment_id", 1), ("user_id", 1)], unique=True)
@@ -385,10 +389,23 @@ async def lifespan(app: FastAPI):
     await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
     await db.direct_messages.create_index([("recipient_id", 1), ("read_at", 1)])
     await db.media.create_index([("user_id", 1), ("created_at", -1)])
+    # Mirrors 004_support_and_dual_media.sql: unique object key, plus the two
+    # partial indexes that skip soft-deleted staff assets.
+    await db.admin_media.create_index("key", unique=True)
+    await db.admin_media.create_index(
+        [("uploader_staff_id", 1), ("created_at", -1)],
+        partialFilterExpression={"deleted_at": None},
+    )
+    await db.admin_media.create_index(
+        [("purpose", 1), ("created_at", -1)],
+        partialFilterExpression={"deleted_at": None},
+    )
     await db.reports.create_index([("status", 1), ("created_at", 1)])
     await db.reports.create_index([("reporter_id", 1), ("target_id", 1), ("status", 1)])
     await db.audit_log.create_index([("created_at", -1)])
     await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
+    # Product analytics: unique event id, and name+ts for the 24h / 7d rollup.
+    await analytics.ensure_indexes(db)
     await db.user_notes.create_index([("user_id", 1), ("created_at", -1)])
     # Read by _roles() on every permission resolve — the hot path for each
     # channel read and message write, so it must never be a collection scan.
@@ -943,6 +960,7 @@ async def progression(exercise_id: str, user: dict = Depends(current_user)):
 
 # --------------------------------------------------------------------------- #
 # Feature routers (import late: they import shared helpers from this module)  #
+import analytics  # noqa: E402
 from routers.labs import router as labs_router  # noqa: E402
 from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
@@ -950,6 +968,7 @@ from routers.program import router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
+from routers.analytics import router as analytics_router  # noqa: E402
 from routers.notifications import router as notifications_router  # noqa: E402
 from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
@@ -958,6 +977,7 @@ api.include_router(program_router)
 api.include_router(community_router)
 api.include_router(social_router)
 api.include_router(admin_router)
+api.include_router(analytics_router)
 api.include_router(labs_router)
 api.include_router(notifications_router)
 api.include_router(search_router)

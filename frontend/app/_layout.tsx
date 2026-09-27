@@ -33,7 +33,7 @@ export default function RootLayout() {
               {/*
                 Cold start uses the initial URL; warm start uses later url events.
                 Expo Router owns both. app/+native-intent.ts rewrites ironflow://
-                and ironflow:/// post and live links onto /post/[id] and /live/[id].
+                and ironflow:/// live links onto /live/[id] (and the same shape for posts).
               */}
               <Stack
                 screenOptions={{

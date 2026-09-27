@@ -1,10 +1,18 @@
 import { Platform, Share } from "react-native";
 import * as Linking from "expo-linking";
+import { track } from "@/src/analytics";
 
 /** Matches `expo.scheme` in app.json and Expo Router `app/post/[id].tsx`. */
 export const POST_SCHEME = "ironflow";
 
 export type ShareTarget = "x" | "facebook" | "whatsapp" | "linkedin";
+
+/** `channel` on `post_shared`. `system_share` is the taxonomy name for the OS sheet. */
+export type ShareChannel = "system_share" | "copy" | ShareTarget;
+
+function trackShared(postId: string, channel: ShareChannel): void {
+  track("post_shared", { post_id: postId, channel });
+}
 
 export type ShareSheetResult = "shared" | "dismissed" | "unavailable";
 
@@ -61,6 +69,7 @@ export async function sharePost(input: { id: string; title?: string; message?: s
     );
     // Web's Share.share resolves to undefined after navigator.share. Only iOS reports dismiss.
     if (result?.action === Share.dismissedAction) return "dismissed";
+    trackShared(input.id, "system_share");
     return "shared";
   } catch {
     return "unavailable";
@@ -69,7 +78,9 @@ export async function sharePost(input: { id: string; title?: string; message?: s
 
 /** Writes the post URL. Returns false when the platform has no clipboard. */
 export async function copyPostLink(id: string): Promise<boolean> {
-  return writeClipboard(buildPostUrl(id));
+  const copied = await writeClipboard(buildPostUrl(id));
+  if (copied) trackShared(id, "copy");
+  return copied;
 }
 
 async function writeClipboard(value: string): Promise<boolean> {
@@ -112,10 +123,12 @@ export async function openShareTarget(target: ShareTarget, id: string, message?:
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const opened = window.open(href, "_blank");
     if (opened) opened.opener = null;
+    if (opened !== null) trackShared(id, target);
     return opened !== null;
   }
   try {
     await Linking.openURL(href);
+    trackShared(id, target);
     return true;
   } catch {
     return false;
