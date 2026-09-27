@@ -337,6 +337,11 @@ def test_live_sessions_schedule_gather_and_notify(monkeypatch):
         await expect(403, community.schedule_live_session(cid, body, account("mem")))
         session = await community.schedule_live_session(cid, body, account("owner"))
         assert (await db.messages.find_one({"live_session_id": session["id"]}))["content"] == "Mobility flow"
+        fetched = await community.get_live_session(session["id"], account("mem"))
+        assert fetched["session"]["id"] == session["id"]
+        assert fetched["session"]["title"] == "Mobility flow" and fetched["session"]["status"] == "scheduled"
+        assert fetched["joined"] is False
+        await expect(404, community.get_live_session("missing", account("mem")))
 
         going = await community.rsvp_live_session(session["id"], account("mem"))
         assert going["rsvped"] and going["rsvp_count"] == 1

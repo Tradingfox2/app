@@ -15,13 +15,21 @@ const POLL_MS = 3000;
 const RECONCILE_MS = 30000;
 
 /**
- * In-app live room. `ironflow://live/{id}` and `frontend://live/{id}` both land
- * here (the path is `/live/[id]`). Presence and chat are the persisted join
- * list and `live_messages`, pushed over the Centrifugo channel `live:{id}`.
+ * The only live screen. `app/+native-intent.ts` rewrites `ironflow://live/{id}`
+ * onto `/live/[id]`, and this room is what that route renders: persisted join,
+ * presence, and session chat on Centrifugo `live:{id}`.
+ *
+ * A thin GET landing (status, RSVP, external link only) is superseded.
  * The app does not stream video; an optional external join_url stays a link.
  */
+function sessionId(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw || undefined;
+}
+
 export default function LiveRoomScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const id = sessionId(params.id);
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useI18n();
