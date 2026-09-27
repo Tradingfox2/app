@@ -202,3 +202,20 @@ through the shared module.
 - **Test harness:** new router params that take `Query(...)` defaults must go
   *after* `user` and use `Annotated[..., Query()] = default`, because tests
   call handlers positionally.
+
+## Added 2026-09-27 (post share-out)
+
+- **Post URL owner:** `frontend/src/share.ts`. `buildPostUrl` / `sharePost` /
+  `copyPostLink` / `openShareTarget`. Scheme is `ironflow` (`app.json`).
+  HTTPS only when `EXPO_PUBLIC_WEB_ORIGIN` or `EXPO_PUBLIC_WEB_URL` is an
+  http(s) origin; otherwise `ironflow://post/{id}`. Documented in
+  `docs/post-deep-links.md`.
+- **Share UI:** `src/components/social/share-bar.tsx`, used by `PostCard`
+  (feed overflow Share and the share icon; always open on `app/post/[id].tsx`).
+  Targets are real composers (X, Facebook, WhatsApp, LinkedIn) via
+  `Linking.openURL` / `window.open`. No success toast.
+- **Own profile wall** (`app/user/[id].tsx`) reuses `Composer` and
+  `POST /posts`. Follow stays on `api.follow` / `social_graph.py`.
+- **Not built:** universal links / Android app links (need a real host),
+  native clipboard module (`expo-clipboard`). Web copy uses the Clipboard API.
+  Share does not call a new backend route.

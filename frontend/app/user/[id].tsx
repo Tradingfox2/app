@@ -8,7 +8,7 @@ import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Avatar } from "@/src/components/social/avatar";
-import { PostCard, useFeed } from "@/src/components/social/feed";
+import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
 import { ReportSheet, type ReportTarget } from "@/src/components/social/report-sheet";
 
 export default function PublicProfile() {
@@ -94,6 +94,7 @@ export default function PublicProfile() {
         </View> : null}
         {!own && !profile.can_message ? <Text style={styles.hint}>{t("Messaging unlocks when you follow each other, share a community, or have a coaching relationship.")}</Text> : null}
         {canSeePosts ? <View style={styles.wall} testID="profile-posts">
+          {own ? <Composer onPublished={created => { posts.prepend(created); setProfile(current => current ? { ...current, posts: current.posts + 1 } : current); }} /> : null}
           {!posts.loading && posts.posts.length === 0 ? <Text style={styles.hint}>{t("No posts yet.")}</Text> : null}
           {posts.posts.map(post => <PostCard key={post.id} post={post} onChange={next => posts.patch(post.id, () => next)} onRemoved={() => posts.remove(post.id)} onReposted={() => undefined} />)}
           {posts.hasMore ? <Pressable accessibilityRole="button" onPress={() => void posts.loadMore()} style={styles.icon}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Pressable> : null}
