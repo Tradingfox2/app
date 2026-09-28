@@ -39,6 +39,7 @@ export default function Profile() {
   const [ref, setRef] = useState<any>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [savingLanguage, setSavingLanguage] = useState(false);
+  const [languageError, setLanguageError] = useState("");
   const [planError, setPlanError] = useState("");
   const signingOutRef = useRef(false);
   const rankingBusy = useRef(false);
@@ -121,9 +122,12 @@ export default function Profile() {
   const selectLanguage = async (locale: SupportedLocale) => {
     if (savingLanguage || locale === user?.preferred_locale) return;
     setSavingLanguage(true);
+    setLanguageError("");
     try {
       await api.updateProfile(locale);
       await refresh();
+    } catch (cause) {
+      setLanguageError(cause instanceof Error ? cause.message : t("Could not change the language."));
     } finally {
       setSavingLanguage(false);
     }
@@ -265,6 +269,7 @@ export default function Profile() {
             })}
           </View>
           <Text style={styles.languageHint}>{t("Changes the entire app and new AI-generated content.")}</Text>
+          {languageError ? <Text accessibilityRole="alert" testID="language-error" style={styles.languageError}>{languageError}</Text> : null}
         </View>
 
         <View style={styles.section}>
@@ -417,6 +422,7 @@ const styles = StyleSheet.create({
   languageText: { color: colors.textMuted, fontSize: 10, fontWeight: "800" },
   languageTextActive: { color: colors.brandOn },
   languageHint: { color: colors.textDim, fontSize: 11, marginTop: spacing.sm },
+  languageError: { color: colors.error, fontSize: 12, marginTop: spacing.sm },
   planCard: {
     ...card,
     borderRadius: radius.md,

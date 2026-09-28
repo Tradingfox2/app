@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { api, PartnerDashboard } from "@/src/api";
 import { colors, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { joinPolicyPhrase } from "@/src/community-copy";
 
 export default function PartnerDashboardScreen() {
   const { t, formatNumber, localeTag } = useI18n(); const router = useRouter();
@@ -18,7 +19,7 @@ export default function PartnerDashboardScreen() {
     {data ? <ScrollView contentContainerStyle={styles.scroll}><Text style={styles.eyebrow}>{t("NETWORK PULSE")}</Text><Text style={styles.title}>{t("Your coaching business")}</Text>
       <View style={styles.metrics}><Metric value={formatNumber(data.active_members)} label={t("ACTIVE MEMBERS")} /><Metric value={formatNumber(data.pending_members)} label={t("PENDING")} /><Metric value={formatNumber(data.community_count)} label={t("COMMUNITIES")} /></View>
       <View style={styles.moneyBand}><View><Text style={styles.moneyLabel}>{t("AVAILABLE BALANCE")}</Text><Text style={styles.money}>{data.balances.length ? data.balances.map(row => new Intl.NumberFormat(localeTag, { style: "currency", currency: row._id }).format(row.net_cents / 100)).join(" · ") : "—"}</Text></View><View style={styles.payout}><Ionicons name="wallet-outline" size={17} color={colors.warning} /><Text style={styles.payoutText}>{t(data.payout_status.toUpperCase())}</Text></View></View>
-      <Text style={styles.section}>{t("YOUR COMMUNITIES")}</Text>{data.communities.map(item => <Pressable key={item.id} onPress={() => router.push({ pathname: "/community/[id]", params: { id: item.id } })} style={styles.row}><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{formatNumber(item.member_count)} {t("members")} · {t(item.join_policy.toUpperCase())}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Pressable>)}
+      <Text style={styles.section}>{t("YOUR COMMUNITIES")}</Text>{data.communities.map(item => <Pressable key={item.id} onPress={() => router.push({ pathname: "/community/[id]", params: { id: item.id } })} style={styles.row}><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{formatNumber(item.member_count)} {t("members")} · {t(joinPolicyPhrase(item.join_policy))}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Pressable>)}
     </ScrollView> : null}
   </SafeAreaView>;
 }

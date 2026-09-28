@@ -233,6 +233,8 @@ test("moderators time members out, unban and clear the report queue", async ({ p
   });
   await page.goto("/community/c-1/manage");
   await expect(page.getByTestId("insights")).toContainText("12");
+  await expect(page.getByTestId("insights")).toContainText("40");
+  await expect(page.getByTestId("insights-chart-label")).toContainText("5 messages");
   await page.getByTestId("remove-reported-rep-1").click();
   await expect.poll(() => calls).toContainEqual(["PATCH", "/communities/c-1/reports/rep-1", { resolution: "content_removed", note: "" }]);
 
@@ -256,7 +258,74 @@ test("editing the profile sends the name and bio", async ({ page }) => {
   await page.getByTestId("profile-name").fill("Me Renamed");
   await page.getByTestId("profile-bio-input").fill("Powerlifter");
   await page.getByTestId("profile-save").click();
-  await expect.poll(() => patches).toEqual([{ full_name: "Me Renamed", bio: "Powerlifter" }]);
+  await expect.poll(() => patches).toEqual([{ full_name: "Me Renamed", bio: "Powerlifter", about: "", sports: [] }]);
+});
+
+test("profile save failures appear next to the header button", async ({ page }) => {
+  await fixtures(page, async (route, path, method) => {
+    if (path === "/auth/me" && method === "PATCH") {
+      await route.fulfill({ status: 503, json: { detail: "Fixture profile failed" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/profile-edit");
+  await page.getByTestId("profile-name").fill("Me Renamed");
+  const save = page.getByTestId("profile-save");
+  await save.click();
+  const error = page.getByTestId("profile-save-error");
+  await expect(error).toBeVisible();
+  await expect(error).toHaveText("Fixture profile failed");
+  const saveBox = await save.boundingBox();
+  const errorBox = await error.boundingBox();
+  expect(saveBox && errorBox && errorBox.y >= saveBox.y && errorBox.y - saveBox.y < 120).toBe(true);
+});
+
+test("a language change failure is shown instead of disappearing", async ({ page }) => {
+  await fixtures(page, async (route, path, method) => {
+    if (path === "/auth/me" && method === "PATCH") {
+      await route.fulfill({ status: 503, json: { detail: "Fixture language failed" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/profile");
+  await page.getByTestId("language-fr").click();
+  await expect(page.getByTestId("language-error")).toHaveText("Fixture language failed");
+});
+
+test("a blank comment cannot be saved quietly", async ({ page }) => {
+  const edits: unknown[] = [];
+  let releaseEdit: (() => void) | undefined;
+  const held = new Promise<void>(resolve => { releaseEdit = resolve; });
+  await fixtures(page, async (route, path, method) => {
+    if (path === "/feed") { await route.fulfill({ json: [{ ...basePost, comment_count: 1 }] }); return true; }
+    if (path === "/posts/p-1/comments" && method === "GET") {
+      await route.fulfill({ json: [{ id: "c-1", post_id: "p-1", author_id: me.id, author: me, content: "Nice set", parent_id: null, like_count: 0, reply_count: 0, liked_by_me: false, can_edit: true, mentions: [], created_at: "2026-09-15T08:00:00Z" }] });
+      return true;
+    }
+    if (path === "/comments/c-1" && method === "PATCH") {
+      edits.push(route.request().postDataJSON());
+      await held;
+      await route.fulfill({ json: { id: "c-1", post_id: "p-1", author_id: me.id, author: me, content: "Nice set — updated", parent_id: null, like_count: 0, reply_count: 0, liked_by_me: false, can_edit: true, mentions: [], edited_at: "2026-09-15T08:05:00Z", created_at: "2026-09-15T08:00:00Z" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community");
+  await page.getByRole("button", { name: "Comments", exact: true }).click();
+  await page.getByTestId("comment-edit-c-1").click();
+  await page.getByTestId("comment-edit-input").fill("   ");
+  const save = page.getByTestId("comment-edit-save");
+  await expect(save).toBeDisabled();
+  await expect(page.getByTestId("comment-edit-error")).toHaveText("Write something before saving.");
+  expect(edits).toEqual([]);
+  await page.getByTestId("comment-edit-input").fill("Nice set — updated");
+  await expect(page.getByTestId("comment-edit-error")).toHaveCount(0);
+  await save.click();
+  await expect(save).toBeDisabled();
+  releaseEdit?.();
+  await expect.poll(() => edits).toEqual([{ content: "Nice set — updated" }]);
 });
 
 test("a notification type can be switched off", async ({ page }) => {

@@ -10,6 +10,7 @@ import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
 import { Avatar } from "@/src/components/social/avatar";
+import { LISTED_PUBLICLY_LABEL, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
 
 const DISCOVER_PAGE = 50;
 
@@ -124,7 +125,7 @@ export default function CommunityScreen() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {(["feed", "discover", "mine", "coaches", "rankings"] as Tab[]).map((item) => (
-            <Pressable key={item} testID={`community-tab-${item}`} style={[styles.tab, tab === item && styles.tabActive]} onPress={() => setTab(item)}>
+            <Pressable key={item} accessibilityRole="tab" {...selectedControl(tab === item)} accessibilityLabel={t(item.toUpperCase())} testID={`community-tab-${item}`} style={[styles.tab, tab === item && styles.tabActive]} onPress={() => setTab(item)}>
               <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{t(item.toUpperCase())}</Text>
             </Pressable>
           ))}
@@ -141,7 +142,7 @@ export default function CommunityScreen() {
             </ScrollView> : null}
             <View style={styles.scopeRow}>
               {(["all", "following", "mine"] as const).map(scope => (
-                <Pressable key={scope} accessibilityRole="button" accessibilityState={{ selected: feed.scope === scope }} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
+                <Pressable key={scope} accessibilityRole="button" {...selectedControl(feed.scope === scope)} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
                   <Text style={[styles.scopeText, feed.scope === scope && styles.scopeTextActive]}>{t(scope === "all" ? "EVERYONE" : scope === "following" ? "FOLLOWING" : "MY POSTS")}</Text>
                 </Pressable>
               ))}
@@ -171,13 +172,12 @@ export default function CommunityScreen() {
               <Text style={styles.count}>{formatNumber((tab === "discover" ? communities : mine).length)}</Text>
             </View>
             {tab === "discover" ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.sm }} testID="category-filter">
-              {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Pressable key={item ?? "all"} accessibilityRole="button" testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
+              {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Pressable key={item ?? "all"} accessibilityRole="button" {...selectedControl(category === item)} testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
                 <Text style={[styles.scopeText, category === item && styles.scopeTextActive]}>{t(item ? item.replace("_", " ").toUpperCase() : "ALL")}</Text>
               </Pressable>)}
             </ScrollView> : null}
-            {(tab === "discover" ? communities : mine).map((community, index) => (
+            {(tab === "discover" ? communities : mine).map((community) => (
               <Pressable key={community.id} testID={`community-${community.id}`} style={styles.communityRow} onPress={() => openCommunity(community)}>
-                <View style={styles.rankMark}><Text style={styles.rankMarkText}>{String(index + 1).padStart(2, "0")}</Text></View>
                 <View style={styles.communityCopy}>
                   <View style={styles.nameLine}>
                     <Text numberOfLines={1} style={styles.communityName}>{community.name}</Text>
@@ -187,7 +187,8 @@ export default function CommunityScreen() {
                   <View style={styles.metaLine}>
                     <Text style={styles.meta}>{formatNumber(community.member_count)} {t("members")}</Text>
                     <Text style={styles.dot}>•</Text>
-                    <Text style={styles.meta}>{community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) : community.join_policy === "approval" ? t("APPROVAL") : t("OPEN")}</Text>
+                    <Text style={styles.meta}>{community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) : t(joinPolicyPhrase(community.join_policy))}</Text>
+                    {community.is_public ? <><Text style={styles.dot}>•</Text><Text style={styles.meta}>{t(LISTED_PUBLICLY_LABEL)}</Text></> : null}
                     {community.membership ? <View style={styles.memberBadge}><Text style={styles.memberBadgeText}>{t(community.membership.status.toUpperCase())}</Text></View> : null}
                   </View>
                 </View>
@@ -233,29 +234,38 @@ export default function CommunityScreen() {
               </Pressable>
             ))}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP COACHES")}</Text>
-            {(rankings?.coaches || []).map((row, index) => (
-              <Pressable key={row.coach?.id || index} accessibilityRole="button" onPress={() => row.coach && router.push({ pathname: "/user/[id]", params: { id: row.coach.id } })} style={styles.rankingRow}>
-                <Text style={styles.rankingNumber}>{index + 1}</Text><Text numberOfLines={1} style={styles.rankingName}>{row.coach?.full_name || t("Coach")}</Text><Text style={styles.rankingValue}>{formatNumber(row.member_count)}</Text>
-              </Pressable>
-            ))}
+            {(rankings?.coaches || []).map((row, index) => {
+              const personId = row.coach?.id;
+              return (
+                <Pressable key={personId || `coach-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !personId }} accessibilityLabel={personId ? row.coach?.full_name || t("Coach") : t("Coach profile unavailable")} disabled={!personId} testID={personId ? `ranking-coach-${personId}` : `ranking-coach-missing-${index}`} onPress={() => { if (personId) router.push({ pathname: "/user/[id]", params: { id: personId } }); }} style={[styles.rankingRow, !personId && styles.rankingDisabled]}>
+                  <Text style={styles.rankingNumber}>{index + 1}</Text><Text numberOfLines={1} style={styles.rankingName}>{row.coach?.full_name || t("Coach")}</Text><Text style={styles.rankingValue}>{formatNumber(row.member_count)}</Text>
+                </Pressable>
+              );
+            })}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP USERS")}</Text>
             <Text style={styles.rankingNote}>{t("Ranked by active days, not message volume.")}</Text>
-            {(rankings?.users || []).map((row, index) => (
-              <Pressable key={row.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: row.id } })} style={styles.rankingRow}>
-                <Text style={styles.rankingNumber}>{index + 1}</Text>
-                <Text numberOfLines={1} style={styles.rankingName}>{row.full_name || t("Member")}</Text>
-                <Text style={styles.rankingValue}>{t("{count} active days", { count: formatNumber(row.active_days) })}</Text>
-              </Pressable>
-            ))}
+            {(rankings?.users || []).map((row, index) => {
+              const personId = row.id;
+              return (
+                <Pressable key={personId || `user-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !personId }} accessibilityLabel={personId ? row.full_name || t("Member") : t("Member profile unavailable")} disabled={!personId} testID={personId ? `ranking-user-${personId}` : `ranking-user-missing-${index}`} onPress={() => { if (personId) router.push({ pathname: "/user/[id]", params: { id: personId } }); }} style={[styles.rankingRow, !personId && styles.rankingDisabled]}>
+                  <Text style={styles.rankingNumber}>{index + 1}</Text>
+                  <Text numberOfLines={1} style={styles.rankingName}>{row.full_name || t("Member")}</Text>
+                  <Text style={styles.rankingValue}>{t("{count} active days", { count: formatNumber(row.active_days) })}</Text>
+                </Pressable>
+              );
+            })}
             {!rankings?.users?.length ? <Text style={styles.rankingNote}>{t("No opted-in activity yet")}</Text> : null}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP CHANNELS")}</Text>
-            {(rankings?.channels || []).map((row, index) => (
-              <Pressable key={row.id} accessibilityRole="button" onPress={() => openCommunity({ id: row.community_id })} style={styles.rankingRow}>
-                <Text style={styles.rankingNumber}>{index + 1}</Text>
-                <View style={styles.communityCopy}><Text style={styles.communityName}># {row.name}</Text><Text style={styles.meta}>{row.community_name}</Text></View>
-                <Text style={styles.rankingValue}>{t("{count} contributors", { count: formatNumber(row.contributors) })}</Text>
-              </Pressable>
-            ))}
+            {(rankings?.channels || []).map((row, index) => {
+              const allowed = !!row.id && mine.some(community => community.id === row.community_id);
+              return (
+                <Pressable key={row.id || `channel-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !allowed }} accessibilityLabel={t("Open channel {name}", { name: row.name })} disabled={!allowed} testID={row.id ? `ranking-channel-${row.id}` : `ranking-channel-missing-${index}`} onPress={() => { if (allowed) router.push({ pathname: "/channel/[id]", params: { id: row.id } }); }} style={[styles.rankingRow, !allowed && styles.rankingDisabled]}>
+                  <Text style={styles.rankingNumber}>{index + 1}</Text>
+                  <View style={styles.communityCopy}><Text style={styles.communityName}># {row.name}</Text><Text style={styles.meta}>{row.community_name}</Text></View>
+                  <Text style={styles.rankingValue}>{t("{count} contributors", { count: formatNumber(row.contributors) })}</Text>
+                </Pressable>
+              );
+            })}
             {!rankings?.channels?.length ? <Text style={styles.rankingNote}>{t("No opted-in activity yet")}</Text> : null}
           </View>
         ) : null}
@@ -341,14 +351,13 @@ const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: sp
   sectionHead: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm }, sectionTitle: { ...type.section, flex: 1 },
   count: { color: colors.textDim, fontSize: 12, fontVariant: ["tabular-nums"] },
   communityRow: { minHeight: 112, flexDirection: "row", alignItems: "center", paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
-  rankMark: { width: 36, height: 56, alignItems: "center", justifyContent: "center", borderLeftWidth: 2, borderLeftColor: colors.brand, backgroundColor: colors.surface2 },
-  rankMarkText: { color: colors.brand, fontWeight: "900", fontVariant: ["tabular-nums"] }, communityCopy: { flex: 1, minWidth: 0 },
+  communityCopy: { flex: 1, minWidth: 0 },
   nameLine: { flexDirection: "row", alignItems: "center", gap: 6 }, communityName: { color: colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 },
   communityDescription: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 4 }, metaLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: spacing.sm },
   meta: { color: colors.textMuted, fontSize: 11, fontWeight: "700" }, dot: { color: colors.textDim }, memberBadge: { backgroundColor: colors.brandDim, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
   memberBadgeText: { color: colors.brand, fontSize: 9, fontWeight: "900" }, coachRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" }, avatarText: { color: colors.brand, fontWeight: "900" },
-  rankingNote: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: spacing.xl }, rankingRow: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  rankingNote: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: spacing.xl }, rankingRow: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, rankingDisabled: { opacity: 0.4 },
   rankingNumber: { color: colors.brand, width: 24, fontSize: 18, fontWeight: "900", fontVariant: ["tabular-nums"] }, rankingName: { color: colors.text, fontWeight: "700", flex: 1 }, rankingValue: { color: colors.textMuted, fontWeight: "800", fontVariant: ["tabular-nums"] },
   coachRankingTitle: { marginTop: spacing.xxl }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted, textAlign: "center" },
 });

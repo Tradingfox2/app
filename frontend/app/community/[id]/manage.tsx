@@ -9,7 +9,15 @@ import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { KICK_MEMBER, MANAGE_MESSAGES, MANAGE_ROLES, PERMISSION_LIST, can, toggle as togglePermission } from "@/src/permissions";
 import { Avatar } from "@/src/components/social/avatar";
+import { LISTED_PUBLICLY_LABEL, SAVE_LABEL, SAVED_LABEL, iconButtonA11y, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
 import * as Linking from "expo-linking";
+
+/** Calendar date from a `YYYY-MM-DD` insights bucket, without a UTC day shift. */
+function insightDay(isoDay: string, formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string) {
+  const [year, month, day] = isoDay.split("-").map(Number);
+  if (!year || !month || !day) return isoDay;
+  return formatDate(new Date(year, month - 1, day), { day: "numeric", month: "short" });
+}
 
 const METRIC_LABELS: Record<ChallengeMetric, string> = {
   workouts: "WORKOUTS", active_days: "ACTIVE DAYS", minutes: "MINUTES", tonnage: "VOLUME",
@@ -61,6 +69,10 @@ export default function ManageCommunity() {
   const busy = useRef(false);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [savedAction, setSavedAction] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState("");
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The caller's own powers, as the server resolved them per channel.
   const myMask = channels.reduce((mask, channel) => mask | (channel.permissions ?? 0), 0);
   const isOwner = community?.membership?.role === "owner";
@@ -90,24 +102,53 @@ export default function ManageCommunity() {
   useFocusEffect(useCallback(() => {
     generation.current += 1; busy.current = false; setReviewing(false);
     setMembers([]); setChannels([]); setRoles([]); setLoading(true); setError(""); setAudit(null);
-    setOpenRole(null); setOpenChannel(null); setOverwriteRole(null); setOpenMember(null); void load();
-    return () => { generation.current += 1; };
+    setOpenRole(null); setOpenChannel(null); setOverwriteRole(null); setOpenMember(null);
+    setPendingAction(null); setSavedAction(null); setSettingsError("");
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    void load();
+    return () => { generation.current += 1; if (savedTimer.current) clearTimeout(savedTimer.current); };
   }, [load]));
   // Every mutation is single-flight and re-reads from the server on success, so
   // a permission change can never be shown as applied when it was not.
   // `generic` keeps the fallback copy even when the server sent a reason, for the
   // actions that have always reported failure generically.
-  const run = async (action: () => Promise<void>, failure = "Something went wrong", generic = false) => {
+  const showSaved = (key: string) => {
+    setSavedAction(key);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    const stamp = generation.current;
+    savedTimer.current = setTimeout(() => {
+      if (stamp !== generation.current) return;
+      setSavedAction(current => current === key ? null : current);
+    }, 2200);
+  };
+  // `actionId` keeps the spinner on that control. `onError` places the failure
+  // beside it. A `false` result is a no-op, not a save.
+  const run = async (action: () => Promise<boolean | void>, failure = "Something went wrong", generic = false, options?: { actionId?: string; onError?: (message: string) => void }) => {
     if (busy.current) return;
     const current = generation.current;
-    busy.current = true; setReviewing(true); setError("");
-    try { await action(); }
-    catch (cause) {
+    busy.current = true;
+    if (options?.actionId) setPendingAction(options.actionId);
+    else setReviewing(true);
+    setError("");
+    options?.onError?.("");
+    let succeeded = false;
+    try {
+      const result = await action();
+      succeeded = result !== false;
+    } catch (cause) {
       if (current === generation.current) {
-        setError(!generic && cause instanceof Error ? cause.message : t(failure));
+        const message = !generic && cause instanceof Error ? cause.message : t(failure);
+        if (options?.onError) options.onError(message);
+        else setError(message);
+      }
+    } finally {
+      if (current === generation.current) {
+        busy.current = false;
+        setPendingAction(null);
+        setReviewing(false);
+        if (succeeded && options?.actionId) showSaved(options.actionId);
       }
     }
-    finally { if (current === generation.current) { busy.current = false; setReviewing(false); } }
   };
   const review = (memberId: string, status: "active" | "rejected" | "removed" | "banned") => run(async () => {
     if (!id) return;
@@ -143,7 +184,7 @@ export default function ManageCommunity() {
   const saveChannelDetails = (channel: CommunityChannel) => run(async () => {
     await api.updateChannel(channel.id, { description: channelEdit.description.trim(), category: channelEdit.category.trim() });
     await load();
-  }, "Could not update the channel");
+  }, "Could not update the channel", false, { actionId: `channel-${channel.id}` });
   const setSlowmode = (channel: CommunityChannel, seconds: number) => run(async () => {
     await api.updateChannel(channel.id, { slowmode_sec: seconds });
     setChannels(rows => rows.map(row => row.id === channel.id ? { ...row, slowmode_sec: seconds } : row));
@@ -162,10 +203,10 @@ export default function ManageCommunity() {
     const updated = await api.updateRole(role.id, { permissions: togglePermission(role.permissions, bit) });
     setRoles(rows => rows.map(row => row.id === updated.id ? { ...row, ...updated } : row));
   }, "Could not update role");
-  const saveRole = (role: CommunityRole, changes: Partial<Pick<CommunityRole, "name" | "color" | "rank">>) => run(async () => {
+  const saveRole = (role: CommunityRole, changes: Partial<Pick<CommunityRole, "name" | "color" | "rank">>, actionId?: string) => run(async () => {
     const updated = await api.updateRole(role.id, changes);
     setRoles(rows => rows.map(row => row.id === updated.id ? { ...row, ...updated } : row));
-  }, "Could not update role");
+  }, "Could not update role", false, actionId ? { actionId } : undefined);
   const cycleOverwrite = (channel: CommunityChannel, roleId: string, bit: number) => run(async () => {
     const existing = channel.overwrites ?? [];
     const current = existing.find(row => row.role_id === roleId) ?? { role_id: roleId, allow: 0, deny: 0 };
@@ -188,19 +229,27 @@ export default function ManageCommunity() {
     await api.assignMemberRoles(id, member.id, nextRoles); await load();
   }, "Could not update member roles");
 
-  const saveSettings = () => run(async () => {
-    if (!id || settings.name.trim().length < 3) return;
-    // Name and description always travel; everything else only when it changed,
-    // so an untouched form sends exactly what it always has.
-    const changed: Parameters<typeof api.updateCommunity>[1] = {};
-    if (community && extras.category !== (community.category ?? "general")) changed.category = extras.category;
-    if (community && extras.is_public !== community.is_public) changed.is_public = extras.is_public;
-    if (community && extras.join_policy !== community.join_policy) changed.join_policy = extras.join_policy;
-    if (community && extras.welcome_message !== (community.welcome_message ?? "")) changed.welcome_message = extras.welcome_message.trim();
-    if (community && JSON.stringify(extras.rules) !== JSON.stringify(community.rules ?? [])) changed.rules = extras.rules;
-    const updated = await api.updateCommunity(id, { name: settings.name.trim(), description: settings.description.trim(), ...changed });
-    setCommunity(updated);
-  }, "Could not update the community");
+  const saveSettings = () => {
+    if (!id || settings.name.trim().length < 3) {
+      setSettingsError(t("Could not update the community"));
+      return;
+    }
+    void run(async () => {
+      // Name and description always travel; everything else only when it changed,
+      // so an untouched form sends exactly what it always has. Success is still
+      // announced on the button when nothing else moved.
+      const changed: Parameters<typeof api.updateCommunity>[1] = {};
+      if (community && extras.category !== (community.category ?? "general")) changed.category = extras.category;
+      if (community && extras.is_public !== community.is_public) changed.is_public = extras.is_public;
+      if (community && extras.join_policy !== community.join_policy) changed.join_policy = extras.join_policy;
+      if (community && extras.welcome_message !== (community.welcome_message ?? "")) changed.welcome_message = extras.welcome_message.trim();
+      if (community && JSON.stringify(extras.rules) !== JSON.stringify(community.rules ?? [])) changed.rules = extras.rules;
+      const updated = await api.updateCommunity(id, { name: settings.name.trim(), description: settings.description.trim(), ...changed });
+      setCommunity(updated);
+      setSettings({ name: updated?.name ?? "", description: updated?.description ?? "" });
+      setExtras({ category: updated?.category ?? "general", is_public: updated?.is_public ?? true, join_policy: updated?.join_policy ?? "open", welcome_message: updated?.welcome_message ?? "", rules: updated?.rules ?? [] });
+    }, "Could not update the community", false, { actionId: "settings", onError: setSettingsError });
+  };
   const uploadImage = (field: "cover_media_id" | "avatar_media_id") => run(async () => {
     if (!id) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -213,10 +262,10 @@ export default function ManageCommunity() {
     setCommunity(await api.updateCommunity(id, { [field]: uploaded.id }));
   }, "Could not upload the image");
   const renameChannel = (channel: CommunityChannel) => run(async () => {
-    if (renameTo.trim().length < 2) return;
+    if (renameTo.trim().length < 2) return false;
     await api.updateChannel(channel.id, { name: renameTo.trim() });
     setRenaming(null); setRenameTo(""); await load();
-  }, "Could not rename the channel");
+  }, "Could not rename the channel", false, { actionId: `rename-${channel.id}` });
   const archiveChannel = (channel: CommunityChannel) => run(async () => {
     await api.archiveChannel(channel.id);
     if (openChannel === channel.id) setOpenChannel(null);
@@ -275,7 +324,28 @@ export default function ManageCommunity() {
     api.communityMembers(id, { q: value.trim(), status: "active" }).then(setMemberHits).catch(() => setMemberHits([]));
   };
   const banned = members.filter(member => member.status === "banned");
-  const disabled = reviewing || loading;
+  const disabled = reviewing || loading || pendingAction !== null;
+  const settingsBusy = pendingAction === "settings";
+  const settingsSaved = savedAction === "settings";
+  const settingsUnsaved = !!community && (
+    settings.name !== (community.name ?? "")
+    || settings.description !== (community.description ?? "")
+    || extras.category !== (community.category ?? "general")
+    || extras.is_public !== community.is_public
+    || extras.join_policy !== community.join_policy
+    || extras.welcome_message !== (community.welcome_message ?? "")
+    || JSON.stringify(extras.rules) !== JSON.stringify(community.rules ?? [])
+  );
+  const sparkDays = insights?.daily_messages ?? [];
+  const sparkTotal = sparkDays.reduce((sum, day) => sum + day.messages, 0);
+  const confirmMark = (actionId: string, hint: string, blocked: boolean, onPress: () => void, testID: string) => {
+    const pending = pendingAction === actionId;
+    const saved = savedAction === actionId;
+    const label = t(saved ? SAVED_LABEL : SAVE_LABEL);
+    return <Pressable {...iconButtonA11y(label, hint)} accessibilityState={{ disabled: blocked || pending, busy: pending }} testID={testID} disabled={blocked || pending} onPress={onPress} style={[styles.approve, (blocked || pending) && !pending && { opacity: 0.4 }]}>
+      {pending ? <ActivityIndicator color={colors.brandOn} size="small" /> : <Ionicons name={saved ? "checkmark-done" : "checkmark"} size={18} color={colors.brandOn} />}
+    </Pressable>;
+  };
   const triFor = (channel: CommunityChannel, roleId: string, bit: number): Tri => {
     const row = (channel.overwrites ?? []).find(entry => entry.role_id === roleId);
     if (!row) return "inherit";
@@ -290,39 +360,42 @@ export default function ManageCommunity() {
     {insights ? <>
       <Text style={styles.section}>{t("INSIGHTS")}</Text>
       <View style={styles.stats} testID="insights">
-        {([["members", insights.members], ["joined_7d", insights.joined_7d], ["messages_7d", insights.messages_7d], ["active_members_7d", insights.active_members_7d]] as [string, number][]).map(([key, value]) => <View key={key} style={styles.stat}>
+        {([["members", insights.members], ["joined_7d", insights.joined_7d], ["joined_30d", insights.joined_30d], ["messages_7d", insights.messages_7d], ["messages_30d", insights.messages_30d], ["active_members_7d", insights.active_members_7d]] as [string, number][]).map(([key, value]) => <View key={key} style={styles.stat}>
           <Text style={styles.statValue}>{formatNumber(value)}</Text>
-          <Text style={styles.meta}>{t({ members: "MEMBERS", joined_7d: "JOINED 7D", messages_7d: "MESSAGES 7D", active_members_7d: "ACTIVE 7D" }[key] ?? key)}</Text>
+          <Text style={styles.meta}>{t({ members: "MEMBERS", joined_7d: "JOINED 7D", joined_30d: "JOINED 30D", messages_7d: "MESSAGES 7D", messages_30d: "MESSAGES 30D", active_members_7d: "ACTIVE 7D" }[key] ?? key)}</Text>
         </View>)}
       </View>
       <Text style={styles.meta}>{t("{pct}% of members posted this week · {left} left in 30 days · {pending} pending").replace("{pct}", String(Math.round(insights.engagement_rate_7d * 100))).replace("{left}", String(insights.left_30d)).replace("{pending}", String(insights.pending))}</Text>
-      {insights.daily_messages?.length ? <View style={styles.sparkline} testID="insights-chart">{insights.daily_messages.map(day => {
-        const peak = Math.max(...insights.daily_messages.map(row => row.messages), 1);
-        return <View key={day.day} accessibilityLabel={`${day.day}: ${day.messages}`} style={[styles.bar, { height: Math.max(3, Math.round((day.messages / peak) * 44)) }]} />;
-      })}</View> : null}
+      {sparkDays.length ? <>
+        <Text style={styles.meta} testID="insights-chart-label">{t("{count} messages · {start} – {end}", { count: formatNumber(sparkTotal), start: insightDay(sparkDays[0].day, formatDate), end: insightDay(sparkDays[sparkDays.length - 1].day, formatDate) })}</Text>
+        <View style={styles.sparkline} testID="insights-chart" accessibilityLabel={t("{count} messages · {start} – {end}", { count: formatNumber(sparkTotal), start: insightDay(sparkDays[0].day, formatDate), end: insightDay(sparkDays[sparkDays.length - 1].day, formatDate) })}>{sparkDays.map(day => {
+          const peak = Math.max(...sparkDays.map(row => row.messages), 1);
+          return <View key={day.day} accessibilityLabel={t("{count} messages · {date}", { count: formatNumber(day.messages), date: insightDay(day.day, formatDate) })} style={[styles.bar, { height: Math.max(3, Math.round((day.messages / peak) * 44)) }]} />;
+        })}</View>
+      </> : null}
       {insights.top_channels?.length ? <Text style={styles.meta}>{t("Busiest")}: {insights.top_channels.map(row => `#${row.name} (${row.messages})`).join(" · ")}</Text> : null}
     </> : null}
 
     <Text style={styles.section}>{t("COMMUNITY SETTINGS")}</Text>
     <View style={styles.imagesRow}>
-      <Pressable accessibilityRole="button" testID="upload-avatar" disabled={disabled} onPress={() => void uploadImage("avatar_media_id")} style={styles.avatarBox}>
+      <Pressable {...iconButtonA11y(t("Community photo"), t("Upload a community photo"))} testID="upload-avatar" disabled={disabled} onPress={() => void uploadImage("avatar_media_id")} style={styles.avatarBox}>
         {community?.avatar_url ? <Image source={{ uri: mediaUrl(community.avatar_url) }} style={styles.fill} accessibilityIgnoresInvertColors /> : <Ionicons name="image-outline" size={22} color={colors.textDim} />}
       </Pressable>
-      <Pressable accessibilityRole="button" testID="upload-cover" disabled={disabled} onPress={() => void uploadImage("cover_media_id")} style={styles.coverBox}>
+      <Pressable {...iconButtonA11y(t("Cover image"), t("Upload a cover image"))} testID="upload-cover" disabled={disabled} onPress={() => void uploadImage("cover_media_id")} style={styles.coverBox}>
         {community?.cover_url ? <Image source={{ uri: mediaUrl(community.cover_url) }} style={styles.fill} accessibilityIgnoresInvertColors /> : <Text style={styles.meta}>{t("Tap to add a cover image")}</Text>}
       </Pressable>
     </View>
     <TextInput value={settings.name} onChangeText={value => setSettings(current => ({ ...current, name: value }))} maxLength={80} editable={!disabled} placeholder={t("Community name")} placeholderTextColor={colors.textDim} style={styles.input} testID="settings-name" />
     <TextInput value={settings.description} onChangeText={value => setSettings(current => ({ ...current, description: value }))} maxLength={1200} multiline editable={!disabled} placeholder={t("Who is this community for?")} placeholderTextColor={colors.textDim} style={[styles.input, styles.multiline]} testID="settings-description" />
     <Text style={styles.meta}>{t("Category")}</Text>
-    <View style={styles.chipRow}>{COMMUNITY_CATEGORIES.map(category => <Pressable key={category} accessibilityRole="button" testID={`settings-category-${category}`} onPress={() => setExtras(current => ({ ...current, category }))} style={[styles.chip, extras.category === category && styles.chipOn]}><Text style={styles.chipText}>{t(category.replace("_", " ").toUpperCase())}</Text></Pressable>)}</View>
+    <View style={styles.chipRow}>{COMMUNITY_CATEGORIES.map(category => <Pressable key={category} accessibilityRole="button" {...selectedControl(extras.category === category)} testID={`settings-category-${category}`} onPress={() => setExtras(current => ({ ...current, category }))} style={[styles.chip, extras.category === category && styles.chipOn]}><Text style={styles.chipText}>{t(category.replace("_", " ").toUpperCase())}</Text></Pressable>)}</View>
     <View style={styles.switchRow}>
-      <View style={{ flex: 1 }}><Text style={styles.name}>{t("Listed publicly")}</Text><Text style={styles.meta}>{t("Private communities are hidden from discovery and joined by invite only.")}</Text></View>
-      <Switch testID="settings-public" accessibilityLabel={t("Listed publicly")} value={extras.is_public} disabled={disabled} onValueChange={value => setExtras(current => ({ ...current, is_public: value }))} trackColor={{ true: colors.brand }} />
+      <View style={{ flex: 1 }}><Text style={styles.name}>{t(LISTED_PUBLICLY_LABEL)}</Text><Text style={styles.meta}>{t("Private communities are hidden from discovery and joined by invite only.")}</Text></View>
+      <Switch testID="settings-public" accessibilityLabel={t(LISTED_PUBLICLY_LABEL)} accessibilityHint={t("Show this community in search and rankings.")} value={extras.is_public} disabled={disabled} onValueChange={value => setExtras(current => ({ ...current, is_public: value }))} trackColor={{ true: colors.brand }} />
     </View>
     {community?.join_policy !== "paid" ? <>
       <Text style={styles.meta}>{t("Who can join")}</Text>
-      <View style={styles.chipRow}>{(["open", "approval"] as const).map(policy => <Pressable key={policy} accessibilityRole="button" testID={`settings-policy-${policy}`} onPress={() => setExtras(current => ({ ...current, join_policy: policy }))} style={[styles.chip, extras.join_policy === policy && styles.chipOn]}><Text style={styles.chipText}>{t(policy === "open" ? "ANYONE" : "APPROVAL")}</Text></Pressable>)}</View>
+      <View style={styles.chipRow}>{(["open", "approval"] as const).map(policy => <Pressable key={policy} accessibilityRole="button" {...selectedControl(extras.join_policy === policy)} testID={`settings-policy-${policy}`} onPress={() => setExtras(current => ({ ...current, join_policy: policy }))} style={[styles.chip, extras.join_policy === policy && styles.chipOn]}><Text style={styles.chipText}>{t(joinPolicyPhrase(policy))}</Text></Pressable>)}</View>
     </> : null}
     <Text style={styles.meta}>{t("Welcome message — shown once to each new member")}</Text>
     <TextInput value={extras.welcome_message} onChangeText={value => setExtras(current => ({ ...current, welcome_message: value }))} maxLength={1000} multiline editable={!disabled} placeholder={t("Welcome! Start by introducing yourself in #general...")} placeholderTextColor={colors.textDim} style={[styles.input, styles.multiline]} testID="settings-welcome" />
@@ -331,10 +404,13 @@ export default function ManageCommunity() {
       <Text style={styles.active}>{index + 1}</Text><Text style={[styles.checkLabel]}>{rule}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={t("Remove rule")} testID={`remove-rule-${index}`} onPress={() => setExtras(current => ({ ...current, rules: current.rules.filter((_, i) => i !== index) }))} style={styles.icon}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable>
     </View>)}
-    {extras.rules.length < 15 ? <View style={styles.addRow}><TextInput value={newRule} onChangeText={setNewRule} maxLength={300} placeholder={t("Add a rule")} placeholderTextColor={colors.textDim} style={styles.input} testID="new-rule" /><Pressable accessibilityRole="button" testID="add-rule" disabled={!newRule.trim()} onPress={() => { setExtras(current => ({ ...current, rules: [...current.rules, newRule.trim()] })); setNewRule(""); }} style={[styles.approve, !newRule.trim() && { opacity: 0.4 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View> : null}
-    <Pressable accessibilityRole="button" testID="save-settings" disabled={disabled || settings.name.trim().length < 3} onPress={() => void saveSettings()} style={[styles.primary, (disabled || settings.name.trim().length < 3) && { opacity: 0.4 }]}>
-      <Text style={styles.primaryText}>{t("SAVE CHANGES")}</Text>
+    {extras.rules.length < 15 ? <View style={styles.addRow}><TextInput value={newRule} onChangeText={setNewRule} maxLength={300} placeholder={t("Add a rule")} placeholderTextColor={colors.textDim} style={styles.input} testID="new-rule" /><Pressable {...iconButtonA11y(t("Add rule"), t("Not saved until you save."))} testID="add-rule" disabled={!newRule.trim() || disabled} onPress={() => { setExtras(current => ({ ...current, rules: [...current.rules, newRule.trim()] })); setNewRule(""); }} style={[styles.approve, (!newRule.trim() || disabled) && { opacity: 0.4 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View> : null}
+    {community && JSON.stringify(extras.rules) !== JSON.stringify(community.rules ?? []) ? <Text style={styles.meta} testID="rules-unsaved">{t("Not saved until you save.")}</Text> : null}
+    {settingsUnsaved ? <Text style={styles.meta} testID="settings-unsaved">{t("Not saved until you save.")}</Text> : null}
+    <Pressable accessibilityRole="button" accessibilityLabel={t(settingsSaved ? SAVED_LABEL : SAVE_LABEL)} accessibilityState={{ disabled: disabled || settings.name.trim().length < 3, busy: settingsBusy }} testID="save-settings" disabled={disabled || settings.name.trim().length < 3} onPress={saveSettings} style={[styles.primary, ((disabled && !settingsBusy) || settings.name.trim().length < 3) && { opacity: 0.4 }]}>
+      {settingsBusy ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.primaryText}>{t(settingsSaved ? SAVED_LABEL : SAVE_LABEL)}</Text>}
     </Pressable>
+    {settingsError ? <Text accessibilityRole="alert" testID="save-settings-error" style={styles.error}>{settingsError}</Text> : null}
 
     {can(myMask, MANAGE_MESSAGES) ? <>
       <Text style={styles.section}>{t("MODERATION QUEUE")}</Text>
@@ -378,7 +454,7 @@ export default function ManageCommunity() {
           <View style={styles.addRow}>
             <TextInput value={roleEdit.name} onChangeText={name => setRoleEdit(current => ({ ...current, name }))} maxLength={32} style={styles.input} testID={`role-name-${role.id}`} />
             <TextInput value={roleEdit.rank} onChangeText={rank => setRoleEdit(current => ({ ...current, rank: rank.replace(/[^0-9]/g, "") }))} maxLength={3} keyboardType="number-pad" style={[styles.input, { flex: 0, width: 64 }]} testID={`role-rank-${role.id}`} />
-            <Pressable accessibilityRole="button" testID={`role-save-${role.id}`} disabled={disabled || roleEdit.name.trim().length < 2} onPress={() => void saveRole(role, { name: roleEdit.name.trim(), rank: Math.max(1, Number(roleEdit.rank) || role.rank) })} style={styles.approve}><Ionicons name="checkmark" size={18} color={colors.brandOn} /></Pressable>
+            {confirmMark(`role-${role.id}`, t("Save this role"), disabled || roleEdit.name.trim().length < 2, () => void saveRole(role, { name: roleEdit.name.trim(), rank: Math.max(1, Number(roleEdit.rank) || role.rank) }, `role-${role.id}`), `role-save-${role.id}`)}
           </View>
           <View style={styles.chipRow}>{ROLE_COLORS.map(color => <Pressable key={color} accessibilityRole="button" accessibilityLabel={color} testID={`role-color-${role.id}-${color}`} onPress={() => void saveRole(role, { color })} style={[styles.colorDot, { backgroundColor: color }, role.color === color && styles.colorOn]} />)}</View>
         </> : null}
@@ -409,17 +485,15 @@ export default function ManageCommunity() {
       {openChannel === channel.id ? <View style={styles.panel} testID={`channel-panel-${channel.id}`}>
         <View style={styles.addRow}>
           <TextInput value={renaming === channel.id ? renameTo : ""} onChangeText={value => { setRenaming(channel.id); setRenameTo(value); }} maxLength={50} editable={!disabled} placeholder={t("Rename channel")} placeholderTextColor={colors.textDim} style={styles.input} testID={`rename-input-${channel.id}`} />
-          <Pressable accessibilityRole="button" testID={`rename-${channel.id}`} disabled={disabled || renaming !== channel.id || renameTo.trim().length < 2} onPress={() => void renameChannel(channel)} style={[styles.approve, (disabled || renaming !== channel.id || renameTo.trim().length < 2) && { opacity: 0.4 }]}>
-            <Ionicons name="checkmark" size={18} color={colors.brandOn} />
-          </Pressable>
+          {confirmMark(`rename-${channel.id}`, t("Save the channel name"), disabled || renaming !== channel.id || renameTo.trim().length < 2, () => void renameChannel(channel), `rename-${channel.id}`)}
         </View>
         <TextInput value={channelEdit.description} onChangeText={description => setChannelEdit(current => ({ ...current, description }))} maxLength={300} placeholder={t("Channel topic")} placeholderTextColor={colors.textDim} style={[styles.input, { marginTop: spacing.sm }]} testID={`channel-topic-${channel.id}`} />
         <View style={styles.addRow}>
           <TextInput value={channelEdit.category} onChangeText={category => setChannelEdit(current => ({ ...current, category }))} maxLength={32} placeholder={t("Category heading (e.g. Training)")} placeholderTextColor={colors.textDim} style={styles.input} testID={`channel-category-${channel.id}`} />
-          <Pressable accessibilityRole="button" testID={`channel-save-${channel.id}`} disabled={disabled} onPress={() => void saveChannelDetails(channel)} style={styles.approve}><Ionicons name="checkmark" size={18} color={colors.brandOn} /></Pressable>
+          {confirmMark(`channel-${channel.id}`, t("Save the channel topic"), disabled, () => void saveChannelDetails(channel), `channel-save-${channel.id}`)}
         </View>
         <Text style={styles.meta}>{t("Slow mode")}</Text>
-        <View style={styles.chipRow}>{SLOWMODES.map(seconds => <Pressable key={seconds} accessibilityRole="button" testID={`slowmode-${channel.id}-${seconds}`} disabled={disabled} onPress={() => void setSlowmode(channel, seconds)} style={[styles.chip, (channel.slowmode_sec ?? 0) === seconds && styles.chipOn]}><Text style={styles.chipText}>{seconds === 0 ? t("OFF") : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}</Text></Pressable>)}</View>
+        <View style={styles.chipRow}>{SLOWMODES.map(seconds => <Pressable key={seconds} accessibilityRole="button" {...selectedControl((channel.slowmode_sec ?? 0) === seconds)} testID={`slowmode-${channel.id}-${seconds}`} disabled={disabled} onPress={() => void setSlowmode(channel, seconds)} style={[styles.chip, (channel.slowmode_sec ?? 0) === seconds && styles.chipOn]}><Text style={styles.chipText}>{seconds === 0 ? t("OFF") : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}</Text></Pressable>)}</View>
         {channel.is_default
           ? <Text style={styles.meta}>{t("The default channel cannot be archived.")}</Text>
           : <Pressable accessibilityRole="button" testID={`archive-channel-${channel.id}`} disabled={disabled} onPress={() => void archiveChannel(channel)} style={styles.danger}>
