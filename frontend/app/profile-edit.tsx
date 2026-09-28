@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { api, mediaUrl } from "@/src/api";
+import { api, mediaUrl, type User } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { Avatar } from "@/src/components/social/avatar";
 import { useI18n } from "@/src/i18n";
+import { profileTextPatch, type ProfileText } from "@/src/profile-patch";
 import { colors, radius, spacing } from "@/src/theme";
 import { SAVE_LABEL } from "@/src/community-copy";
 
@@ -27,6 +28,53 @@ export default function EditProfileScreen() {
   const [removeCover, setRemoveCover] = useState(false);
   const [busy, setBusy] = useState<"upload" | "cover" | "save" | null>(null);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
+  const baseline = useRef<ProfileText | null>(null);
+  const seeded = useRef(false);
+  const userRef = useRef(user);
+  const tRef = useRef(t);
+  userRef.current = user;
+  tRef.current = t;
+
+  // The inputs are useState, so they freeze whatever `user` was on the first
+  // paint — often null, while /auth/me is still in flight. Saving that blank
+  // form sends about:"" and sports:[] and the server stores the wipe.
+  useEffect(() => {
+    if (seeded.current) return;
+    let cancel = false;
+    const seed = (source: User) => {
+      const next: ProfileText = {
+        full_name: source.full_name ?? "",
+        bio: source.bio ?? "",
+        about: source.about ?? "",
+        sports: source.sports ?? [],
+      };
+      setName(next.full_name);
+      setBio(next.bio);
+      setAbout(next.about);
+      setSports(next.sports);
+      setAvatar({ id: null, url: source.avatar_url ?? null });
+      setCover({ id: null, url: source.cover_url ?? null });
+      setRemoveAvatar(false);
+      setRemoveCover(false);
+      baseline.current = next;
+      seeded.current = true;
+      setReady(true);
+    };
+    (async () => {
+      try {
+        const fresh = await api.me();
+        if (cancel) return;
+        seed(fresh);
+      } catch (cause) {
+        if (cancel) return;
+        const cached = userRef.current;
+        if (cached) seed(cached);
+        else setError(cause instanceof Error && cause.message ? cause.message : tRef.current("Could not load your profile."));
+      }
+    })();
+    return () => { cancel = true; };
+  }, []);
 
   const pickImage = async (slot: "avatar" | "cover") => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -56,14 +104,15 @@ export default function EditProfileScreen() {
   };
 
   const save = async () => {
-    if (busy || name.trim().length < 2) return;
+    const loaded = baseline.current;
+    if (busy || !loaded || name.trim().length < 2) return;
     setBusy("save"); setError("");
     try {
+      // Photos stay out of the body unless this visit uploaded or removed one.
+      // Text fields travel only when they differ from the loaded account, so a
+      // blank first paint cannot clear about, sports, or bio.
       await api.updateProfileDetails({
-        full_name: name.trim(),
-        bio: bio.trim(),
-        about: about.trim(),
-        sports,
+        ...profileTextPatch(loaded, { full_name: name, bio, about, sports }),
         ...(avatar.id ? { avatar_media_id: avatar.id } : {}),
         ...(removeAvatar ? { remove_avatar: true } : {}),
         ...(cover.id ? { cover_media_id: cover.id } : {}),
@@ -81,12 +130,13 @@ export default function EditProfileScreen() {
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <Text style={styles.title}>{t("EDIT PROFILE")}</Text>
       <View style={{ flex: 1 }} />
-      <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: !!busy || name.trim().length < 2, busy: busy === "save" }} testID="profile-save" disabled={!!busy || name.trim().length < 2} onPress={() => void save()} style={[styles.save, (!!busy || name.trim().length < 2) && styles.disabled]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: !ready || !!busy || name.trim().length < 2, busy: busy === "save" }} testID="profile-save" disabled={!ready || !!busy || name.trim().length < 2} onPress={() => void save()} style={[styles.save, (!ready || !!busy || name.trim().length < 2) && styles.disabled]}>
         {busy === "save" ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.saveText}>{t(SAVE_LABEL)}</Text>}
       </Pressable>
     </View>
     {error ? <Text accessibilityRole="alert" testID="profile-save-error" style={styles.headerError}>{error}</Text> : null}
-    <ScrollView contentContainerStyle={styles.body}>
+    {!ready && !error ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.lg }} /> : null}
+    {ready ? <ScrollView contentContainerStyle={styles.body}>
       <Pressable accessibilityRole="button" testID="profile-cover" disabled={!!busy} onPress={() => void pickImage("cover")} style={styles.cover}>
         {cover.url && !removeCover ? <Image source={{ uri: mediaUrl(cover.url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : <Text style={styles.secondaryText}>{t("CHANGE COVER")}</Text>}
         {busy === "cover" ? <ActivityIndicator color={colors.brand} /> : null}
@@ -117,7 +167,7 @@ export default function EditProfileScreen() {
       <Text style={styles.label}>{t("ABOUT")}</Text>
       <TextInput value={about} onChangeText={setAbout} maxLength={500} multiline placeholder={t("Tell people how you train.")} placeholderTextColor={colors.textDim} style={[styles.input, styles.bio]} testID="profile-about-input" />
       <Text style={styles.counter}>{about.length}/500</Text>
-    </ScrollView>
+    </ScrollView> : null}
   </SafeAreaView>;
 }
 

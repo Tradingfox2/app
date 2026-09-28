@@ -245,6 +245,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     "Return to the previous screen": "Revenir à l’écran précédent",
     "Coach profile unavailable": "Profil du coach indisponible",
     "Member profile unavailable": "Profil du membre indisponible",
+    "Unsaved changes will be lost": "Les modifications non enregistrées seront perdues",
+    Stay: "Rester",
+    Leave: "Quitter",
+    "Could not load your profile.": "Impossible de charger votre profil.",
   },
   de: {
     "Open join": "Offener Beitritt",
@@ -269,6 +273,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     "Return to the previous screen": "Zum vorherigen Bildschirm zurück",
     "Coach profile unavailable": "Coach-Profil nicht verfügbar",
     "Member profile unavailable": "Mitgliederprofil nicht verfügbar",
+    "Unsaved changes will be lost": "Nicht gespeicherte Änderungen gehen verloren",
+    Stay: "Bleiben",
+    Leave: "Verlassen",
+    "Could not load your profile.": "Dein Profil konnte nicht geladen werden.",
   },
   es: {
     "Open join": "Acceso libre",
@@ -293,6 +301,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     "Return to the previous screen": "Volver a la pantalla anterior",
     "Coach profile unavailable": "Perfil del entrenador no disponible",
     "Member profile unavailable": "Perfil del miembro no disponible",
+    "Unsaved changes will be lost": "Se perderán los cambios sin guardar",
+    Stay: "Quedarme",
+    Leave: "Salir",
+    "Could not load your profile.": "No se pudo cargar tu perfil.",
   },
   it: {
     "Open join": "Accesso libero",
@@ -317,6 +329,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     "Return to the previous screen": "Torna alla schermata precedente",
     "Coach profile unavailable": "Profilo coach non disponibile",
     "Member profile unavailable": "Profilo membro non disponibile",
+    "Unsaved changes will be lost": "Le modifiche non salvate andranno perse",
+    Stay: "Resta",
+    Leave: "Esci",
+    "Could not load your profile.": "Impossibile caricare il tuo profilo.",
   },
 };
 

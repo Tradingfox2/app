@@ -258,7 +258,27 @@ test("editing the profile sends the name and bio", async ({ page }) => {
   await page.getByTestId("profile-name").fill("Me Renamed");
   await page.getByTestId("profile-bio-input").fill("Powerlifter");
   await page.getByTestId("profile-save").click();
-  await expect.poll(() => patches).toEqual([{ full_name: "Me Renamed", bio: "Powerlifter", about: "", sports: [] }]);
+  await expect.poll(() => patches).toEqual([{ full_name: "Me Renamed", bio: "Powerlifter" }]);
+});
+
+test("saving a profile name leaves about and sports on the server", async ({ page }) => {
+  const patches: unknown[] = [];
+  const rich = { ...me, about: "Morning lifter", sports: ["Squat", "Run"], cover_url: "https://cdn.example/cover.jpg" };
+  await fixtures(page, async (route, path, method) => {
+    if (path === "/auth/me" && method === "GET") { await route.fulfill({ json: rich }); return true; }
+    if (path === "/auth/me" && method === "PATCH") {
+      patches.push(route.request().postDataJSON());
+      await route.fulfill({ json: { ...rich, full_name: "Me Renamed" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/profile-edit");
+  await expect(page.getByTestId("profile-about-input")).toHaveValue("Morning lifter");
+  await expect(page.getByText("Squat", { exact: true })).toBeVisible();
+  await page.getByTestId("profile-name").fill("Me Renamed");
+  await page.getByTestId("profile-save").click();
+  await expect.poll(() => patches).toEqual([{ full_name: "Me Renamed" }]);
 });
 
 test("profile save failures appear next to the header button", async ({ page }) => {

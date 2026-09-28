@@ -117,6 +117,19 @@ test("a house rule stays unsaved until Save confirms it", async ({ page }) => {
   await expect(page.getByTestId("rules-unsaved")).toHaveCount(0);
 });
 
+test("leaving with an unsaved rule asks before the draft is dropped", async ({ page }) => {
+  await manageFixtures(page, async () => false);
+  await page.goto("/community/c-1/manage");
+  await page.getByTestId("new-rule").fill("Be kind");
+  await page.getByTestId("add-rule").click();
+  await expect(page.getByText("Be kind", { exact: true })).toBeVisible();
+  await page.getByTestId("manage-back").click();
+  await expect(page.getByTestId("unsaved-settings")).toContainText("Unsaved changes will be lost");
+  await page.getByTestId("unsaved-stay").click();
+  await expect(page.getByText("Be kind", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/community\/c-1\/manage/);
+});
+
 test("a channel can be renamed and archived, except the default one", async ({ page }) => {
   const renames: unknown[] = [];
   const archived: string[] = [];
