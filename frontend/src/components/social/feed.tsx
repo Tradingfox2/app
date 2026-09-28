@@ -8,6 +8,7 @@ import { api, mediaUrl, type Community, type LinkPreview, type MediaItem, type P
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { SAVE_LABEL } from "@/src/community-copy";
 import { sharePost } from "@/src/share";
 import { ActionSheet, type SheetAction } from "./action-sheet";
 import { Avatar } from "./avatar";
@@ -296,7 +297,7 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen,
         <MentionInput value={editing} onChangeText={setEditing} multiline maxLength={4000} style={styles.editInput} testID="post-edit-input" />
         <View style={styles.editRow}>
           <Pressable accessibilityRole="button" onPress={() => setEditing(null)}><Text style={styles.linkMuted}>{t("Cancel")}</Text></Pressable>
-          <Pressable accessibilityRole="button" testID="post-edit-save" disabled={busy} onPress={() => void saveEdit()}><Text style={styles.link}>{t("Save")}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} testID="post-edit-save" disabled={busy || !editing.trim()} onPress={() => void saveEdit()}><Text style={[styles.link, (busy || !editing.trim()) && styles.disabled]}>{t(SAVE_LABEL)}</Text></Pressable>
         </View>
       </View> : shown.content ? <RichText content={shown.content} mentions={shown.mentions} style={styles.content} /> : null}
       {shown.poll ? <PollBlock poll={shown.poll} disabled={busy} onVote={index => void vote(index)} /> : null}
@@ -385,6 +386,7 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [editError, setEditError] = useState("");
   const loaded = useRef(false);
 
   const guard = async (action: () => Promise<void>) => {
@@ -415,11 +417,22 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
     const result = comment.liked_by_me ? await api.unlikeComment(comment.id) : await api.likeComment(comment.id);
     setRows(current => (current || []).map(row => row.id === comment.id ? { ...row, liked_by_me: result.liked, like_count: result.like_count } : row));
   });
-  const saveEdit = () => guard(async () => {
-    if (!editing?.text.trim()) return;
-    const updated = await api.editComment(editing.id, editing.text.trim());
-    setRows(current => (current || []).map(row => row.id === updated.id ? { ...row, ...updated } : row)); setEditing(null);
-  });
+  const saveEdit = () => {
+    if (busy) return;
+    const current = editing;
+    if (!current?.text.trim()) {
+      setEditError(t("Write something before saving."));
+      return;
+    }
+    const commentId = current.id;
+    const content = current.text.trim();
+    setEditError("");
+    void guard(async () => {
+      const updated = await api.editComment(commentId, content);
+      setRows(rows => (rows || []).map(row => row.id === updated.id ? { ...row, ...updated } : row));
+      setEditing(null);
+    });
+  };
   const remove = (comment: PostComment) => guard(async () => {
     await api.deleteComment(comment.id);
     setRows(current => (current || []).filter(row => row.id !== comment.id).map(row => row.id === comment.parent_id ? { ...row, reply_count: Math.max(0, (row.reply_count ?? 1) - 1) } : row));
@@ -438,12 +451,20 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
         {comment.edited_at ? <Text style={styles.time}>{t("edited")}</Text> : null}
       </View>
       {editing?.id === comment.id
-        ? <View style={styles.commentRow}><TextInput value={editing.text} onChangeText={text => setEditing({ id: comment.id, text })} maxLength={2000} style={styles.commentInput} testID="comment-edit-input" /><Pressable accessibilityRole="button" onPress={() => void saveEdit()} testID="comment-edit-save"><Text style={styles.link}>{t("Save")}</Text></Pressable></View>
+        ? <View style={styles.commentEdit}>
+            <View style={styles.commentRow}>
+              <TextInput value={editing.text} onChangeText={text => { setEditing({ id: comment.id, text }); if (text.trim()) setEditError(""); }} maxLength={2000} style={styles.commentInput} testID="comment-edit-input" />
+              <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: busy || !editing.text.trim(), busy }} disabled={busy || !editing.text.trim()} onPress={() => void saveEdit()} testID="comment-edit-save">
+                {busy ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={[styles.link, !editing.text.trim() && styles.disabled]}>{t(SAVE_LABEL)}</Text>}
+              </Pressable>
+            </View>
+            {!editing.text.trim() || editError ? <Text accessibilityRole="alert" testID="comment-edit-error" style={styles.error}>{editError || t("Write something before saving.")}</Text> : null}
+          </View>
         : <RichText content={comment.content} mentions={comment.mentions} style={styles.commentText} />}
       <View style={styles.commentActions}>
         <Pressable accessibilityRole="button" accessibilityLabel={comment.liked_by_me ? t("Unlike comment") : t("Like comment")} onPress={() => void like(comment)} style={styles.commentAction}><Ionicons name={comment.liked_by_me ? "heart" : "heart-outline"} size={14} color={comment.liked_by_me ? colors.brand : colors.textDim} />{comment.like_count ? <Text style={styles.time}>{comment.like_count}</Text> : null}</Pressable>
         <Pressable accessibilityRole="button" onPress={() => setReplyTo(comment)} testID={`comment-reply-${comment.id}`}><Text style={styles.commentLink}>{t("Reply")}</Text></Pressable>
-        {mine && comment.can_edit ? <Pressable accessibilityRole="button" onPress={() => setEditing({ id: comment.id, text: comment.content })} testID={`comment-edit-${comment.id}`}><Text style={styles.commentLink}>{t("Edit")}</Text></Pressable> : null}
+        {mine && comment.can_edit ? <Pressable accessibilityRole="button" onPress={() => { setEditError(""); setEditing({ id: comment.id, text: comment.content }); }} testID={`comment-edit-${comment.id}`}><Text style={styles.commentLink}>{t("Edit")}</Text></Pressable> : null}
         {canDelete ? <Pressable accessibilityRole="button" onPress={() => void remove(comment)} testID={`comment-delete-${comment.id}`}><Text style={[styles.commentLink, { color: colors.error }]}>{t("Delete")}</Text></Pressable> : null}
         {!mine ? <Pressable accessibilityRole="button" onPress={() => onReport({ target_type: "comment", target_id: comment.id })} testID={`comment-report-${comment.id}`}><Text style={styles.commentLink}>{t("Report")}</Text></Pressable> : null}
       </View>
@@ -531,5 +552,6 @@ const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding
   commentLink: { color: colors.textDim, fontSize: 11, fontWeight: "800" },
   replyingTo: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   commentRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  commentEdit: { gap: 4 },
   commentInput: { flex: 1, minHeight: 40, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, color: colors.text },
 });

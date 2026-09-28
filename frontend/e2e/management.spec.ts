@@ -46,9 +46,75 @@ test("community settings can be edited", async ({ page }) => {
   });
   await page.goto("/community/c-1/manage");
   await expect(page.getByTestId("settings-name")).toHaveValue("Iron Club");
+  await expect(page.getByTestId("upload-avatar")).toHaveAttribute("aria-label", "Community photo");
+  await expect(page.getByTestId("add-rule")).toHaveAttribute("aria-label", "Add rule");
   await page.getByTestId("settings-name").fill("Iron Club Reloaded");
+  await expect(page.getByTestId("settings-unsaved")).toHaveText("Not saved until you save.");
   await page.getByTestId("save-settings").click();
+  await expect(page.getByTestId("save-settings")).toHaveText("Saved");
   await expect.poll(() => saved).toEqual([{ name: "Iron Club Reloaded", description: "Strength" }]);
+  await expect(page.getByTestId("save-settings-error")).toHaveCount(0);
+  await expect(page.getByTestId("save-settings")).toHaveText("Save");
+});
+
+test("saving unchanged community settings still shows Saved on the button", async ({ page }) => {
+  const saved: unknown[] = [];
+  await manageFixtures(page, async (route, path) => {
+    if (path === "/communities/c-1" && route.request().method() === "PATCH") {
+      saved.push(route.request().postDataJSON());
+      await route.fulfill({ json: community });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1/manage");
+  await page.getByTestId("save-settings").click();
+  await expect(page.getByTestId("save-settings")).toHaveText("Saved");
+  await expect.poll(() => saved).toEqual([{ name: "Iron Club", description: "Strength" }]);
+});
+
+test("a failed community save shows the error beside the button", async ({ page }) => {
+  await manageFixtures(page, async (route, path) => {
+    if (path === "/communities/c-1" && route.request().method() === "PATCH") {
+      await route.fulfill({ status: 503, json: { detail: "Fixture save failed" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1/manage");
+  const save = page.getByTestId("save-settings");
+  await save.click();
+  const error = page.getByTestId("save-settings-error");
+  await expect(error).toBeVisible();
+  await expect(error).toHaveText("Fixture save failed");
+  await expect(save).toHaveText("Save");
+  const saveBox = await save.boundingBox();
+  const errorBox = await error.boundingBox();
+  expect(saveBox).toBeTruthy();
+  expect(errorBox).toBeTruthy();
+  expect(errorBox!.y).toBeGreaterThanOrEqual(saveBox!.y);
+  expect(errorBox!.y - (saveBox!.y + saveBox!.height)).toBeLessThan(80);
+});
+
+test("a house rule stays unsaved until Save confirms it", async ({ page }) => {
+  const saved: unknown[] = [];
+  await manageFixtures(page, async (route, path) => {
+    if (path === "/communities/c-1" && route.request().method() === "PATCH") {
+      saved.push(route.request().postDataJSON());
+      await route.fulfill({ json: { ...community, rules: ["Be kind"] } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1/manage");
+  await page.getByTestId("new-rule").fill("Be kind");
+  await page.getByTestId("add-rule").click();
+  await expect(page.getByText("Be kind", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("rules-unsaved")).toHaveText("Not saved until you save.");
+  expect(saved).toEqual([]);
+  await page.getByTestId("save-settings").click();
+  await expect.poll(() => saved).toEqual([{ name: "Iron Club", description: "Strength", rules: ["Be kind"] }]);
+  await expect(page.getByTestId("rules-unsaved")).toHaveCount(0);
 });
 
 test("a channel can be renamed and archived, except the default one", async ({ page }) => {
@@ -77,6 +143,7 @@ test("a channel can be renamed and archived, except the default one", async ({ p
   await page.getByTestId("rename-input-ch-2").fill("Legends");
   await page.getByTestId("rename-ch-2").click();
   await expect.poll(() => renames).toEqual([{ name: "Legends" }]);
+  await expect(page.getByTestId("rename-ch-2")).toHaveAttribute("aria-label", "Saved");
 
   // The panel stays open across a rename, so no second tap to re-expand.
   await page.getByTestId("archive-channel-ch-2").click();
@@ -178,6 +245,12 @@ const application = {
   review_note: null, created_at: "2026-09-10T08:00:00Z",
   applicant: { id: peer.id, full_name: peer.full_name, email: "two@example.invalid", avatar_url: null },
 };
+const coachDirectoryRow = {
+  user_id: peer.id, full_name: peer.full_name, email: "two@example.invalid", role: "user",
+  coach_status: "pending", suspended_at: null, application_id: application.id,
+  bio: application.bio, specialties: application.specialties, credentials: application.credentials,
+  review_note: application.review_note, created_at: application.created_at,
+};
 
 async function consoleFixtures(page: Page, permissions: string[], override?: (route: Route, path: string) => Promise<boolean>) {
   await page.addInitScript(() => localStorage.setItem("ironflow_token", JSON.stringify("synthetic-test-token")));
@@ -187,6 +260,7 @@ async function consoleFixtures(page: Page, permissions: string[], override?: (ro
     if (path === "/auth/me") return route.fulfill({ json: { ...me, staff_role: "admin" } });
     if (path === "/admin/overview") return route.fulfill({ json: { ...staffOverview, permissions } });
     if (path === "/admin/coach-applications") return route.fulfill({ json: [application] });
+    if (path === "/admin/coaches") return route.fulfill({ json: permissions.includes("coaches.review") ? [coachDirectoryRow] : [] });
     if (path === "/admin/users") return route.fulfill({ json: { users: [], count: 0 } });
     await route.fulfill({ json: [] });
   });

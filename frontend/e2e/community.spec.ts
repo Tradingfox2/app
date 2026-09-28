@@ -39,6 +39,12 @@ test("discovery failure is visible, retry restores content and tabs fit", async 
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   // The screen lands on FEED, so discovery content lives one tab over.
   await page.getByTestId("community-tab-discover").click();
+  await expect(page.getByTestId("community-tab-discover")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("category-all")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId(`community-${community.id}`)).toBeVisible();
+  await expect(page.getByTestId(`community-${community.id}`)).toContainText("Open join");
+  await expect(page.getByTestId(`community-${community.id}`)).toContainText("Listed publicly");
+  await expect(page.getByTestId(`community-${community.id}`)).not.toContainText("01");
   await expect(page.getByText(community.name, { exact: true })).toBeVisible();
   await noHorizontalOverflow(page);
   await page.getByTestId("community-tab-coaches").click();
@@ -51,6 +57,22 @@ test("discovery failure is visible, retry restores content and tabs fit", async 
   await expect(page.getByText("TOP CHANNELS", { exact: true })).toBeVisible();
   await expect(page.getByText("3 contributors", { exact: true })).toBeVisible();
   await noHorizontalOverflow(page);
+  await expect(page.getByTestId("ranking-channel-fixture-channel")).toBeEnabled();
+  await page.getByTestId("ranking-channel-fixture-channel").click();
+  await expect(page).toHaveURL(/\/channel\/fixture-channel/);
+});
+
+test("ranking coach rows without a person id stay disabled", async ({ page }) => {
+  await fixtures(page, async (route, path) => {
+    if (path !== "/community-rankings") return false;
+    await route.fulfill({ json: { communities: [], coaches: [{ coach: null, community_count: 1, member_count: 4 }], users: [{ id: "", full_name: "Nameless", active_days: 1 }], channels: [{ id: "hidden-channel", name: "private", community_id: "not-joined", community_name: "Elsewhere", contributors: 1 }], window_days: 30 } });
+    return true;
+  });
+  await page.goto("/community");
+  await page.getByTestId("community-tab-rankings").click();
+  await expect(page.getByTestId("ranking-coach-missing-0")).toBeDisabled();
+  await expect(page.getByTestId("ranking-user-missing-0")).toBeDisabled();
+  await expect(page.getByTestId("ranking-channel-hidden-channel")).toBeDisabled();
 });
 
 test("review errors keep requests available and prevent duplicate submissions", async ({ page }) => {

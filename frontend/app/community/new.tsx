@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { api, COMMUNITY_CATEGORIES, Community, type CommunityCategory } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { LISTED_PUBLICLY_LABEL, iconButtonA11y, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
 
 export default function NewCommunity() {
   const router = useRouter();
@@ -31,16 +32,16 @@ export default function NewCommunity() {
   };
 
   return <SafeAreaView style={styles.safe}>
-    <View style={styles.header}><Pressable onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text style={styles.headerTitle}>{t("NEW COMMUNITY")}</Text></View>
+    <View style={styles.header}><Pressable {...iconButtonA11y(t("Back"), t("Return to the previous screen"))} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text style={styles.headerTitle}>{t("NEW COMMUNITY")}</Text></View>
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>{t("Build a home for your coaching.")}</Text>
       <Text style={styles.body}>{t("Choose how members enter. Paid access stays locked until verified billing is connected.")}</Text>
       <Label text={t("NAME")} /><TextInput value={name} onChangeText={setName} placeholder={t("Community name")} placeholderTextColor={colors.textDim} style={styles.input} />
       <Label text={t("DESCRIPTION")} /><TextInput value={description} onChangeText={setDescription} multiline placeholder={t("Who is this community for?")} placeholderTextColor={colors.textDim} style={[styles.input, styles.multiline]} />
-      <Label text={t("CATEGORY")} /><View style={styles.categories}>{COMMUNITY_CATEGORIES.map(item => <Pressable key={item} accessibilityRole="button" testID={`new-category-${item}`} onPress={() => setCategory(item)} style={[styles.categoryChip, category === item && styles.optionActive]}><Text style={[styles.optionText, category === item && styles.optionTextActive]}>{t(item.replace("_", " ").toUpperCase())}</Text></Pressable>)}</View>
-      <Label text={t("MEMBERSHIP")} /><View style={styles.options}>{(["open", "approval", "paid"] as const).map(item => <Pressable key={item} onPress={() => setPolicy(item)} style={[styles.option, policy === item && styles.optionActive]}><Ionicons name={item === "open" ? "earth" : item === "approval" ? "shield-checkmark" : "card"} size={18} color={policy === item ? colors.brandOn : colors.textMuted} /><Text style={[styles.optionText, policy === item && styles.optionTextActive]}>{t(item.toUpperCase())}</Text></Pressable>)}</View>
+      <Label text={t("CATEGORY")} /><View style={styles.categories}>{COMMUNITY_CATEGORIES.map(item => <Pressable key={item} accessibilityRole="button" {...selectedControl(category === item)} testID={`new-category-${item}`} onPress={() => setCategory(item)} style={[styles.categoryChip, category === item && styles.optionActive]}><Text style={[styles.optionText, category === item && styles.optionTextActive]}>{t(item.replace("_", " ").toUpperCase())}</Text></Pressable>)}</View>
+      <Label text={t("MEMBERSHIP")} /><View style={styles.options}>{(["open", "approval", "paid"] as const).map(item => <Pressable key={item} accessibilityRole="button" {...selectedControl(policy === item)} testID={`new-policy-${item}`} onPress={() => setPolicy(item)} style={[styles.option, policy === item && styles.optionActive]}><Ionicons name={item === "open" ? "earth" : item === "approval" ? "shield-checkmark" : "card"} size={18} color={policy === item ? colors.brandOn : colors.textMuted} /><Text style={[styles.optionText, policy === item && styles.optionTextActive]}>{t(joinPolicyPhrase(item))}</Text></Pressable>)}</View>
       {policy === "paid" ? <><Label text={t("MONTHLY PRICE · EUR")} /><TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={styles.input} /></> : null}
-      <View style={styles.toggleRow}><View style={{ flex: 1 }}><Text style={styles.toggleTitle}>{t("PUBLIC DISCOVERY")}</Text><Text style={styles.hint}>{t("Show this community in search and rankings.")}</Text></View><Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ true: colors.brandDim }} thumbColor={isPublic ? colors.brand : colors.textMuted} /></View>
+      <View style={styles.toggleRow}><View style={{ flex: 1 }}><Text style={styles.toggleTitle}>{t(LISTED_PUBLICLY_LABEL)}</Text><Text style={styles.hint}>{t("Show this community in search and rankings.")}</Text></View><Switch testID="new-public" accessibilityLabel={t(LISTED_PUBLICLY_LABEL)} accessibilityHint={t("Show this community in search and rankings.")} value={isPublic} onValueChange={setIsPublic} trackColor={{ true: colors.brandDim }} thumbColor={isPublic ? colors.brand : colors.textMuted} /></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Pressable onPress={create} disabled={saving || name.trim().length < 3} style={[styles.submit, (saving || name.trim().length < 3) && styles.disabled]}><Text style={styles.submitText}>{t(saving ? "CREATING..." : "CREATE COMMUNITY")}</Text></Pressable>
     </ScrollView>

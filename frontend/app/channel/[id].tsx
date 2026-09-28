@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -16,6 +16,7 @@ import { Avatar } from "@/src/components/social/avatar";
 import { MediaGrid } from "@/src/components/social/media";
 import { ReportSheet, type ReportTarget } from "@/src/components/social/report-sheet";
 import { RichText } from "@/src/components/social/rich-text";
+import { SAVE_LABEL } from "@/src/community-copy";
 
 const QUICK_REACTIONS = ["💪", "🔥", "👏", "🎯", "😂"];
 /** The full picker: training, food, recovery and the usual reactions. */
@@ -354,7 +355,7 @@ export default function ChannelScreen() {
           {uploading ? <ActivityIndicator color={colors.brand} /> : <Ionicons name="image-outline" size={20} color={colors.brand} />}
         </Pressable> : null}
         <TextInput value={draft} onChangeText={typed} editable={!sending} maxLength={4000} multiline placeholder={t("Message the channel...")} placeholderTextColor={colors.textDim} style={styles.input} testID="composer-input" />
-        <Pressable accessibilityRole="button" disabled={!canSend} onPress={send} accessibilityLabel={t("Send message")} testID="composer-send" style={[styles.send, !canSend && styles.disabled]}><Ionicons name={editing ? "checkmark" : "send"} size={17} color={colors.brandOn} /></Pressable>
+        <Pressable accessibilityRole="button" disabled={!canSend} onPress={send} accessibilityLabel={editing ? t(SAVE_LABEL) : t("Send message")} accessibilityHint={editing ? t("Confirm the edited message") : t("Send this message")} {...(Platform.OS === "web" ? { title: editing ? t(SAVE_LABEL) : t("Send message") } : {})} testID="composer-send" style={[styles.send, !canSend && styles.disabled]}><Ionicons name={editing ? "checkmark" : "send"} size={17} color={colors.brandOn} /></Pressable>
       </View>}
     <ReportSheet target={reporting} onClose={() => setReporting(null)} />
   </KeyboardAvoidingView></SafeAreaView>;

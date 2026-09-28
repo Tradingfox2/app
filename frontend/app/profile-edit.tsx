@@ -9,6 +9,7 @@ import { useAuth } from "@/src/auth-context";
 import { Avatar } from "@/src/components/social/avatar";
 import { useI18n } from "@/src/i18n";
 import { colors, radius, spacing } from "@/src/theme";
+import { SAVE_LABEL } from "@/src/community-copy";
 
 /** Name, bio and photo — what other members see on your profile and posts. */
 export default function EditProfileScreen() {
@@ -80,10 +81,11 @@ export default function EditProfileScreen() {
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <Text style={styles.title}>{t("EDIT PROFILE")}</Text>
       <View style={{ flex: 1 }} />
-      <Pressable accessibilityRole="button" testID="profile-save" disabled={!!busy || name.trim().length < 2} onPress={() => void save()} style={[styles.save, (!!busy || name.trim().length < 2) && styles.disabled]}>
-        {busy === "save" ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.saveText}>{t("SAVE")}</Text>}
+      <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: !!busy || name.trim().length < 2, busy: busy === "save" }} testID="profile-save" disabled={!!busy || name.trim().length < 2} onPress={() => void save()} style={[styles.save, (!!busy || name.trim().length < 2) && styles.disabled]}>
+        {busy === "save" ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.saveText}>{t(SAVE_LABEL)}</Text>}
       </Pressable>
     </View>
+    {error ? <Text accessibilityRole="alert" testID="profile-save-error" style={styles.headerError}>{error}</Text> : null}
     <ScrollView contentContainerStyle={styles.body}>
       <Pressable accessibilityRole="button" testID="profile-cover" disabled={!!busy} onPress={() => void pickImage("cover")} style={styles.cover}>
         {cover.url && !removeCover ? <Image source={{ uri: mediaUrl(cover.url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : <Text style={styles.secondaryText}>{t("CHANGE COVER")}</Text>}
@@ -115,7 +117,6 @@ export default function EditProfileScreen() {
       <Text style={styles.label}>{t("ABOUT")}</Text>
       <TextInput value={about} onChangeText={setAbout} maxLength={500} multiline placeholder={t("Tell people how you train.")} placeholderTextColor={colors.textDim} style={[styles.input, styles.bio]} testID="profile-about-input" />
       <Text style={styles.counter}>{about.length}/500</Text>
-      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     </ScrollView>
   </SafeAreaView>;
 }
@@ -127,6 +128,7 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontWeight: "900", letterSpacing: 1 },
   save: { minHeight: 36, paddingHorizontal: spacing.lg, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   saveText: { color: colors.brandOn, fontWeight: "900", letterSpacing: 1 },
+  headerError: { color: colors.error, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   disabled: { opacity: 0.4 },
   body: { padding: spacing.lg, gap: spacing.sm },
   cover: { height: 140, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", overflow: "hidden" },
@@ -142,5 +144,4 @@ const styles = StyleSheet.create({
   input: { minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
   bio: { minHeight: 96, paddingTop: spacing.md, textAlignVertical: "top" },
   counter: { color: colors.textDim, fontSize: 11, textAlign: "right" },
-  error: { color: colors.error },
 });

@@ -7,6 +7,7 @@ import * as Linking from "expo-linking";
 import { api, mediaUrl, type ChannelKind, type Community, type CommunityChannel, type MentionedUser } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { LISTED_PUBLICLY_LABEL, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
 import { MANAGE_CHANNEL, can } from "@/src/permissions";
 import { Avatar } from "@/src/components/social/avatar";
 import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
@@ -132,16 +133,16 @@ export default function CommunityDetail() {
         {community.cover_url ? <View style={styles.heroShade} /> : null}
         <View style={styles.heroTop}>
           {community.avatar_url ? <Image source={{ uri: mediaUrl(community.avatar_url) }} style={styles.communityAvatar} accessibilityIgnoresInvertColors /> : null}
-          <Text style={styles.kicker}>{community.join_policy === "paid" ? t("PAID MEMBERSHIP") : community.join_policy === "approval" ? t("APPLICATION REQUIRED") : t("OPEN COMMUNITY")}{community.category && community.category !== "general" ? ` · ${t(community.category.replace("_", " ").toUpperCase())}` : ""}</Text>
+          <Text style={styles.kicker}>{community.join_policy === "open" ? t(joinPolicyPhrase("open")) : community.join_policy === "approval" ? t("APPLICATION REQUIRED") : t("PAID MEMBERSHIP")}{community.category && community.category !== "general" ? ` · ${t(community.category.replace("_", " ").toUpperCase())}` : ""}</Text>
         </View>
         <Text style={styles.title}>{community.name}</Text>
         <Text style={styles.description} numberOfLines={3}>{community.description || t("A focused place to train and progress together.")}</Text>
-        <View style={styles.meta}><Ionicons name="people" size={16} color={colors.brand} /><Text style={styles.metaText}>{formatNumber(community.member_count)} {t("members")}</Text><Text style={styles.metaText}>· {community.owner?.full_name || t("Coach")}</Text></View>
+        <View style={styles.meta}><Ionicons name="people" size={16} color={colors.brand} /><Text style={styles.metaText}>{formatNumber(community.member_count)} {t("members")}</Text><Text style={styles.metaText}>· {community.owner?.full_name || t("Coach")}</Text>{community.is_public ? <Text style={styles.metaText}>· {t(LISTED_PUBLICLY_LABEL)}</Text> : null}</View>
       </View>
       {!isActive ? <View style={styles.joinBand}><View style={{ flex: 1 }}><Text style={styles.joinTitle}>{confirming ? t("CONFIRMING PAYMENT…") : membership?.status === "pending" ? t("REQUEST PENDING") : membership?.status === "banned" ? t("YOU ARE BANNED") : community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) + t(" / month") : t("JOIN THE GROUP")}</Text><Text style={styles.joinCopy}>{membership?.status === "pending" ? t("A community manager will review your request.") : membership?.status === "banned" ? t("The community's managers removed you.") : !community.is_public ? t("This community is invite-only. Ask a member for a link.") : community.join_policy === "paid" ? t("Monthly, by card through Stripe. Leave any time and the subscription stops.") : t("Get access to channels and member conversations.")}</Text></View>{confirming ? <ActivityIndicator color={colors.brand} testID="checkout-confirming" /> : membership?.status !== "pending" && membership?.status !== "banned" && community.is_public ? <Pressable onPress={join} disabled={busy} style={styles.joinButton} testID="join-community"><Text style={styles.joinButtonText}>{t(community.join_policy === "paid" ? "CONTINUE" : community.join_policy === "approval" ? "REQUEST" : "JOIN")}</Text></Pressable> : null}</View> : null}
       {timedOutUntil ? <View style={styles.notice} testID="timeout-notice"><Ionicons name="time-outline" size={18} color={colors.warning} /><Text style={styles.noticeText}>{t("You are timed out until {date}. You can read but not post.").replace("{date}", formatDate(timedOutUntil, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</Text></View> : null}
       {error ? <View style={styles.notice}><Ionicons name="information-circle" size={18} color={colors.warning} /><Text style={styles.noticeText}>{error}</Text></View> : null}
-      {isActive ? <View style={styles.tabs}>{(["channels", "wall", "about", "members"] as Tab[]).map(item => <Pressable key={item} accessibilityRole="button" testID={`community-detail-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabOn]}><Text style={[styles.tabText, tab === item && styles.tabTextOn]}>{t(item.toUpperCase())}</Text></Pressable>)}</View> : null}
+      {isActive ? <View style={styles.tabs}>{(["channels", "wall", "about", "members"] as Tab[]).map(item => <Pressable key={item} accessibilityRole="tab" {...selectedControl(tab === item)} accessibilityLabel={t(item.toUpperCase())} testID={`community-detail-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabOn]}><Text style={[styles.tabText, tab === item && styles.tabTextOn]}>{t(item.toUpperCase())}</Text></Pressable>)}</View> : null}
 
       {isActive && tab === "channels" ? <>{groups.map(([heading, rows]) => <View key={heading || "_"}>
         <View style={styles.sectionHead}><Text style={styles.section}>{heading ? heading.toUpperCase() : t("CHANNELS")}</Text><Text style={styles.count}>{rows.length}</Text></View>
