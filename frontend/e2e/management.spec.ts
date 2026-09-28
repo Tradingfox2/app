@@ -260,7 +260,7 @@ async function consoleFixtures(page: Page, permissions: string[], override?: (ro
     if (path === "/auth/me") return route.fulfill({ json: { ...me, staff_role: "admin" } });
     if (path === "/admin/overview") return route.fulfill({ json: { ...staffOverview, permissions } });
     if (path === "/admin/coach-applications") return route.fulfill({ json: [application] });
-    if (path === "/admin/coaches") return route.fulfill({ json: [coachDirectoryRow] });
+    if (path === "/admin/coaches") return route.fulfill({ json: permissions.includes("coaches.review") ? [coachDirectoryRow] : [] });
     if (path === "/admin/users") return route.fulfill({ json: { users: [], count: 0 } });
     await route.fulfill({ json: [] });
   });
