@@ -17,6 +17,7 @@
   "exclude": [
     "node_modules",
     "src/components/anatomy/ref",
-    "src/linking.test.ts"
+    "src/linking.test.ts",
+    "src/profile-patch.test.ts"
   ]
 }
