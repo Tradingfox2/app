@@ -1,5 +1,10 @@
 -- Supabase stand-ins so the migrations run on a plain Postgres (CI, local).
--- Usage: psql -v ON_ERROR_STOP=1 -f tests/shim.sql -f migrations/001_init.sql \n--          -f migrations/002_rls.sql -f migrations/003_community_social.sql -f tests/smoke.sql
+-- Usage: psql -v ON_ERROR_STOP=1 -f tests/shim.sql \
+--   -f migrations/001_init.sql -f migrations/002_rls.sql \
+--   -f migrations/003_community_social.sql \
+--   -f migrations/004_support_and_dual_media.sql \
+--   -f migrations/005_athlete_personal_space.sql \
+--   -f migrations/006_audience_only_me.sql -f tests/smoke.sql
 create schema if not exists auth;
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text);
 create or replace function auth.uid() returns uuid language sql stable as $$
