@@ -13,7 +13,9 @@ supabase/
 │   ├── 001_init.sql                    -- tables, indexes, foreign keys
 │   ├── 002_rls.sql                     -- Row Level Security policies + helper function
 │   ├── 003_community_social.sql        -- community, social graph, media
-│   └── 004_support_and_dual_media.sql  -- support tickets + admin_media
+│   ├── 004_support_and_dual_media.sql  -- support tickets + admin_media
+│   ├── 005_athlete_personal_space.sql  -- profile wall, stories, audience
+│   └── 006_audience_only_me.sql        -- audience also allows only_me
 ├── seed.sql           -- 15 muscles + 50 exercises
 └── README.md
 ```
@@ -28,7 +30,8 @@ supabase/
 | `biomarkers` | Blood / body analysis results |
 | `wearable_metrics` | Apple Watch / Whoop / Garmin metrics |
 | `coach_relationships` | Coach ↔ client links with `status` |
-| `communities`, `community_members`, `posts` | Social layer |
+| `communities`, `community_members`, `posts` | Social layer. `posts.audience` is `public` (default), `friends`, or `only_me` |
+| `stories` | Workout stories and highlights. `stories.audience` is `friends` (default), `public`, or `only_me` |
 | `group_sessions`, `session_participants` | Live group coaching sessions |
 | `subscriptions`, `payouts`, `referrals` | Monetization layer |
 | `media` | End-user uploads (`users/{user_id}/…` keys) |
@@ -52,6 +55,17 @@ Reference tables `muscles` and `exercises` are readable by everyone.
 and ship with no policies, so a direct client is denied. FastAPI uses the
 service role and enforces access in the API.
 
+`stories` enables RLS and ships with no policies (migration 005). Migration
+006 does not add policies. `only_me` means the author alone; that visibility
+is enforced in the API/Mongo layer. SQL only stores the allowed value.
+
+## Audience
+
+`posts.audience` and `stories.audience` allow `public`, `friends`, and
+`only_me` (migration 006). Defaults stay `public` on posts and `friends` on
+stories. Existing `public` and `friends` rows stay valid. `club` is not a
+value.
+
 ## Deploy to Supabase
 
 ### Option A — Supabase Dashboard (fastest)
@@ -62,7 +76,9 @@ service role and enforces access in the API.
    2. `migrations/002_rls.sql`
    3. `migrations/003_community_social.sql`
    4. `migrations/004_support_and_dual_media.sql`
-   5. `seed.sql`
+   5. `migrations/005_athlete_personal_space.sql`
+   6. `migrations/006_audience_only_me.sql`
+   7. `seed.sql`
 3. In **Project Settings → API**, copy:
    - `Project URL` → `EXPO_PUBLIC_SUPABASE_URL`
    - `anon public key` → `EXPO_PUBLIC_SUPABASE_ANON_KEY`
