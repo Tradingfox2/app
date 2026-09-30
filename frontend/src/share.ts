@@ -83,6 +83,22 @@ export async function copyPostLink(id: string): Promise<boolean> {
   return copied;
 }
 
+/** System share sheet for a link that is not a post. Dismiss is not a failure. */
+export async function shareLink(url: string): Promise<ShareSheetResult> {
+  try {
+    const result = await Share.share({ message: url });
+    if (result?.action === Share.dismissedAction) return "dismissed";
+    return "shared";
+  } catch {
+    return "unavailable";
+  }
+}
+
+/** Writes an arbitrary link. Returns false when the platform has no clipboard. */
+export async function copyLink(url: string): Promise<boolean> {
+  return writeClipboard(url);
+}
+
 async function writeClipboard(value: string): Promise<boolean> {
   const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
   if (clipboard?.writeText) {

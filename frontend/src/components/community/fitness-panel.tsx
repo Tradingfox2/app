@@ -59,7 +59,7 @@ function CheckinPanel({ channelId, refreshKey }: { channelId: string; refreshKey
   </View>;
 }
 
-function ChallengePanel({ channelId, refreshKey }: { channelId: string; refreshKey: number }) {
+export function ChallengePanel({ channelId, refreshKey }: { channelId: string; refreshKey: number }) {
   const { t, formatNumber, formatDate } = useI18n();
   const [board, setBoard] = useState<ChallengeBoard | null>(null);
   const [busy, setBusy] = useState(false);

@@ -308,7 +308,7 @@ def _coach_is_approved(user: dict) -> bool:
     return user.get("role") == "coach" and user.get("coach_status", "approved") == "approved"
 
 
-async def _community_view(community: dict, user_id: str | None = None) -> dict:
+async def _community_view(community: dict, user_id: str | None = None, *, redacted: bool = False) -> dict:
     community_id = community["id"]
     member_count = await db.community_members.count_documents(
         {"community_id": community_id, "status": "active"}
@@ -321,6 +321,13 @@ async def _community_view(community: dict, user_id: str | None = None) -> dict:
     view["member_count"] = member_count
     view["owner"] = clean(owner)
     view["membership"] = await _membership(community_id, user_id) if user_id else None
+    if redacted:
+        # A pending or declined visitor of a private club may see that their
+        # request exists. They may not read the room: rules, welcome, description.
+        view["description"] = ""
+        view["rules"] = []
+        view["welcome_message"] = ""
+        view["redacted"] = True
     return view
 
 
@@ -417,19 +424,54 @@ async def list_coach_applications(
 
 @router.get("/coaches")
 async def list_coaches():
-    coaches = []
-    async for coach in db.users.find(
-        {"role": "coach", "$or": [{"coach_status": "approved"}, {"coach_status": {"$exists": False}}]},
-        {"_id": 0, "id": 1, "full_name": 1, "avatar_url": 1, "role": 1, "coach_status": 1},
-    ).limit(50):
-        coach["community_count"] = await db.communities.count_documents(
-            {"owner_id": coach["id"], "status": {"$ne": "archived"}}
-        )
-        coach["member_count"] = await db.community_members.count_documents(
-            {"owner_id": coach["id"], "status": "active"}
-        )
-        coaches.append(clean(coach))
-    return coaches
+    """Approved coaches, ranked by athletes in their active public clubs.
+
+    The coach's own membership row is not a member they coach. Private and
+    archived clubs stay out of both numbers so a hidden room cannot inflate
+    the public list. Tie-break is the coach id, the same order as rankings.
+    """
+    pipeline = [
+        {"$match": {"role": "coach", "$or": [
+            {"coach_status": "approved"}, {"coach_status": {"$exists": False}},
+        ]}},
+        {"$lookup": {
+            "from": "communities",
+            "let": {"coach": "$id"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$owner_id", "$$coach"]},
+                    {"$eq": ["$is_public", True]},
+                    {"$ne": ["$status", "archived"]},
+                ]}}},
+                {"$project": {"_id": 0, "id": 1}},
+            ],
+            "as": "clubs",
+        }},
+        {"$lookup": {
+            "from": "community_members",
+            "let": {"clubs": "$clubs.id", "coach": "$id"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$in": ["$community_id", "$$clubs"]},
+                    {"$eq": ["$status", "active"]},
+                    {"$ne": ["$user_id", "$$coach"]},
+                ]}}},
+                {"$count": "n"},
+            ],
+            "as": "members",
+        }},
+        {"$addFields": {
+            "community_count": {"$size": "$clubs"},
+            "member_count": {"$ifNull": [{"$arrayElemAt": ["$members.n", 0]}, 0]},
+        }},
+        {"$sort": {"member_count": -1, "id": 1}},
+        {"$limit": 50},
+        {"$project": {
+            "_id": 0, "id": 1, "full_name": 1, "avatar_url": 1, "role": 1,
+            "coach_status": 1, "community_count": 1, "member_count": 1,
+        }},
+    ]
+    return [clean(row) async for row in db.users.aggregate(pipeline)]
 
 
 # Posts / feed live in routers/social.py (likes, reposts, comments, media, DMs).
@@ -442,14 +484,19 @@ async def list_communities(
     category: Category | None = None,
     offset: Annotated[int, Query(ge=0, le=10_000)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    sort: Literal["members", "trending"] = "members",
 ):
     if scope == "discover":
-        # Ranked by size in the database. Sorting in Python after taking the
-        # 100 newest meant a large older community simply fell off the list.
+        # Ranked in the database. Sorting in Python after taking the newest
+        # meant a large older community simply fell off the list.
+        # `members` is all-time size. `trending` is active joins in 14 days,
+        # then size, so a quiet large club does not outrank one people are
+        # actually entering.
         match: dict = {"is_public": True, "status": {"$ne": "archived"}}
         if category:
             match["category"] = category
-        pipeline = [
+        since = now() - timedelta(days=14)
+        pipeline: list[dict] = [
             {"$match": match},
             {"$lookup": {
                 "from": "community_members", "let": {"cid": "$id"},
@@ -460,12 +507,33 @@ async def list_communities(
                 ],
                 "as": "_mc",
             }},
-            {"$addFields": {"_members": {"$ifNull": [{"$arrayElemAt": ["$_mc.n", 0]}, 0]}}},
-            {"$sort": {"_members": -1, "created_at": -1}},
+        ]
+        if sort == "trending":
+            pipeline.append({"$lookup": {
+                "from": "community_members", "let": {"cid": "$id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$and": [
+                        {"$eq": ["$community_id", "$$cid"]},
+                        {"$eq": ["$status", "active"]},
+                        {"$gte": ["$joined_at", since]},
+                    ]}}},
+                    {"$count": "n"},
+                ],
+                "as": "_recent",
+            }})
+        pipeline.extend([
+            {"$addFields": {
+                "_members": {"$ifNull": [{"$arrayElemAt": ["$_mc.n", 0]}, 0]},
+                "_recent_n": {"$ifNull": [{"$arrayElemAt": ["$_recent.n", 0]}, 0]},
+            }},
+            {"$sort": (
+                {"_recent_n": -1, "_members": -1, "created_at": -1}
+                if sort == "trending" else {"_members": -1, "created_at": -1}
+            )},
             {"$skip": offset},
             {"$limit": limit},
-            {"$project": {"_id": 0, "_mc": 0, "_members": 0}},
-        ]
+            {"$project": {"_id": 0, "_mc": 0, "_members": 0, "_recent": 0, "_recent_n": 0}},
+        ])
         rows = [row async for row in db.communities.aggregate(pipeline)]
         return [await _community_view(row, user["id"] if user else None) for row in rows]
     if not user:
@@ -544,6 +612,11 @@ async def get_community(community_id: str, user: dict | None = Depends(optional_
     if not community.get("is_public"):
         if not user:
             raise HTTPException(401, "Not authenticated")
+        member = await _membership(community_id, user["id"])
+        # Pending and declined callers still have a request on file. A hard
+        # 403 hid that and made the review loop look like the club did not exist.
+        if (member or {}).get("status") in {"pending", "rejected"}:
+            return await _community_view(community, user["id"], redacted=True)
         await _active_member(community_id, user["id"])
     return await _community_view(community, user["id"] if user else None)
 
@@ -625,7 +698,45 @@ async def _activate(
     await db.community_members.replace_one(
         {"community_id": community_id, "user_id": user["id"]}, membership, upsert=True
     )
+    if membership["status"] == "pending":
+        await _notify_join_request(community, user)
     return clean(membership), True
+
+
+async def _notify_join_request(community: dict, requester: dict) -> None:
+    """Tell the people who can approve a join. Repeat requests on the same
+    club collapse in `notifications.notify` for a day, so leave-and-rejoin
+    does not stack a new row on an unread one."""
+    community_id = community["id"]
+    recipients: list[str] = []
+    async for row in db.community_members.find(
+        {"community_id": community_id, "status": "active", "role": {"$in": ["owner", "moderator"]}},
+        {"_id": 0, "user_id": 1},
+    ):
+        recipients.append(row["user_id"])
+    manager_roles = [
+        role["id"]
+        for role in await _roles(community_id)
+        if permissions.has(int(role.get("permissions") or 0), permissions.MANAGE_CHANNEL)
+    ]
+    if manager_roles:
+        async for row in db.community_members.find(
+            {"community_id": community_id, "status": "active", "role_ids": {"$in": manager_roles}},
+            {"_id": 0, "user_id": 1},
+        ):
+            recipients.append(row["user_id"])
+    name = requester.get("full_name") or "Someone"
+    seen: dict[str, None] = {}
+    for user_id in recipients:
+        if user_id in seen:
+            continue
+        seen[user_id] = None
+        await notifications.notify(
+            user_id, notifications.JOIN_REQUEST, actor=requester,
+            title=f"{name} asked to join {community['name']}",
+            target_type="community", target_id=community_id,
+            metadata={"manage": True},
+        )
 
 
 @router.post("/communities/{community_id}/join")

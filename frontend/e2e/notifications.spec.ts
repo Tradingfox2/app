@@ -46,6 +46,24 @@ test("the unread tab hides what has already been read", async ({ page }) => {
   await expect(page.getByTestId("notification-n-2")).toHaveCount(0);
 });
 
+test("a join request opens the club's manage screen", async ({ page }) => {
+  const row = notification("n-join", {
+    type: "join_request", title: "Member One asked to join Iron Club", body: "",
+    metadata: { target_type: "community", target_id: "c-1", manage: true, actor_id: "u-3" },
+  });
+  await fixtures(page, [row], async (route, path) => {
+    if (path === "/notifications/n-join/read") { await route.fulfill({ json: { ...row, read_at: "2026-09-13T11:00:00Z" } }); return true; }
+    if (path === "/communities/c-1") {
+      await route.fulfill({ json: { id: "c-1", name: "Iron Club", owner_id: me.id, is_public: true, join_policy: "approval", price_cents: 0, currency: "EUR", member_count: 1, owner: null, membership: { id: "m-1", role: "owner", status: "active" }, created_at: "2026-01-01T00:00:00Z" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/notifications");
+  await page.getByTestId("notification-n-join").click();
+  await expect(page).toHaveURL(/\/community\/c-1\/manage/);
+});
+
 test("opening a mention marks it read and jumps to the channel", async ({ page }) => {
   const reads: string[] = [];
   await fixtures(page, [notification("n-1")], async (route, path) => {

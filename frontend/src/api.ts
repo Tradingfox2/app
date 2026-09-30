@@ -246,6 +246,8 @@ export type Community = {
   cover_url?: string | null;
   avatar_url?: string | null;
   status?: "active" | "archived";
+  /** Private club the caller has only asked to join, or was declined. Rules and description are withheld. */
+  redacted?: boolean;
 };
 
 export const COMMUNITY_CATEGORIES = [
@@ -764,7 +766,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}/api${path}`, { ...options, headers });
   const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
+  let body: { detail?: unknown } | null = null;
+  if (text) {
+    try {
+      body = JSON.parse(text) as { detail?: unknown };
+    } catch {
+      body = null;
+    }
+  }
   if (!res.ok) {
     const msg = body?.detail || `Request failed: ${res.status}`;
     const error = new Error(typeof msg === "string" ? msg : JSON.stringify(msg)) as Error & { status: number };
@@ -884,8 +893,8 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
-  communities: (scope: "discover" | "mine" = "discover", options: { category?: CommunityCategory | null; offset?: number } = {}) =>
-    request<Community[]>(`/communities?scope=${scope}${options.category ? `&category=${options.category}` : ""}${options.offset ? `&offset=${options.offset}` : ""}`),
+  communities: (scope: "discover" | "mine" = "discover", options: { category?: CommunityCategory | null; offset?: number; sort?: "members" | "trending" } = {}) =>
+    request<Community[]>(`/communities?scope=${scope}${options.category ? `&category=${options.category}` : ""}${options.offset ? `&offset=${options.offset}` : ""}${options.sort ? `&sort=${options.sort}` : ""}`),
   archivedCommunities: () => request<Community[]>("/communities-archived"),
   restoreCommunity: (id: string) => request<Community>(`/communities/${id}/restore`, { method: "POST" }),
   transferCommunity: (id: string, memberId: string) =>

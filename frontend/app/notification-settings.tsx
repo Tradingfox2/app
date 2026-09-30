@@ -23,6 +23,7 @@ const TYPES: [string, string][] = [
   ["direct_message", "Direct messages"],
   ["live_session", "Live sessions you signed up for"],
   ["program_adopted", "Members starting your programs"],
+  ["join_request", "Join requests for your clubs"],
 ];
 
 /**

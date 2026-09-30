@@ -62,6 +62,60 @@ test("discovery failure is visible, retry restores content and tabs fit", async 
   await expect(page).toHaveURL(/\/channel\/fixture-channel/);
 });
 
+test("discover requests real trending and coaches name what the sort counts", async ({ page }) => {
+  const sorts: string[] = [];
+  await fixtures(page, async (route, path) => {
+    if (path !== "/communities") return false;
+    const sort = new URL(route.request().url()).searchParams.get("sort");
+    if (sort) sorts.push(sort);
+    return false;
+  });
+  await page.goto("/community");
+  await page.getByTestId("community-tab-discover").click();
+  await expect(page.getByText("New members in the last 14 days.", { exact: true })).toBeVisible();
+  expect(sorts).toContain("trending");
+  await page.getByTestId("community-tab-coaches").click();
+  await expect(page.getByTestId("coaches-basis")).toHaveText("Athletes in active public clubs. The coach is not counted.");
+});
+
+test("an athlete without a club is pointed at joining or starting one", async ({ page }) => {
+  await fixtures(page, async (route, path) => {
+    if (path === "/auth/me") {
+      await route.fulfill({ json: { ...user, id: "fixture-athlete", role: "athlete", coach_status: "not_applied", full_name: "Fixture Athlete" } });
+      return true;
+    }
+    if (path === "/communities" && new URL(route.request().url()).searchParams.get("scope") === "mine") {
+      await route.fulfill({ json: [] });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community");
+  await expect(page.getByTestId("community-primary-cta")).toHaveText("FIND A CLUB");
+  await expect(page.getByText("BECOME A COACH", { exact: true })).toHaveCount(0);
+  await page.getByTestId("community-primary-cta").click();
+  await expect(page.getByTestId("community-tab-discover")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("community-start-club")).toBeVisible();
+});
+
+test("an athlete who already has a club can still become a coach", async ({ page }) => {
+  const joined = { ...community, membership: { id: "m-1", community_id: community.id, user_id: "fixture-athlete", role: "member", status: "active", entitlement_source: "free", joined_at: "2026-09-01T12:00:00Z" } };
+  await fixtures(page, async (route, path) => {
+    if (path === "/auth/me") {
+      await route.fulfill({ json: { ...user, id: "fixture-athlete", role: "athlete", coach_status: "not_applied", full_name: "Fixture Athlete" } });
+      return true;
+    }
+    if (path === "/communities" && new URL(route.request().url()).searchParams.get("scope") === "mine") {
+      await route.fulfill({ json: [joined] });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community");
+  await expect(page.getByTestId("community-primary-cta")).toHaveText("BECOME A COACH");
+  await expect(page.getByTestId("community-start-club")).toHaveCount(0);
+});
+
 test("ranking coach rows without a person id stay disabled", async ({ page }) => {
   await fixtures(page, async (route, path) => {
     if (path !== "/community-rankings") return false;
