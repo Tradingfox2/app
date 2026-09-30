@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { api, type Community } from "@/src/api";
+import { track } from "@/src/analytics";
 import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
 import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
 import { colors, radius, spacing } from "@/src/theme";
@@ -356,7 +357,13 @@ export default function WorkoutLogger() {
         setShareError(t("Finish the workout before sharing it"));
         return;
       }
-      await api.publish(shareBody(id, audience));
+      const post = await api.publish(shareBody(id, audience));
+      track("post_created", {
+        post_id: post.id,
+        has_media: false,
+        has_poll: false,
+        ...(audience.kind === "club" ? { community_id: audience.id } : {}),
+      });
       router.replace("/community");
     } catch (cause) {
       setShareError(cause instanceof Error ? cause.message : t("Something went wrong"));

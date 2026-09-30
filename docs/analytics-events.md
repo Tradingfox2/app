@@ -7,6 +7,14 @@ metric.
 
 **Live source of truth is the MongoDB collection `analytics_events`: FastAPI/Motor writes it and the admin rollup reads it.** There is no Supabase migration for this collection and no runtime write to Postgres. SQLAlchemy and Alembic are not used.
 
+Live session start, join, and end are written only there, from the server (`analytics.record`, source `server`). `insight_events` is not written anymore. `insights.emit` ignores the call so a leftover caller cannot open a second log. Old `insight_events` rows are history; nothing in the product reads them.
+
+These screens stay on their own documents, not on `analytics_events`:
+
+- Community Insights (`GET /communities/{id}/insights`) counts memberships and messages.
+- The partner dashboard counts active members, pending requests, and owned communities.
+- The home training week card (tonnage, sets, streak) counts workouts. It is not `workout_completed`.
+
 ## Envelope
 
 Every stored row has these fields:
@@ -19,7 +27,7 @@ Every stored row has these fields:
 | `actor_id` | yes | Authenticated user id. The body cannot set this. |
 | `role` | no | Product role at ingest time: `athlete`, `coach`, or `admin`. |
 | `session_id` | no | Client session id, 8–64 letters, digits, `_` or `-`. |
-| `source` | yes | `client` for `POST /api/events`, `server` for a future API-side emit. |
+| `source` | yes | `client` for `POST /api/events`, `server` for `analytics.record` inside the API. |
 | `props` | yes | Allow-listed scalars only. Unknown keys are dropped. |
 
 `role` on the row is the product role (`users.role`), not `staff_role`.
@@ -33,18 +41,21 @@ health data are not accepted.
 | Name | Properties | Who emits | Wired in this change |
 |---|---|---|---|
 | `screen_view` | `screen` (route name, no query string) | Client, on navigation. Owner: screenwright. | Taxonomy only |
-| `ticket_created` | `ticket_id` | Client or server when a support ticket is created. Owner: opsdesk. | Taxonomy only. No ticket collection exists yet. |
-| `ticket_replied` | `ticket_id` | Client or server when staff or the member replies. Owner: opsdesk. | Taxonomy only. |
-| `post_created` | `post_id`, `has_media`, `has_poll`, `community_id` (omit when the post is public) | Client, after `POST /api/posts` succeeds. | **Yes.** Feed composer in `frontend/src/components/social/feed.tsx` calls `track("post_created", …)`. |
+| `ticket_created` | `ticket_id` | Client, after `POST /api/tickets` returns an id. Owner: opsdesk. | **Yes.** `frontend/src/components/support/ticket-form.tsx` calls `track("ticket_created", …)`. The opening note is not also `ticket_replied`. |
+| `ticket_replied` | `ticket_id` | Client, after a member or staff reply succeeds. Owner: opsdesk. | **Yes.** Member replies in `ticket-detail.tsx` and staff replies in `frontend/app/admin/index.tsx`. |
+| `post_created` | `post_id`, `has_media`, `has_poll`, `community_id` (omit when the post is public) | Client, after `POST /api/posts` succeeds. | **Yes.** Feed composer in `frontend/src/components/social/feed.tsx`, and workout share in `frontend/app/workout/[id].tsx`, each call `track("post_created", …)` once. |
 | `post_shared` | `post_id`, `channel` (`system_share`, `copy`, `x`, `facebook`, `whatsapp`, `linkedin`) | Client, after a share succeeds. Owner: socialgraph. | **Yes.** `frontend/src/share.ts` calls `track("post_shared", { post_id, channel })` when the system sheet completes (`system_share`), a copy succeeds (`copy`), or a network composer opens. Dismiss, cancel, and failure do not emit. |
-| `live_session_started` | `session_id`, `channel_id` | Server, inside `start_live_session`, source `server`. Owner: community. | Taxonomy only |
-| `live_session_joined` | `session_id` | Client or server when a member opens the join link or RSVPs into a live session. Owner: community. | Taxonomy only |
+| `live_session_started` | `session_id`, `channel_id` | Server, inside `start_live_session`, source `server`. Owner: community. | **Yes.** `analytics.record` from `_emit_live`. Not written to `insight_events`. |
+| `live_session_joined` | `session_id` | Server, the first time a member joins a live room. Owner: community. | **Yes.** One row per member per room. A second join does not emit. |
+| `live_session_ended` | `session_id`, `channel_id` | Server, inside `end_live_session`, source `server`. Owner: community. | **Yes.** Cancelling a room that never went live does not emit. |
 | `story_created` | `story_id`, `has_media`, `highlight` | Client, after `POST /api/stories` succeeds. Owner: personal space. | **Yes.** The story form in `frontend/app/story-new.tsx` calls `track("story_created", …)`. |
+| `workout_completed` | `workout_id` | Server, inside `POST /workouts/{id}/finish`, source `server`, only when `ended_at` was empty. | **Yes.** A second finish does not emit. The client does not also call `track`. |
 
-Emit each occurrence once. The feed composer is the client path. Do not
-also record `post_created` on the server for that same publish, or the
-rollup will double-count. A future server emit (live session start) should
-call `analytics.record(..., source="server")` and not also call `track`.
+Emit each occurrence once. The feed composer and the workout share screen
+are the client paths for `post_created`. Do not also record `post_created`
+on the server for that same publish, or the rollup will double-count.
+Server emits (`live_session_*`, `workout_completed`) call
+`analytics.record(..., source="server")` and do not also call `track`.
 
 `community_id` and ids are strings up to 80 printable characters. `has_media`
 and `has_poll` are booleans.
@@ -121,9 +132,10 @@ Publishing from the community feed composer:
 2. On success, `track("post_created", { post_id, has_media, has_poll, community_id? })` runs.
 3. A staff member opens **Staff console → Analytics** and the `post_created` counts come from `GET /api/admin/analytics`.
 
-Workout share (`frontend/app/workout/[id].tsx`) also creates a post and is
-not instrumented. That call site is a socialgraph handoff: use the same
-`track("post_created", …)` after a successful publish, still once.
+Workout share (`frontend/app/workout/[id].tsx`) creates a post and then
+calls the same `track("post_created", { post_id, has_media: false, has_poll: false })`
+once. Finish itself is the server event `workout_completed`, not a second
+`post_created`.
 
 ## Manual check
 
@@ -160,14 +172,16 @@ cd backend && python -m pytest tests/test_analytics.py -q
 - **schemaforge** — live store is Mongo `analytics_events` only. No SQL migration in this change. Other product tables keep their existing Supabase mirrors; this event log does not, because nothing applies or queries a Postgres copy.
 - **apismith** — ingest style is `POST /api/events` (single or `events[]`), actor from the token, idempotent `event_id`.
 - **screenwright** — emit `screen_view` from navigation via `track`. Do not put query parameters in `screen`.
-- **socialgraph** — `post_created` is live on the feed composer. `post_shared` is live in `frontend/src/share.ts` (feed menu, share bar, and post detail). Workout share (`frontend/app/workout/[id].tsx`) still needs `track("post_created", …)` after a successful publish.
-- **community** — emit `live_session_started` with `analytics.record(..., source="server")` from `start_live_session`, and `live_session_joined` from the join / RSVP path. One emit per occurrence.
-- **opsdesk** — the Analytics tab lives on `/admin`. When a ticket model exists, emit `ticket_created` and `ticket_replied`. Do not point this tab at `admin/overview` activity counts; those count domain documents, not events.
+- **socialgraph** — `post_created` is live on the feed composer and on workout share. `post_shared` is live in `frontend/src/share.ts` (feed menu, share bar, and post detail).
+- **community** — `live_session_started`, `live_session_joined`, and `live_session_ended` are server emits on `analytics_events`. Do not write them to `insight_events`.
+- **opsdesk** — the Analytics tab lives on `/admin`. `ticket_created` and `ticket_replied` are client emits. Do not point this tab at `admin/overview` activity counts; those count domain documents, not events.
+- **glossary** — metric chips on staff Analytics, community Insights, and the partner dashboard use `MetricGlossary` (`frontend/src/components/metric-glossary.tsx`). The sentences live in `frontend/src/analytics-locales.ts` (`METRIC_GLOSSARY`). Hover, long-press, or a tap shows the sentence. Those Insights and partner numbers are still domain counts; the glossary says so.
 
 ## What already existed (and why it was not reused as the event log)
 
 - `GET /api/dashboard` is the athlete home snapshot (training load, streak). It is not a product event stream.
 - `GET /api/admin/overview` `activity` counts `workouts`, `posts`, and `messages` documents in the last 24 hours. Those collections stay the source for that card. They are not `analytics_events`.
-- `GET /api/communities/{id}/insights` and `GET /api/partner/dashboard` are per-community and per-coach operational counts.
+- `GET /api/communities/{id}/insights` and `GET /api/partner/dashboard` are per-community and per-coach operational counts. They do not read `analytics_events` or `insight_events`.
+- `insight_events` used to receive live start/join/end, including the session title. That write is retired. The same lifecycle is `live_session_started`, `live_session_joined`, and `live_session_ended` on `analytics_events`, with ids only.
 - There was no `analytics_events` collection, no event taxonomy, and no `track` helper.
 - `Math.random` in `frontend/src/offline-queue.ts` builds a local offline id. It is not a metric and was left alone.

@@ -97,8 +97,8 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
 
 test("analytics tab renders the counts the API returned", async ({ page }) => {
   const windows = {
-    "24h": { screen_view: 0, ticket_created: 0, ticket_replied: 0, post_created: 3, post_shared: 0, live_session_started: 0, live_session_joined: 0 },
-    "7d": { screen_view: 1, ticket_created: 0, ticket_replied: 0, post_created: 5, post_shared: 0, live_session_started: 0, live_session_joined: 0 },
+    "24h": { screen_view: 0, ticket_created: 0, ticket_replied: 0, post_created: 3, post_shared: 0, live_session_started: 0, live_session_joined: 0, live_session_ended: 0, story_created: 0, workout_completed: 0 },
+    "7d": { screen_view: 1, ticket_created: 0, ticket_replied: 0, post_created: 5, post_shared: 0, live_session_started: 0, live_session_joined: 0, live_session_ended: 0, story_created: 0, workout_completed: 0 },
   };
   await fixtures(page, support, async (route, path) => {
     if (path === "/admin/overview") {
@@ -126,6 +126,12 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
   await expect(page.getByTestId("analytics-count-post_created-24h")).toHaveText("3");
   await expect(page.getByTestId("analytics-count-post_created-7d")).toHaveText("5");
   await expect(page.getByTestId("analytics-count-screen_view-7d")).toHaveText("1");
+  const postsChip = page.getByTestId("analytics-metric-post_created-24h");
+  await expect(postsChip).toHaveAttribute("aria-label", /Feed posts published in this window/);
+  await postsChip.hover();
+  await expect(page.getByTestId("analytics-metric-post_created-24h-glossary")).toContainText("Each publish counts once");
+  await postsChip.click();
+  await expect(page.getByTestId("analytics-metric-post_created-24h-glossary")).toContainText("Each publish counts once");
   await expect(page.getByText("Counts are read from stored events. Nothing on this page is estimated.", { exact: true })).toBeVisible();
 });
 

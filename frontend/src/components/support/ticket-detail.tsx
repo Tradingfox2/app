@@ -80,6 +80,7 @@ export function SupportTicketDetail({
       setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]);
       setDraft("");
       setReplySent(true);
+      track("ticket_replied", { ticket_id: ticketId });
     } catch (cause) {
       setReplyError(cause instanceof Error ? cause.message : t("Could not send your reply"));
     } finally {

@@ -115,5 +115,39 @@ def test_three_events_aggregate_and_ignore_domain_rows(monkeypatch):
         assert summary["windows"]["24h"]["ticket_created"] == 0
         assert summary["windows"]["7d"]["live_session_started"] == 0
         assert set(summary["windows"]["24h"]) == set(analytics.EVENT_NAMES)
+        assert summary["windows"]["7d"]["workout_completed"] == 0
+        assert summary["windows"]["7d"]["live_session_ended"] == 0
+
+    run_isolated(scenario)
+
+
+def test_finishing_a_workout_records_one_completion(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(server, "db", db)
+        started = datetime.now(timezone.utc) - timedelta(minutes=20)
+        await db.workouts.insert_one({
+            "id": "w-1", "user_id": "athlete-1", "title": "Squat day",
+            "started_at": started, "ended_at": None, "duration_sec": None,
+        })
+        athlete = account("athlete-1")
+        with pytest.raises(HTTPException) as missing:
+            await server.finish_workout("missing", athlete)
+        assert missing.value.status_code == 404
+        with pytest.raises(HTTPException) as denied:
+            await server.finish_workout("w-1", account("someone-else"))
+        assert denied.value.status_code == 403
+
+        first = await server.finish_workout("w-1", athlete)
+        assert first["ended_at"] is not None and first["duration_sec"] >= 20 * 60 - 5
+        second = await server.finish_workout("w-1", athlete)
+        assert second["ended_at"] == first["ended_at"]
+        assert second["duration_sec"] == first["duration_sec"]
+        rows = [row async for row in db.analytics_events.find({"name": "workout_completed"}, {"_id": 0})]
+        assert len(rows) == 1
+        assert rows[0]["source"] == "server"
+        assert rows[0]["actor_id"] == "athlete-1"
+        assert rows[0]["role"] == "athlete"
+        assert rows[0]["props"] == {"workout_id": "w-1"}
+        assert "title" not in rows[0]["props"]
 
     run_isolated(scenario)

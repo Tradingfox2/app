@@ -234,6 +234,8 @@ test("moderators time members out, unban and clear the report queue", async ({ p
   await page.goto("/community/c-1/manage");
   await expect(page.getByTestId("insights")).toContainText("12");
   await expect(page.getByTestId("insights")).toContainText("40");
+  await page.getByTestId("insights-metric-messages_7d").click();
+  await expect(page.getByTestId("insights-metric-messages_7d-glossary")).toContainText("Removed messages are not included");
   await expect(page.getByTestId("insights-chart-label")).toContainText("5 messages");
   await page.getByTestId("remove-reported-rep-1").click();
   await expect.poll(() => calls).toContainEqual(["PATCH", "/communities/c-1/reports/rep-1", { resolution: "content_removed", note: "" }]);

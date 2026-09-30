@@ -176,6 +176,10 @@ test("creating a ticket posts the form and opens the id the API returned", async
   await expect(page.getByTestId("support-status")).toHaveText("Open · Billing");
   await expect(page.getByTestId("support-message-m-open")).toContainText("Charged twice for Pro");
   expect(posts).toEqual([{ subject: "Cannot update my card", category: "billing", body: "Charged twice for Pro" }]);
+  await expect.poll(() => state.events.some(event => {
+    const body = event as { name?: string; props?: { ticket_id?: string } };
+    return body.name === "ticket_created" && body.props?.ticket_id === "t-new";
+  })).toBe(true);
   await expect.poll(() => viewedScreens(state.events)).toEqual(expect.arrayContaining(["support", "support/new", "support/[id]"]));
   expect(viewedScreens(state.events).some(screen => screen.includes("t-new") || screen.includes("?"))).toBe(false);
 });
@@ -198,6 +202,7 @@ test("the list shows tickets from the API and a reply posts onto the thread", as
     messages: {
       "t-1": [message("m-1", "t-1", "It closes when I scan the gym QR.", "user"), message("m-2", "t-1", "We are looking at the camera path.", "staff")],
     },
+    events: [] as { name?: string; props?: { ticket_id?: string } }[],
   };
   await fixtures(page, state, async (route, path, method) => {
     if (path === "/tickets" && method === "GET") listUrls.push(route.request().url());
@@ -221,6 +226,7 @@ test("the list shows tickets from the API and a reply posts onto the thread", as
   await expect(page.getByTestId("support-message-m-reply")).toContainText("It still happens on Android.");
   await expect(page.getByTestId("support-reply-success")).toHaveText("Reply sent.");
   expect(replies).toEqual([{ body: "It still happens on Android." }]);
+  await expect.poll(() => state.events.some(event => event.name === "ticket_replied" && event.props?.ticket_id === "t-1")).toBe(true);
 });
 
 test("a failed ticket list shows the API detail and retry recovers", async ({ page }) => {

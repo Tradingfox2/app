@@ -49,6 +49,7 @@ export function SupportTicketForm({
         setError(t("The server did not return a ticket id."));
         return;
       }
+      track("ticket_created", { ticket_id: created.id });
       onCreated(created.id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("Could not send your ticket"));

@@ -381,6 +381,7 @@ async def lifespan(app: FastAPI):
     await db.live_rsvps.create_index([("session_id", 1), ("user_id", 1)], unique=True)
     await db.live_participants.create_index([("session_id", 1), ("user_id", 1)], unique=True)
     await db.live_messages.create_index([("session_id", 1), ("created_at", 1)])
+    # Historical only. Live start/join/end now go to analytics_events.
     await db.insight_events.create_index([("session_id", 1), ("created_at", -1)])
     await db.insight_events.create_index([("name", 1), ("created_at", -1)])
     await db.post_saves.create_index([("user_id", 1), ("post_id", 1)], unique=True)
@@ -713,12 +714,28 @@ async def finish_workout(workout_id: str, user: dict = Depends(current_user)):
         raise HTTPException(404, "Not found")
     if not await can_access_user_data(user["id"], w["user_id"]):
         raise HTTPException(403, "Not allowed")
+    if w.get("ended_at"):
+        return clean(w)
     ended = now()
     duration = int((ended - w["started_at"]).total_seconds()) if w.get("started_at") else 0
-    await db.workouts.update_one(
-        {"id": workout_id}, {"$set": {"ended_at": ended, "duration_sec": duration}}
+    updated = await db.workouts.find_one_and_update(
+        {"id": workout_id, "ended_at": None},
+        {"$set": {"ended_at": ended, "duration_sec": duration}},
+        projection={"_id": 0},
+        return_document=True,
     )
-    updated = await db.workouts.find_one({"id": workout_id}, {"_id": 0})
+    if not updated:
+        return clean(await db.workouts.find_one({"id": workout_id}, {"_id": 0}))
+    try:
+        await analytics.record(
+            name="workout_completed",
+            actor_id=user["id"],
+            source="server",
+            role=analytics.product_role(user),
+            props={"workout_id": workout_id},
+        )
+    except Exception as exc:  # noqa: BLE001 - analytics must not fail the finish
+        logger.warning("workout_completed for %s was not stored: %s", workout_id, exc)
     return clean(updated)
 
 
