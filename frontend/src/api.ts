@@ -447,6 +447,12 @@ export type LiveSession = {
   realtime_channel?: string;
 };
 
+/** A session on the Home and Community LIVE NOW strips. */
+export type LiveNowSession = LiveSession & {
+  community_name: string;
+  channel_name: string;
+};
+
 export type LiveParticipant = {
   user_id: string;
   joined_at: string;
@@ -941,6 +947,7 @@ export const api = {
     request<CommunityMessage>(`/channels/${channelId}/programs`, { method: "POST", body: JSON.stringify({ program_id: programId, note }) }),
   adoptProgram: (messageId: string) => request<{ id: string }>(`/messages/${messageId}/adopt-program`, { method: "POST" }),
   liveSessions: (channelId: string) => request<{ upcoming: LiveSession[]; past: LiveSession[] }>(`/channels/${channelId}/live-sessions`),
+  liveNow: () => request<LiveNowSession[]>("/live-now"),
   scheduleLiveSession: (channelId: string, body: { title: string; description?: string; starts_at: string; duration_min?: number; join_url?: string | null }) =>
     request<LiveSession>(`/channels/${channelId}/live-sessions`, { method: "POST", body: JSON.stringify(body) }),
   rsvpLive: (sessionId: string) => request<LiveSession>(`/live-sessions/${sessionId}/rsvp`, { method: "POST" }),

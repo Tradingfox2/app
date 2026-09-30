@@ -249,6 +249,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     Stay: "Rester",
     Leave: "Quitter",
     "Could not load your profile.": "Impossible de charger votre profil.",
+    "LIVE NOW": "EN DIRECT",
+    EARLIER: "PLUS TÔT",
+    ENDED: "TERMINÉE",
+    CANCELLED: "ANNULÉE",
   },
   de: {
     "Open join": "Offener Beitritt",
@@ -277,6 +281,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     Stay: "Bleiben",
     Leave: "Verlassen",
     "Could not load your profile.": "Dein Profil konnte nicht geladen werden.",
+    "LIVE NOW": "JETZT LIVE",
+    EARLIER: "FRÜHER",
+    ENDED: "BEENDET",
+    CANCELLED: "ABGESAGT",
   },
   es: {
     "Open join": "Acceso libre",
@@ -305,6 +313,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     Stay: "Quedarme",
     Leave: "Salir",
     "Could not load your profile.": "No se pudo cargar tu perfil.",
+    "LIVE NOW": "EN DIRECTO",
+    EARLIER: "ANTERIORES",
+    ENDED: "TERMINADA",
+    CANCELLED: "CANCELADA",
   },
   it: {
     "Open join": "Accesso libero",
@@ -333,6 +345,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     Stay: "Resta",
     Leave: "Esci",
     "Could not load your profile.": "Impossibile caricare il tuo profilo.",
+    "LIVE NOW": "IN DIRETTA",
+    EARLIER: "PRIMA",
+    ENDED: "TERMINATA",
+    CANCELLED: "ANNULLATA",
   },
 };
 

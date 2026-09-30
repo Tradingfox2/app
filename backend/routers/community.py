@@ -2569,13 +2569,105 @@ async def _emit_live(name: str, session: dict, actor_id: str) -> None:
     )
 
 
+def _live_notice(session: dict) -> dict:
+    return {"channel_id": session["channel_id"], "session_id": session["id"]}
+
+
 async def _tell_rsvps(session: dict, actor: dict, title: str) -> None:
+    """RSVP-only notices (cancel). Going live uses `_tell_channel` instead."""
     async for row in db.live_rsvps.find({"session_id": session["id"]}, {"_id": 0, "user_id": 1}):
         await notifications.notify(
             row["user_id"], notifications.LIVE_SESSION, actor=actor, title=title,
             body=session["title"], target_type="channel", target_id=session["channel_id"],
-            metadata={"channel_id": session["channel_id"], "session_id": session["id"]},
+            metadata=_live_notice(session),
         )
+
+
+async def _tell_channel(session: dict, channel: dict, actor: dict, title: str) -> None:
+    """Tell every member who can see the channel that a session is live.
+
+    `notifications.notify` still skips the host, blocked pairs, and anyone who
+    switched off the `live_session` preference.
+    """
+    for user_id in await _channel_audience(channel):
+        await notifications.notify(
+            user_id, notifications.LIVE_SESSION, actor=actor, title=title,
+            body=session["title"], target_type="channel", target_id=session["channel_id"],
+            metadata=_live_notice(session),
+        )
+
+
+async def _with_place_names(sessions: list[dict], viewer_id: str) -> list[dict]:
+    if not sessions:
+        return []
+    views = await _live_view(sessions, viewer_id)
+    channel_ids = list({row["channel_id"] for row in views})
+    community_ids = list({row["community_id"] for row in views})
+    channels = {
+        row["id"]: row.get("name") or ""
+        async for row in db.channels.find({"id": {"$in": channel_ids}}, {"_id": 0, "id": 1, "name": 1})
+    }
+    communities = {
+        row["id"]: row.get("name") or ""
+        async for row in db.communities.find({"id": {"$in": community_ids}}, {"_id": 0, "id": 1, "name": 1})
+    }
+    for view in views:
+        view["channel_name"] = channels.get(view["channel_id"]) or ""
+        view["community_name"] = communities.get(view["community_id"]) or ""
+    return views
+
+
+@router.get("/live-now")
+async def list_live_now(user: dict = Depends(current_user)):
+    """Sessions that are live and that this member can join.
+
+    Active membership is not enough: a channel overwrite can hide the room,
+    and those sessions stay off Home and Community.
+    """
+    community_ids = list({
+        row["community_id"]
+        async for row in db.community_members.find(
+            {"user_id": user["id"], "status": "active"},
+            {"_id": 0, "community_id": 1},
+        )
+    })
+    if not community_ids:
+        return []
+    sessions = [
+        row async for row in db.live_sessions.find(
+            {"status": "live", "community_id": {"$in": community_ids}},
+            {"_id": 0},
+        ).sort("started_at", -1).limit(30)
+    ]
+    if not sessions:
+        return []
+    channels = {
+        row["id"]: row
+        async for row in db.channels.find(
+            {"id": {"$in": list({row["channel_id"] for row in sessions})}, "status": "active", "kind": "live"},
+            {"_id": 0},
+        )
+    }
+    roles_cache: dict[str, list] = {}
+    community_cache: dict[str, dict] = {}
+    member_cache: dict[str, dict] = {}
+    visible: list[dict] = []
+    for session in sessions:
+        channel = channels.get(session["channel_id"])
+        if not channel:
+            continue
+        community_id = session["community_id"]
+        if community_id not in member_cache:
+            member_cache[community_id] = await _membership(community_id, user["id"]) or {}
+            community_cache[community_id] = await db.communities.find_one({"id": community_id}, {"_id": 0}) or {}
+            roles_cache[community_id] = await _roles(community_id)
+        member = member_cache[community_id]
+        if member.get("status") != "active":
+            continue
+        mask = permissions.resolve(member, community_cache[community_id], channel, roles_cache[community_id])
+        if permissions.has(mask, permissions.VIEW_CHANNEL):
+            visible.append(session)
+    return await _with_place_names(visible, user["id"])
 
 
 @router.post("/channels/{channel_id}/live-sessions", status_code=201)
@@ -2648,7 +2740,7 @@ async def start_live_session(session_id: str, user: dict = Depends(current_user)
         {"$set": {"status": "live", "started_at": now()}}, projection={"_id": 0}, return_document=True)
     if not updated:
         raise HTTPException(409, "This session already started")
-    await _tell_rsvps(updated, user, f"{updated['title']} is live now")
+    await _tell_channel(updated, channel, user, f"{updated['title']} is live now")
     await _emit_live("live_session_started", updated, user["id"])
     payload = {"type": "live.started", "session_id": session_id}
     await realtime.publish(realtime.chat_channel(channel["id"]), payload)

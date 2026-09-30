@@ -11,6 +11,7 @@ import { useI18n } from "@/src/i18n";
 import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
 import { Avatar } from "@/src/components/social/avatar";
 import { LISTED_PUBLICLY_LABEL, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
+import { LiveNowStrip } from "@/src/components/live-now-strip";
 
 const DISCOVER_PAGE = 50;
 
@@ -122,6 +123,8 @@ export default function CommunityScreen() {
             <Text style={styles.primaryActionText}>{t(isCoach ? "CREATE" : "BECOME A COACH")}</Text>
           </Pressable>
         </View>
+
+        <LiveNowStrip inset />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {(["feed", "discover", "mine", "coaches", "rankings"] as Tab[]).map((item) => (
