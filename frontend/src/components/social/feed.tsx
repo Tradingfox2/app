@@ -288,6 +288,10 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen,
     apply({ repost_count: shown.repost_count + 1 });
     setQuoting(null); onReposted(created);
   });
+  const toggleKudos = () => guard(async () => {
+    const result = shown.kudos_by_me ? await api.removeKudos(shown.id) : await api.giveKudos(shown.id);
+    apply({ kudos_by_me: result.kudos, kudos_count: result.kudos_count });
+  });
   const toggleSave = () => guard(async () => {
     const result = shown.saved_by_me ? await api.unsavePost(shown.id) : await api.savePost(shown.id);
     apply({ saved_by_me: result.saved });
@@ -339,7 +343,7 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen,
         </View>
       </View> : shown.content ? <RichText content={shown.content} mentions={shown.mentions} style={styles.content} /> : null}
       {shown.poll ? <PollBlock poll={shown.poll} disabled={busy} onVote={index => void vote(index)} /> : null}
-      {shown.workout_summary ? <WorkoutCard summary={shown.workout_summary} /> : null}
+      {shown.workout_summary ? <WorkoutCard summary={shown.workout_summary} kudosCount={shown.kudos_count ?? 0} kudosMine={!!shown.kudos_by_me} busy={busy} onKudos={() => void toggleKudos()} /> : null}
       {shown.media?.length ? <MediaGrid media={shown.media} testID={`post-media-${shown.id}`} /> : null}
       {shown.link_preview ? <LinkCard preview={shown.link_preview} /> : null}
       {quoted ? <QuotedPost post={quoted} /> : null}
@@ -548,7 +552,7 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
 }
 
 /** A shared session. Numbers are the snapshot taken when it was posted. */
-function WorkoutCard({ summary }: { summary: WorkoutSummary }) {
+function WorkoutCard({ summary, kudosCount, kudosMine, busy, onKudos }: { summary: WorkoutSummary; kudosCount: number; kudosMine: boolean; busy: boolean; onKudos: () => void }) {
   const { t, formatNumber } = useI18n();
   const minutes = summary.duration_sec ? Math.round(summary.duration_sec / 60) : null;
   const stats: [string, string][] = [
@@ -562,6 +566,10 @@ function WorkoutCard({ summary }: { summary: WorkoutSummary }) {
     <View style={styles.workoutHead}><Ionicons name="barbell" size={16} color={colors.brand} /><Text style={styles.workoutTitle}>{summary.title}</Text></View>
     <View style={styles.workoutStats}>{stats.map(([value, label]) => <View key={label} style={styles.workoutStat}><Text style={styles.workoutValue}>{value}</Text><Text style={styles.workoutLabel}>{label}</Text></View>)}</View>
     {summary.exercises.length ? <Text style={styles.workoutExercises} numberOfLines={2}>{summary.exercises.join(" · ")}{more > 0 ? ` +${more}` : ""}</Text> : null}
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Kudos")} accessibilityState={{ selected: kudosMine }} testID={`post-kudos-${summary.workout_id}`} disabled={busy} onPress={onKudos} style={styles.kudos}>
+      <Ionicons name={kudosMine ? "ribbon" : "ribbon-outline"} size={16} color={kudosMine ? colors.brand : colors.textMuted} />
+      <Text style={[styles.kudosText, kudosMine && styles.actionActive]}>{t("Kudos")} · {formatNumber(kudosCount)}</Text>
+    </Pressable>
   </View>;
 }
 
@@ -578,6 +586,8 @@ const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding
   publish: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" }, publishText: { ...type.button, fontSize: 12 },
   error: { color: colors.error, fontSize: 12 },
   audienceHint: { color: colors.textDim, fontSize: 12, lineHeight: 16 },
+  kudos: { alignSelf: "flex-start", minHeight: 36, flexDirection: "row", alignItems: "center", gap: 6 },
+  kudosText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   chip: { minHeight: 32, paddingHorizontal: spacing.md, borderRadius: 16, borderWidth: 1, borderColor: colors.border, justifyContent: "center" },
   chipOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },

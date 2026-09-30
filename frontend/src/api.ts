@@ -581,6 +581,9 @@ export type Post = {
   repost_count: number;
   liked_by_me: boolean;
   reposted_by_me: boolean;
+  /** Present on a post that shares a finished workout. */
+  kudos_count?: number;
+  kudos_by_me?: boolean;
   workout_id?: string | null;
   /** Frozen at share time — editing the log later does not change the card. */
   workout_summary?: WorkoutSummary | null;
@@ -1121,6 +1124,8 @@ export const api = {
   deletePost: (id: string) => request<void>(`/posts/${id}`, { method: "DELETE" }),
   likePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "POST" }),
   unlikePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "DELETE" }),
+  giveKudos: (id: string) => request<{ kudos: boolean; kudos_count: number }>(`/posts/${id}/kudos`, { method: "POST" }),
+  removeKudos: (id: string) => request<{ kudos: boolean; kudos_count: number }>(`/posts/${id}/kudos`, { method: "DELETE" }),
   /** With text it is a quote post; without, a plain repost. */
   repost: (id: string, content?: string) =>
     request<Post>(`/posts/${id}/repost`, { method: "POST", ...(content ? { body: JSON.stringify({ content }) } : {}) }),

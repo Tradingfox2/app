@@ -70,6 +70,56 @@ def test_a_friends_post_stays_off_the_public_feed_until_someone_follows(monkeypa
     run_isolated(scenario)
 
 
+def test_following_and_my_posts_keep_friends_posts(monkeypatch):
+    """FOLLOWING and My posts are friends surfaces: a friends-audience post
+    stays on them, and only_me stays off everyone else's FOLLOWING."""
+    async def scenario(db):
+        people = await seed(db, monkeypatch)
+        public = await social.create_post(social.PostIn(content="open session"), people["alice"])
+        friends = await social.create_post(
+            social.PostIn(content="friends only", audience="friends"), people["alice"])
+        private = await social.create_post(
+            social.PostIn(content="just me", audience="only_me"), people["alice"])
+
+        mine = [post["id"] for post in await social.feed("mine", None, 20, people["alice"])]
+        assert public["id"] in mine and friends["id"] in mine and private["id"] in mine
+
+        before = [post["id"] for post in await social.feed("following", None, 20, people["bob"])]
+        assert friends["id"] not in before and private["id"] not in before
+
+        await social.follow("alice", people["bob"])
+        following = [post["id"] for post in await social.feed("following", None, 20, people["bob"])]
+        assert public["id"] in following and friends["id"] in following
+        assert private["id"] not in following
+        friends_feed = [post["id"] for post in await social.feed("friends", None, 20, people["bob"])]
+        assert friends["id"] in friends_feed and private["id"] not in friends_feed
+        assert friends["id"] not in [post["id"] for post in await social.feed("all", None, 20, people["bob"])]
+    run_isolated(scenario)
+
+
+def test_kudos_exist_only_on_a_shared_workout(monkeypatch):
+    async def scenario(db):
+        people = await seed(db, monkeypatch)
+        await finished_workout(db)
+        plain = await social.create_post(social.PostIn(content="hello"), people["alice"])
+        with pytest.raises(HTTPException) as denied:
+            await social.give_kudos(plain["id"], people["bob"])
+        assert denied.value.status_code == 422
+
+        shared = await social.create_post(social.PostIn(content="", workout_id="w1"), people["alice"])
+        await db.post_kudos.create_index([("post_id", 1), ("user_id", 1)], unique=True)
+        first = await social.give_kudos(shared["id"], people["bob"])
+        assert first["kudos"] is True and first["kudos_count"] == 1
+        again = await social.give_kudos(shared["id"], people["bob"])
+        assert again["kudos_count"] == 1
+        page = await social.feed("all", None, 20, people["bob"])
+        row = next(post for post in page if post["id"] == shared["id"])
+        assert row["kudos_by_me"] is True and row["kudos_count"] == 1
+        cleared = await social.remove_kudos(shared["id"], people["bob"])
+        assert cleared["kudos"] is False and cleared["kudos_count"] == 0
+    run_isolated(scenario)
+
+
 def test_a_pending_follow_does_not_unlock_a_private_friends_post(monkeypatch):
     async def scenario(db):
         people = await seed(db, monkeypatch, private=("alice",))

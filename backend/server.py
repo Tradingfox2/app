@@ -354,6 +354,7 @@ async def lifespan(app: FastAPI):
     await db.posts.create_index([("author_id", 1), ("status", 1), ("created_at", -1)])
     await db.posts.create_index([("repost_of", 1), ("author_id", 1)])
     await db.post_likes.create_index([("post_id", 1), ("user_id", 1)], unique=True)
+    await db.post_kudos.create_index([("post_id", 1), ("user_id", 1)], unique=True)
     await db.post_comments.create_index([("post_id", 1), ("created_at", 1)])
     await db.follows.create_index([("follower_id", 1), ("followee_id", 1)], unique=True)
     await db.follows.create_index([("followee_id", 1)])

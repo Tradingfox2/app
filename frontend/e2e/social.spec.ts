@@ -12,7 +12,7 @@ async function fixtures(page: Page, override?: (route: Route, path: string) => P
     const path = url.pathname.replace(/^\/api/, "");
     if (override && await override(route, path)) return;
     if (path === "/auth/me") return route.fulfill({ json: me });
-    if (path === "/feed") return route.fulfill({ json: url.searchParams.get("scope") === "following" ? [] : [post] });
+    if (path === "/feed") return route.fulfill({ json: url.searchParams.get("scope") === "friends" ? [] : [post] });
     if (path === "/community-rankings") return route.fulfill({ json: { communities: [], coaches: [], users: [], channels: [], window_days: 30 } });
     if (path.startsWith("/media/files/")) return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64") });
     await route.fulfill({ json: [] });
@@ -51,7 +51,7 @@ test("feed renders posts, likes toggle from server counts and reposts are single
   // A second tap takes the repost back rather than doing nothing.
   await expect(page.getByTestId("post-post-1").getByRole("button", { name: "Undo repost", exact: true })).toBeVisible();
   expect(reposts).toBe(1);
-  await page.getByTestId("feed-scope-following").click();
+  await page.getByTestId("feed-scope-friends").click();
   await expect(page.getByText("Follow athletes and coaches to build your feed", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
@@ -91,8 +91,8 @@ test("direct messages: blocked peers show the rule, allowed peers can chat", asy
     return false;
   });
   await page.goto(`/user/${peer.id}`);
-  await expect(page.getByTestId("message-user")).toBeDisabled();
-  await expect(page.getByText(/Messaging unlocks/)).toBeVisible();
+  await expect(page.getByTestId("message-user")).toHaveCount(0);
+  await expect(page.getByTestId("message-locked")).toContainText("Messaging unlocks");
   await page.getByTestId("follow-toggle").click();
   await expect(page.getByTestId("message-user")).toBeEnabled();
   await page.getByTestId("message-user").click();

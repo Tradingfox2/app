@@ -9,6 +9,7 @@ import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Composer, PostCard, useFeed } from "@/src/components/social/feed";
+import { StoriesTray } from "@/src/components/social/stories-tray";
 import { Avatar } from "@/src/components/social/avatar";
 import { LISTED_PUBLICLY_LABEL, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
 import { LiveNowStrip } from "@/src/components/live-now-strip";
@@ -151,6 +152,7 @@ export default function CommunityScreen() {
 
         {tab === "feed" ? (
           <View testID="feed">
+            <StoriesTray />
             <Composer onPublished={feed.prepend} />
             {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
               <Ionicons name="trending-up" size={16} color={colors.brand} style={{ alignSelf: "center" }} />
@@ -159,15 +161,15 @@ export default function CommunityScreen() {
               </Pressable>)}
             </ScrollView> : null}
             <View style={styles.scopeRow}>
-              {(["all", "following", "mine"] as const).map(scope => (
+              {(["all", "friends", "mine"] as const).map(scope => (
                 <Pressable key={scope} accessibilityRole="button" {...selectedControl(feed.scope === scope)} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
-                  <Text style={[styles.scopeText, feed.scope === scope && styles.scopeTextActive]}>{t(scope === "all" ? "EVERYONE" : scope === "following" ? "FOLLOWING" : "MY POSTS")}</Text>
+                  <Text style={[styles.scopeText, feed.scope === scope && styles.scopeTextActive]}>{t(scope === "all" ? "EVERYONE" : scope === "friends" ? "Friends" : "MY POSTS")}</Text>
                 </Pressable>
               ))}
             </View>
             {feed.loading ? <ActivityIndicator color={colors.brand} style={styles.loader} /> : null}
             {feed.error ? <View accessibilityRole="alert" style={styles.list}><Text style={styles.emptyText}>{feed.error}</Text><Pressable accessibilityRole="button" onPress={() => void feed.load()} style={styles.primaryAction}><Text style={styles.primaryActionText}>{t("Retry")}</Text></Pressable></View> : null}
-            {!feed.loading && !feed.error && feed.posts.length === 0 ? <Empty icon="newspaper-outline" text={t(feed.scope === "following" ? "Follow athletes and coaches to build your feed" : "No posts yet. Share your first session.")} /> : null}
+            {!feed.loading && !feed.error && feed.posts.length === 0 ? <Empty icon="newspaper-outline" text={t(feed.scope === "friends" ? "Follow athletes and coaches to build your feed" : "No posts yet. Share your first session.")} /> : null}
             {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={feed.prepend} />)}
             {feed.hasMore ? <Pressable accessibilityRole="button" testID="feed-load-more" disabled={feed.loadingMore} onPress={() => void feed.loadMore()} style={[styles.loadMore, feed.loadingMore && { opacity: 0.5 }]}>
               {feed.loadingMore ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text>}

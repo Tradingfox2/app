@@ -14,6 +14,7 @@ const TYPES: [string, string][] = [
   ["follow_request", "Follow requests"],
   ["follow_accepted", "Accepted follow requests"],
   ["post_like", "Likes on your posts"],
+  ["post_kudos", "Kudos on your workouts"],
   ["post_comment", "Comments on your posts"],
   ["post_repost", "Reposts and quotes"],
   ["post_mention", "Mentions in posts and comments"],

@@ -24,6 +24,7 @@ FOLLOW = "follow"
 FOLLOW_REQUEST = "follow_request"
 FOLLOW_ACCEPTED = "follow_accepted"
 POST_LIKE = "post_like"
+POST_KUDOS = "post_kudos"
 POST_COMMENT = "post_comment"
 POST_REPOST = "post_repost"
 POST_MENTION = "post_mention"
@@ -40,7 +41,7 @@ JOIN_REQUEST = "join_request"
 #: Repeated events on the same object collapse into one row instead of
 #: flooding the list — "X and 4 others liked your post". Only unread rows
 #: inside this window absorb a new actor; anything older starts a fresh one.
-AGGREGATABLE = {POST_LIKE, POST_COMMENT, POST_REPOST, PROGRAM_ADOPTED, COMMENT_LIKE, DIRECT_MESSAGE, JOIN_REQUEST}
+AGGREGATABLE = {POST_LIKE, POST_KUDOS, POST_COMMENT, POST_REPOST, PROGRAM_ADOPTED, COMMENT_LIKE, DIRECT_MESSAGE, JOIN_REQUEST}
 AGGREGATION_WINDOW = timedelta(hours=24)
 
 #: `<@a1b2c3d4-...>` — what the composer emits when a member picks a suggestion.
@@ -91,7 +92,7 @@ MANDATORY = {MEMBERSHIP, COACH_DECISION, "moderation_action", "lab_report_ready"
 
 #: The types a member can switch off, in the order the settings screen lists them.
 CONFIGURABLE = (
-    FOLLOW, FOLLOW_REQUEST, FOLLOW_ACCEPTED, POST_LIKE, POST_COMMENT, POST_REPOST,
+    FOLLOW, FOLLOW_REQUEST, FOLLOW_ACCEPTED, POST_LIKE, POST_KUDOS, POST_COMMENT, POST_REPOST,
     POST_MENTION, MENTION, COMMENT_REPLY, COMMENT_LIKE, DIRECT_MESSAGE,
     LIVE_SESSION, PROGRAM_ADOPTED, JOIN_REQUEST,
 )
