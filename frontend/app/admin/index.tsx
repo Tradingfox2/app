@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole, SupportMessage, SupportTicket, SupportTicketDetail, SupportTicketStatus } from "@/src/api";
 import { AnalyticsPanel } from "@/src/components/admin/analytics-panel";
+import { staffTicketStatusLabel } from "@/src/components/support/copy";
 import { track } from "@/src/analytics";
 import { useAuth } from "@/src/auth-context";
+import { selectedControl } from "@/src/community-copy";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -20,7 +22,7 @@ const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = 
   { id: "support", label: "SUPPORT", icon: "chatbubbles-outline" },
   { id: "reports", label: "REPORTS", icon: "flag-outline" },
   { id: "coaches", label: "COACHES", icon: "ribbon-outline" },
-  { id: "joins", label: "JOIN REQUESTS", icon: "enter-outline" },
+  { id: "joins", label: "Memberships", icon: "enter-outline" },
   { id: "communities", label: "COMMUNITIES", icon: "people-outline" },
   { id: "users", label: "USERS", icon: "person-outline" },
   { id: "team", label: "TEAM", icon: "shield-checkmark-outline" },
@@ -28,6 +30,95 @@ const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = 
 ];
 
 const TICKET_STATUSES: SupportTicketStatus[] = ["open", "pending", "closed"];
+const MEMBERSHIP_STATUSES = ["pending", "banned", "removed"] as const;
+type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
+const REPORT_TARGET_TYPES = ["post", "comment", "message", "direct_message", "user", "community"] as const;
+type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
+
+function membershipStatusLabel(status: MembershipStatus): string {
+  switch (status) {
+    case "pending":
+      return "Waiting";
+    case "banned":
+      return "Banned";
+    case "removed":
+      return "Removed";
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+function reportTypeLabel(type: ReportTargetType): string {
+  switch (type) {
+    case "post":
+      return "Post";
+    case "comment":
+      return "Comment";
+    case "message":
+      return "Message";
+    case "direct_message":
+      return "Direct message";
+    case "user":
+      return "User";
+    case "community":
+      return "Community";
+    default: {
+      const exhaustive: never = type;
+      return exhaustive;
+    }
+  }
+}
+
+function isReportTargetType(value: string): value is ReportTargetType {
+  return (REPORT_TARGET_TYPES as readonly string[]).includes(value);
+}
+
+function agePhrase(iso: string, t: (key: string, values?: Record<string, string | number>) => string): string {
+  const elapsed = Date.now() - new Date(iso).getTime();
+  const minutes = Math.max(0, Math.floor(elapsed / 60_000));
+  if (minutes < 1) return t("Just now");
+  if (minutes < 60) return t("{n}m ago", { n: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return t("{n}h ago", { n: hours });
+  return t("{n}d ago", { n: Math.floor(hours / 24) });
+}
+
+function HintedMetric({ value, label, hint, onPress, testID }: {
+  value: string;
+  label: string;
+  hint?: string;
+  onPress?: () => void;
+  testID?: string;
+}) {
+  const body = (
+    <>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+      {hint ? <Text style={styles.metricHint}>{hint}</Text> : null}
+    </>
+  );
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint={hint}
+        onPress={onPress}
+        style={styles.metric}
+        testID={testID}
+        {...(Platform.OS === "web" && hint ? { title: hint } : {})}
+      >
+        {body}
+      </Pressable>
+    );
+  }
+  return (
+    <View accessibilityHint={hint} style={styles.metric} testID={testID}>
+      {body}
+    </View>
+  );
+}
 
 function ticketLabel(person: { full_name: string | null; email: string | null } | null | undefined, fallback: string): string {
   return person?.full_name || person?.email || fallback;
@@ -55,6 +146,7 @@ export default function AdminConsole() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [reports, setReports] = useState<ModerationReport[]>([]);
   const [reportStatus, setReportStatus] = useState<"open" | "resolved">("open");
+  const [reportType, setReportType] = useState<ReportTargetType | "all">("all");
   const [joins, setJoins] = useState<AdminMembership[]>([]);
   const [joinStatus, setJoinStatus] = useState<"pending" | "banned" | "removed">("pending");
   const [communities, setCommunities] = useState<AdminCommunity[]>([]);
@@ -63,6 +155,7 @@ export default function AdminConsole() {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditQuery, setAuditQuery] = useState("");
   const [ticketStatus, setTicketStatus] = useState<SupportTicketStatus>("open");
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [ticketQuery, setTicketQuery] = useState("");
   const [ticketSearch, setTicketSearch] = useState("");
   const [tickets, setTickets] = useState<SupportTicket[] | null>(null);
@@ -146,6 +239,7 @@ export default function AdminConsole() {
   const search = (next: Status = status) => act(async () => { setUsers((await api.adminUsers(query, next)).users); });
   const loadReports = (next: "open" | "resolved") => act(async () => {
     setReportStatus(next);
+    setReportType("all");
     setReports(await api.adminReports(next));
   });
   const openUser = (id: string) => act(async () => { setTab("users"); setSelected(await api.adminUser(id)); setReason(""); });
@@ -230,6 +324,11 @@ export default function AdminConsole() {
   }
 
   const suspendDisabled = working || reason.trim().length < (selected?.suspended_at ? 5 : 10);
+  const shownReports = reports.filter(row => reportType === "all" || row.target_type === reportType);
+  const reportTypes = reports.map(row => row.target_type).filter(isReportTargetType).filter((type, index, all) => all.indexOf(type) === index);
+  const visibleTickets = (tickets ?? []).filter(ticket => !unassignedOnly || ticket.assignee_id == null);
+  const activityHint = t("Counts in the last 24 hours.");
+  const stockHint = t("Active communities on the platform (not a 24h count).");
   return (
     <SafeAreaView style={styles.safe} testID="admin-console">
       <View style={styles.header}>
@@ -250,6 +349,7 @@ export default function AdminConsole() {
           const count = item.id === "reports" ? overview?.queues.open_reports
             : item.id === "coaches" ? overview?.queues.pending_coach_applications
             : item.id === "joins" ? overview?.queues.pending_memberships
+            : item.id === "support" ? overview?.queues.open_tickets
             : 0;
           return (
             <Pressable key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => { if (tab === "support" && item.id !== "support") setTicketDetail(null); setTab(item.id); }} style={[styles.tab, tab === item.id && styles.tabActive]}>
@@ -269,15 +369,31 @@ export default function AdminConsole() {
           <Text style={styles.section}>{t("QUEUES")}</Text>
           <View style={styles.grid}>
             {([
-              ["open_reports", "Open reports", "reports"],
-              ["pending_coach_applications", "Coach applications", "coaches"],
-              ["pending_memberships", "Join requests", "joins"],
-            ] as const).map(([key, label, destination]) => (
-              <Pressable key={key} accessibilityRole="button" onPress={() => { if (destination === "coaches") { setCoachDirectory(null); setCoachFilter("pending"); } setTab(destination); }} style={styles.metric}>
-                <Text style={styles.metricValue}>{formatNumber(overview.queues[key])}</Text>
-                <Text style={styles.metricLabel}>{t(label)}</Text>
-              </Pressable>
+              ["open_reports", "Open reports", "reports", "Platform moderation queue (not community-local)."],
+              ["pending_coach_applications", "Coach applications", "coaches", ""],
+              ["pending_memberships", "Join requests", "joins", "Memberships waiting for approval across all communities."],
+            ] as const).map(([key, label, destination, hint]) => (
+              <HintedMetric
+                key={key}
+                testID={`admin-queue-${key}`}
+                value={formatNumber(overview.queues[key])}
+                label={t(label)}
+                hint={hint ? t(hint) : undefined}
+                onPress={() => { if (destination === "coaches") { setCoachDirectory(null); setCoachFilter("pending"); } setTab(destination); }}
+              />
             ))}
+            {can("tickets.read") ? ([
+              ["open_tickets", "Needs reply", "open"],
+              ["pending_tickets", "Waiting on member", "pending"],
+            ] as const).map(([key, label, nextStatus]) => (
+              <HintedMetric
+                key={key}
+                testID={`admin-queue-${key}`}
+                value={formatNumber(overview.queues[key] ?? 0)}
+                label={t(label)}
+                onPress={() => { setTicketStatus(nextStatus); setTicketDetail(null); setTab("support"); }}
+              />
+            )) : null}
           </View>
           <Text style={styles.section}>{t("MEMBERS")}</Text>
           <View style={styles.grid}>
@@ -296,15 +412,19 @@ export default function AdminConsole() {
             </Pressable>
             <View style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.users.new_7d)}</Text><Text style={styles.metricLabel}>{t("New (7 days)")}</Text></View>
           </View>
-          <Text style={styles.section}>{t("LAST 24 HOURS")}</Text>
+          <Text style={styles.section} testID="admin-section-stock">{t("STOCK")}</Text>
           <View style={styles.grid}>
-            {(["workouts_24h", "posts_24h", "messages_24h"] as const).map(key => (
-              <View key={key} style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.activity[key])}</Text><Text style={styles.metricLabel}>{t(key === "workouts_24h" ? "Workouts" : key === "posts_24h" ? "Posts" : "Messages")}</Text></View>
+            <HintedMetric testID="admin-stock-communities" value={formatNumber(overview.activity.communities)} label={t("Total communities")} hint={stockHint} onPress={() => setTab("communities")} />
+          </View>
+          <Text style={styles.section} testID="admin-section-activity">{t("LAST 24 HOURS")}</Text>
+          <View style={styles.grid}>
+            {([
+              ["workouts_24h", "Workouts"],
+              ["posts_24h", "Posts"],
+              ["messages_24h", "Messages"],
+            ] as const).map(([key, label]) => (
+              <HintedMetric key={key} testID={`admin-activity-${key}`} value={formatNumber(overview.activity[key])} label={t(label)} hint={activityHint} />
             ))}
-            <Pressable accessibilityRole="button" onPress={() => setTab("communities")} style={styles.metric}>
-              <Text style={styles.metricValue}>{formatNumber(overview.activity.communities)}</Text>
-              <Text style={styles.metricLabel}>{t("Communities")}</Text>
-            </Pressable>
           </View>
           <Text style={styles.hint}>{t("Your permissions:")} {overview.permissions.join(", ")}</Text>
           <Text style={styles.hint}>{t("Health data (labs, biomarkers) and private messages are never shown in this console.")}</Text>
@@ -319,15 +439,27 @@ export default function AdminConsole() {
             ))}
           </View>
           {reportStatus === "resolved" ? <Text style={styles.hint}>{t("Resolved reports stay here so a decision can be checked later.")}</Text> : null}
+          {reportTypes.length > 0 ? <View style={styles.filters}>
+            <Pressable accessibilityRole="button" {...selectedControl(reportType === "all")} testID="report-type-all" onPress={() => setReportType("all")} style={[styles.chip, reportType === "all" && styles.chipActive]}>
+              <Text style={[styles.chipText, reportType === "all" && styles.chipTextActive]}>{t("All types")}</Text>
+            </Pressable>
+            {reportTypes.map(type => (
+              <Pressable key={type} accessibilityRole="button" {...selectedControl(reportType === type)} testID={`report-type-${type}`} onPress={() => setReportType(type)} style={[styles.chip, reportType === type && styles.chipActive]}>
+                <Text style={[styles.chipText, reportType === type && styles.chipTextActive]}>{t(reportTypeLabel(type))}</Text>
+              </Pressable>
+            ))}
+          </View> : null}
           {reports.length === 0 && !loading ? <Text style={styles.hint}>{t("The moderation queue is empty.")}</Text> : null}
-          {reports.length ? <TextInput value={reason} onChangeText={setReason} maxLength={1000} placeholder={t("Decision note (stored in the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
-          {reports.map(report => (
+          {reports.length > 0 && shownReports.length === 0 ? <Text style={styles.hint}>{t("Nothing in this list.")}</Text> : null}
+          {shownReports.length ? <TextInput value={reason} onChangeText={setReason} maxLength={1000} placeholder={t("Decision note (stored in the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
+          {shownReports.map(report => (
             <View key={report.id} style={styles.card} testID={`report-${report.id}`}>
               <View style={styles.cardHead}>
                 <Text style={styles.tag}>{t(report.reason.replace(/_/g, " ").toUpperCase())}</Text>
                 <Text style={styles.time}>{formatDate(report.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
               </View>
-              <Text style={styles.meta}>{t("{type} by {name}", { type: t(report.target_type), name: report.reported_user?.full_name || report.reported_user?.email || t("Unknown") })}</Text>
+              {reportStatus === "open" ? <Text style={styles.meta} testID={`report-age-${report.id}`}>{t("Opened {age}", { age: agePhrase(report.created_at, t) })}</Text> : null}
+              <Text style={styles.meta}>{t("{type} by {name}", { type: t(isReportTargetType(report.target_type) ? reportTypeLabel(report.target_type) : report.target_type), name: report.reported_user?.full_name || report.reported_user?.email || t("Unknown") })}</Text>
               {report.content_snapshot ? <Text style={styles.snapshot}>“{report.content_snapshot}”</Text> : null}
               {report.detail ? <Text style={styles.meta}>{t("Reporter said:")} {report.detail}</Text> : null}
               {reportStatus === "resolved" && report.resolution ? <Text style={styles.meta}>{t(report.resolution.replace(/_/g, " ").toUpperCase())}</Text> : null}
@@ -448,13 +580,13 @@ export default function AdminConsole() {
 
         {tab === "joins" ? <>
           <View style={styles.filters}>
-            {(["pending", "banned", "removed"] as const).map(item => (
-              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: joinStatus === item }} onPress={() => setJoinStatus(item)} style={[styles.chip, joinStatus === item && styles.chipActive]}>
-                <Text style={[styles.chipText, joinStatus === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
+            {MEMBERSHIP_STATUSES.map(item => (
+              <Pressable key={item} accessibilityRole="button" {...selectedControl(joinStatus === item)} testID={`membership-filter-${item}`} onPress={() => setJoinStatus(item)} style={[styles.chip, joinStatus === item && styles.chipActive]}>
+                <Text style={[styles.chipText, joinStatus === item && styles.chipTextActive]}>{t(membershipStatusLabel(item))}</Text>
               </Pressable>
             ))}
           </View>
-          <Text style={styles.hint}>{t("Accept or decline a request here. Paid communities still need verified billing.")}</Text>
+          {joinStatus === "pending" ? <Text style={styles.hint} testID="membership-waiting-hint">{t("Accept or decline a waiting request. Paid communities still need verified billing.")}</Text> : null}
           {joinStatus === "pending" && joins.length ? <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Reason (required, saved to the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
           {joins.length === 0 && !loading ? <Text style={styles.hint}>{t(joinStatus === "pending" ? "No join requests waiting." : "Nothing in this list.")}</Text> : null}
           {joins.map(row => (
@@ -483,10 +615,11 @@ export default function AdminConsole() {
         {tab === "communities" ? <>
           {communities.length === 0 && !loading ? <Text style={styles.hint}>{t("No communities yet")}</Text> : null}
           {communities.map(group => (
-            <Pressable key={group.id} accessibilityRole="button" testID={`admin-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
+            <Pressable key={group.id} accessibilityRole="button" accessibilityHint={t("Active members only")} {...(Platform.OS === "web" ? { title: t("Active members only") } : {})} testID={`admin-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.name}>{group.name}</Text>
-                <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {t(group.status.toUpperCase())} · {t("{count} members", { count: formatNumber(group.member_count) })}{group.pending_count ? ` · ${formatNumber(group.pending_count)} ${t("PENDING")}` : ""}</Text>
+                <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {t(group.status.toUpperCase())} · {t("{n} members", { n: formatNumber(group.member_count) })}{group.pending_count ? ` · ${t("{n} waiting to join", { n: formatNumber(group.pending_count) })}` : ""}</Text>
+                <Text style={styles.metricHint}>{t("Active members only")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
             </Pressable>
@@ -519,8 +652,9 @@ export default function AdminConsole() {
                 <Text style={styles.time}>{formatDate(ticketDetail.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
               </View>
               <Text style={styles.name}>{ticketDetail.subject}</Text>
-              <Text style={styles.meta}>{ticketLabel(ticketDetail.user, ticketDetail.user_id)} · {t(ticketDetail.status.toUpperCase())}</Text>
-              {ticketDetail.assignee_id ? <Text style={styles.meta}>{t("Assigned to {name}", { name: ticketLabel(ticketDetail.assignee, ticketDetail.assignee_id) })}</Text> : null}
+              <Text style={styles.meta}>{ticketLabel(ticketDetail.user, ticketDetail.user_id)} · {staffTicketStatusLabel(ticketDetail.status, t)}</Text>
+              <Text style={styles.meta}>{t("Opened {age}", { age: agePhrase(ticketDetail.created_at, t) })} · {t("Updated {age}", { age: agePhrase(ticketDetail.updated_at, t) })}</Text>
+              {ticketDetail.assignee_id ? <Text style={styles.meta}>{t("Assigned to {name}", { name: ticketLabel(ticketDetail.assignee, ticketDetail.assignee_id) })}</Text> : <Text style={styles.meta}>{t("Unassigned")}</Text>}
               {ticketDetail.messages.length === 0 ? <Text style={styles.hint}>{t("No messages on this ticket yet.")}</Text> : null}
               {ticketDetail.messages.map((message: SupportMessage) => (
                 <View key={message.id} style={styles.note} testID={`ticket-message-${message.id}`}>
@@ -532,8 +666,8 @@ export default function AdminConsole() {
                 <Text style={styles.section}>{t("STATUS")}</Text>
                 <View style={styles.filters}>
                   {TICKET_STATUSES.map(item => (
-                    <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: draftStatus === item }} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} style={[styles.chip, draftStatus === item && styles.chipActive]}>
-                      <Text style={[styles.chipText, draftStatus === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
+                    <Pressable key={item} accessibilityRole="button" {...selectedControl(draftStatus === item)} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} style={[styles.chip, draftStatus === item && styles.chipActive]}>
+                      <Text style={[styles.chipText, draftStatus === item && styles.chipTextActive]}>{staffTicketStatusLabel(item, t)}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -552,10 +686,13 @@ export default function AdminConsole() {
           </View> : <>
             <View style={styles.filters}>
               {TICKET_STATUSES.map(item => (
-                <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: ticketStatus === item }} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} style={[styles.chip, ticketStatus === item && styles.chipActive]}>
-                  <Text style={[styles.chipText, ticketStatus === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
+                <Pressable key={item} accessibilityRole="button" {...selectedControl(ticketStatus === item)} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} style={[styles.chip, ticketStatus === item && styles.chipActive]}>
+                  <Text style={[styles.chipText, ticketStatus === item && styles.chipTextActive]}>{staffTicketStatusLabel(item, t)}</Text>
                 </Pressable>
               ))}
+              <Pressable accessibilityRole="button" {...selectedControl(unassignedOnly)} testID="ticket-filter-unassigned" onPress={() => setUnassignedOnly(value => !value)} style={[styles.chip, unassignedOnly && styles.chipActive]}>
+                <Text style={[styles.chipText, unassignedOnly && styles.chipTextActive]}>{t("Unassigned")}</Text>
+              </Pressable>
             </View>
             <View style={styles.searchRow}>
               <TextInput value={ticketQuery} onChangeText={setTicketQuery} onSubmitEditing={() => setTicketSearch(ticketQuery.trim())} maxLength={80} placeholder={t("Search by subject, email, or ticket id")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-ticket-search" />
@@ -563,14 +700,15 @@ export default function AdminConsole() {
             </View>
             {!can("tickets.read") ? <Text style={styles.hint}>{t("Reading tickets needs the support role.")}</Text> : null}
             {tickets === null && !error ? <ActivityIndicator color={colors.brand} /> : null}
-            {can("tickets.read") && tickets && tickets.length === 0 && !error ? <Text style={styles.hint}>{t("The support queue is empty.")}</Text> : null}
-            {(tickets || []).map(ticket => (
+            {can("tickets.read") && tickets && visibleTickets.length === 0 && !error ? <Text style={styles.hint}>{t(unassignedOnly && tickets.length > 0 ? "No unassigned tickets." : "The support queue is empty.")}</Text> : null}
+            {visibleTickets.map(ticket => (
               <Pressable key={ticket.id} accessibilityRole="button" testID={`admin-ticket-${ticket.id}`} onPress={() => void openTicket(ticket.id)} style={styles.row}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.name}>{ticket.subject}</Text>
-                  <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())} · {formatDate(ticket.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
+                  <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())}</Text>
+                  <Text style={styles.meta}>{t("Opened {age}", { age: agePhrase(ticket.created_at, t) })} · {t("Updated {age}", { age: agePhrase(ticket.updated_at, t) })}{ticket.assignee_id ? "" : ` · ${t("Unassigned")}`}</Text>
                 </View>
-                <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(ticket.status.toUpperCase())}</Text></View>
+                <View style={styles.staffTag}><Text style={styles.staffTagText}>{staffTicketStatusLabel(ticket.status, t)}</Text></View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
               </Pressable>
             ))}
@@ -615,6 +753,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metric: { minWidth: 104, flexGrow: 1, padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface2 },
   metricValue: { color: colors.text, fontSize: 22, fontWeight: "900", fontVariant: ["tabular-nums"] }, metricLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  metricHint: { color: colors.textDim, fontSize: 10, lineHeight: 14, marginTop: 4 },
   card: { padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, gap: 6, marginTop: spacing.sm },
   cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
   tag: { color: colors.error, fontSize: 10, fontWeight: "900", letterSpacing: 1 }, time: { color: colors.textDim, fontSize: 11 },
@@ -632,7 +771,7 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim }, chipText: { color: colors.textMuted, fontSize: 10, fontWeight: "900" }, chipTextActive: { color: colors.brand },
   row: { minHeight: 60, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   name: { color: colors.text, fontWeight: "800" },
-  staffTag: { backgroundColor: colors.brandDim, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }, staffTagText: { color: colors.brand, fontSize: 9, fontWeight: "900" },
+  staffTag: { backgroundColor: colors.brandDim, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm, flexShrink: 1 }, staffTagText: { color: colors.brand, fontSize: 9, fontWeight: "900" },
   suspendedTag: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }, suspendedTagText: { color: colors.text, fontSize: 9, fontWeight: "900" },
   suspendedNote: { color: colors.error, fontSize: 12, marginTop: 4 },
   note: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }, noteText: { color: colors.text, lineHeight: 19 },

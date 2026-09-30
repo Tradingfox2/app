@@ -21,7 +21,7 @@ async function fixtures(page: Page, staff: typeof support | null, override?: (ro
       if (!staff) return route.fulfill({ status: 403, json: { detail: "Staff permission required" } });
       return route.fulfill({ json: {
         users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
-        queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5 },
+        queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
         activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
         permissions: PERMISSIONS[staff.staff_role!], staff_role: staff.staff_role,
       } });
@@ -48,6 +48,9 @@ test("support sees the queue read-only and cannot suspend", async ({ page }) => 
   await page.goto("/admin");
   await expect(page.getByText("128", { exact: true })).toBeVisible();
   await page.getByTestId("admin-tab-reports").click();
+  await expect(page.getByTestId("report-age-rep-1")).toContainText(/Opened \d+d ago/);
+  await expect(page.getByTestId("report-type-all")).toBeVisible();
+  await expect(page.getByTestId("report-type-post")).toBeVisible();
   await expect(page.getByText("“Just take 10x the dose”", { exact: true })).toBeVisible();
   await expect(page.getByText("Read-only: resolving reports needs the moderator role.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("resolve-content_removed-rep-1")).toHaveCount(0);
@@ -100,7 +103,7 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
     if (path === "/admin/overview") {
       await route.fulfill({ json: {
         users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
-        queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5 },
+        queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
         activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
         permissions: [...PERMISSIONS.support, "analytics.read"],
         staff_role: "support",
@@ -223,13 +226,17 @@ test("support saves status, replies, and sees pending in the queue", async ({ pa
   await page.goto("/admin");
   await page.getByTestId("admin-tab-support").click();
   await expect(page.getByText("Cannot log in", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Needs reply");
+  await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Unassigned");
+  await expect(page.getByTestId("admin-ticket-t-1")).toContainText(/Opened /);
+  await expect(page.getByTestId("admin-ticket-t-1")).toContainText(/Updated /);
   await page.getByTestId("admin-ticket-t-1").click();
   await expect(page.getByText("The app says invalid password", { exact: true })).toBeVisible();
 
   await page.getByTestId("ticket-status-closed").click();
   await page.getByTestId("ticket-save-status").click();
   await expect.poll(() => patches).toEqual([{ status: "closed" }]);
-  await expect(page.getByText(`${target.full_name} · CLOSED`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`${target.full_name} · Closed`, { exact: true })).toBeVisible();
 
   await page.getByTestId("ticket-reply").fill("Try resetting your password");
   await page.getByTestId("ticket-send-reply").click();
@@ -237,13 +244,109 @@ test("support saves status, replies, and sees pending in the queue", async ({ pa
   await expect.poll(() => events.map(event => ({ name: event.name, ticket_id: event.props?.ticket_id }))).toEqual([{ name: "ticket_replied", ticket_id: "t-1" }]);
   await expect.poll(() => patches).toEqual([{ status: "closed" }, { status: "pending" }]);
   await expect(page.getByTestId("ticket-message-m-2")).toContainText("Try resetting your password");
-  await expect(page.getByText(`${target.full_name} · PENDING`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`${target.full_name} · Waiting on member`, { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
   await page.getByTestId("ticket-back").click();
-  await expect(page.getByTestId("admin-ticket-t-1")).toContainText("PENDING");
+  await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Waiting on member");
   await expect(page.getByTestId("admin-ticket-t-1")).toContainText(target.full_name);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+test("overview keeps community stock out of the last 24 hours", async ({ page }) => {
+  await fixtures(page, support);
+  await page.goto("/admin");
+  await expect(page.getByTestId("admin-section-stock")).toBeVisible();
+  await expect(page.getByTestId("admin-stock-communities")).toContainText("Total communities");
+  await expect(page.getByTestId("admin-stock-communities")).toContainText("Active communities on the platform (not a 24h count).");
+  await expect(page.getByTestId("admin-stock-communities")).toContainText("6");
+  await expect(page.getByTestId("admin-activity-workouts_24h")).toContainText("Counts in the last 24 hours.");
+  await expect(page.getByTestId("admin-activity-workouts_24h")).toContainText("40");
+  await expect(page.getByTestId("admin-queue-open_reports")).toContainText("Platform moderation queue (not community-local).");
+  await expect(page.getByTestId("admin-queue-pending_memberships")).toContainText("Memberships waiting for approval across all communities.");
+  await expect(page.getByTestId("admin-queue-open_tickets")).toContainText("Needs reply");
+  await expect(page.getByTestId("admin-queue-open_tickets")).toContainText("2");
+  await expect(page.getByTestId("admin-queue-pending_tickets")).toContainText("Waiting on member");
+  await expect(page.getByTestId("admin-queue-pending_tickets")).toContainText("1");
+  await expect(page.getByTestId("admin-tab-support")).toContainText("2");
+  const stock = await page.getByTestId("admin-section-stock").boundingBox();
+  const activity = await page.getByTestId("admin-section-activity").boundingBox();
+  const communities = await page.getByTestId("admin-stock-communities").boundingBox();
+  const workouts = await page.getByTestId("admin-activity-workouts_24h").boundingBox();
+  expect(stock && activity && communities && workouts).toBeTruthy();
+  expect(communities!.y).toBeGreaterThan(stock!.y);
+  expect(communities!.y).toBeLessThan(activity!.y);
+  expect(workouts!.y).toBeGreaterThan(activity!.y);
+  await page.getByTestId("admin-queue-pending_tickets").click();
+  await expect(page.getByTestId("ticket-filter-pending")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("ticket-filter-open")).toHaveAttribute("aria-selected", "false");
+});
+
+test("memberships and community rows use waiting copy", async ({ page }) => {
+  const commentReport = { ...report, id: "rep-2", target_type: "comment", content_snapshot: "A comment", created_at: "2026-09-28T07:00:00Z" };
+  await fixtures(page, moderator, async (route, path) => {
+    if (path === "/admin/reports") {
+      await route.fulfill({ json: [report, commentReport] });
+      return true;
+    }
+    if (path === "/admin/communities") {
+      await route.fulfill({ json: [{
+        id: "c-1",
+        name: "Morning Crew",
+        status: "active",
+        created_at: "2026-09-01T00:00:00Z",
+        member_count: 12,
+        pending_count: 3,
+        owner: { id: target.id, full_name: target.full_name, email: target.email },
+      }] });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/admin");
+  await expect(page.getByTestId("admin-tab-joins")).toContainText("Memberships");
+  await page.getByTestId("admin-tab-joins").click();
+  await expect(page.getByTestId("membership-waiting-hint")).toHaveText("Accept or decline a waiting request. Paid communities still need verified billing.");
+  await page.getByTestId("membership-filter-banned").click();
+  await expect(page.getByTestId("membership-waiting-hint")).toHaveCount(0);
+  await expect(page.getByTestId("membership-filter-removed")).toContainText("Removed");
+  await page.getByTestId("admin-tab-communities").click();
+  await expect(page.getByTestId("admin-community-c-1")).toContainText("12 members");
+  await expect(page.getByTestId("admin-community-c-1")).toContainText("3 waiting to join");
+  await expect(page.getByTestId("admin-community-c-1")).toContainText("Active members only");
+  await page.getByTestId("admin-tab-reports").click();
+  await expect(page.getByTestId("report-rep-1")).toBeVisible();
+  await expect(page.getByTestId("report-rep-2")).toBeVisible();
+  await page.getByTestId("report-type-comment").click();
+  await expect(page.getByTestId("report-rep-2")).toBeVisible();
+  await expect(page.getByTestId("report-rep-1")).toHaveCount(0);
+  await expect(page.getByTestId("report-age-rep-2")).toContainText(/Opened /);
+});
+
+test("support queue can hide assigned tickets", async ({ page }) => {
+  const assigned = {
+    ...openTicket,
+    id: "t-2",
+    subject: "Billing question",
+    category: "billing",
+    status: "open" as const,
+    assignee_id: support.id,
+    assignee: { id: support.id, full_name: support.full_name, email: support.email },
+  };
+  await fixtures(page, support, async (route, path) => {
+    if (path === "/admin/tickets" && route.request().method() === "GET") {
+      await route.fulfill({ json: { tickets: [{ ...openTicket, status: "open" }, assigned], count: 2 } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/admin");
+  await page.getByTestId("admin-tab-support").click();
+  await expect(page.getByText("Billing question", { exact: true })).toBeVisible();
+  await page.getByTestId("ticket-filter-unassigned").click();
+  await expect(page.getByText("Billing question", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Cannot log in", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Unassigned");
 });
 
 test("the Profile entry point actually opens the console", async ({ page }) => {
