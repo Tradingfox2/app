@@ -425,6 +425,71 @@ def test_joining_a_live_session_persists_presence_and_refuses_when_it_ends(monke
     run_isolated(scenario)
 
 
+def test_go_live_notifies_the_channel_and_live_now_hides_rooms_you_cannot_see(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        when = datetime.now(timezone.utc) + timedelta(hours=2)
+        open_id = await kind_channel(db, "live", "ch-open")
+        hidden_id = await kind_channel(db, "live", "ch-hidden")
+        await db.channels.update_one({"id": open_id}, {"$set": {"name": "morning"}})
+        await db.channels.update_one({"id": hidden_id}, {"$set": {"name": "staff"}})
+        default = await community._ensure_default_role("c-1")
+        staff_role = await community.create_role("c-1", community.RoleIn(name="staff", rank=5), account("owner"))
+        await community.assign_member_roles(
+            "c-1", "m-mod", community.MemberRolesIn(role_ids=[staff_role["id"]]), account("owner"))
+        await community.set_channel_overwrites(hidden_id, [
+            community.OverwriteIn(role_id=default["id"], deny=p.VIEW_CHANNEL),
+            community.OverwriteIn(role_id=staff_role["id"], allow=p.VIEW_CHANNEL),
+        ], account("owner"))
+        await db.users.update_one(
+            {"id": "mod"}, {"$set": {"notification_prefs": {"types": {"live_session": False}}}})
+
+        open_session = await community.schedule_live_session(
+            open_id, community.LiveSessionIn(title="Morning mobility", starts_at=when), account("owner"))
+        hidden = await community.schedule_live_session(
+            hidden_id, community.LiveSessionIn(title="Staff huddle", starts_at=when), account("owner"))
+        assert await community.list_live_now(account("mem")) == []
+
+        # mem never RSVPed. Club-wide go-live still reaches members who can see the channel.
+        await community.start_live_session(open_session["id"], account("owner"))
+        told = await db.notifications.find_one({"user_id": "mem", "type": "live_session"})
+        assert told and told["metadata"]["session_id"] == open_session["id"]
+        assert "live now" in told["title"]
+        assert await db.notifications.count_documents({"user_id": "owner", "type": "live_session"}) == 0
+        assert await db.notifications.count_documents({"user_id": "mod", "type": "live_session"}) == 0
+        assert await db.notifications.count_documents({"user_id": "out", "type": "live_session"}) == 0
+
+        visible = await community.list_live_now(account("mem"))
+        assert [row["id"] for row in visible] == [open_session["id"]]
+        assert visible[0]["community_name"] == "Iron Club"
+        assert visible[0]["channel_name"] == "morning"
+        assert visible[0]["status"] == "live"
+        assert await community.list_live_now(account("out")) == []
+
+        await db.notifications.delete_many({})
+        await db.users.update_one(
+            {"id": "mod"}, {"$set": {"notification_prefs": {"types": {"live_session": True}}}})
+        await community.start_live_session(hidden["id"], account("owner"))
+        hidden_told = {row["user_id"] async for row in db.notifications.find({"type": "live_session"})}
+        assert hidden_told == {"mod"}
+        assert (await db.notifications.find_one({"user_id": "mod"}))["metadata"]["session_id"] == hidden["id"]
+        assert {row["id"] for row in await community.list_live_now(account("mod"))} == {open_session["id"], hidden["id"]}
+        assert [row["id"] for row in await community.list_live_now(account("mem"))] == [open_session["id"]]
+
+        await db.notifications.delete_many({})
+        later = await community.schedule_live_session(
+            open_id, community.LiveSessionIn(title="Evening flow", starts_at=when), account("owner"))
+        await community.rsvp_live_session(later["id"], account("mem"))
+        await community.cancel_live_session(later["id"], account("owner"))
+        cancelled = {row["user_id"] async for row in db.notifications.find({"type": "live_session"})}
+        assert cancelled == {"mem"}
+
+        await community.end_live_session(open_session["id"], account("owner"))
+        assert await community.list_live_now(account("mem")) == []
+        assert [row["id"] for row in await community.list_live_now(account("mod"))] == [hidden["id"]]
+    run_isolated(scenario)
+
+
 # --- Channel search ---
 
 def test_channel_search_treats_the_query_as_text_and_respects_visibility(monkeypatch):

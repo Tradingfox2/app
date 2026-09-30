@@ -177,7 +177,7 @@ export default function LiveRoomScreen() {
           <Ionicons name="arrow-back" size={20} color={colors.text} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title} numberOfLines={1}>{session?.title || t("LIVE ROOM")}</Text>
+          <Text style={styles.title} numberOfLines={1} testID="live-room-title">{session?.title || t("LIVE ROOM")}</Text>
           <Text style={styles.meta}>{t("{count} here").replace("{count}", String(participants.length))}</Text>
         </View>
         {live ? <View style={styles.badge} testID="live-room-badge"><Text style={styles.badgeText}>{t("LIVE")}</Text></View> : null}

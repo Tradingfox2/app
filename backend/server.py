@@ -372,6 +372,7 @@ async def lifespan(app: FastAPI):
     await db.challenge_participants.create_index([("channel_id", 1), ("user_id", 1)], unique=True)
     await db.program_adoptions.create_index([("message_id", 1), ("user_id", 1)], unique=True)
     await db.live_sessions.create_index([("channel_id", 1), ("status", 1), ("starts_at", 1)])
+    await db.live_sessions.create_index([("community_id", 1), ("status", 1), ("started_at", -1)])
     await db.live_rsvps.create_index([("session_id", 1), ("user_id", 1)], unique=True)
     await db.live_participants.create_index([("session_id", 1), ("user_id", 1)], unique=True)
     await db.live_messages.create_index([("session_id", 1), ("created_at", 1)])

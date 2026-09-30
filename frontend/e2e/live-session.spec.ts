@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page, type Route } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page, type Route } from "@playwright/test";
 
 /**
  * Two participants, one persisted session.
@@ -182,6 +182,7 @@ test("coach starts, member joins the room, coach ends, and the list follows", as
   await expect(guest.getByTestId("live-badge-s-1")).toHaveCount(0);
   await expect(guest.getByTestId("live-join-s-1")).toHaveCount(0);
   await expect(guest.getByTestId("live-s-1")).toHaveCount(0);
+  await expect(guest.getByTestId("live-past-s-1")).toContainText("Mobility flow");
 
   await guest.goto("/live/s-1");
   await expect(guest.getByTestId("live-room-ended")).toBeVisible();
@@ -191,4 +192,82 @@ test("coach starts, member joins the room, coach ends, and the list follows", as
 
   await hostContext.close();
   await memberContext.close();
+});
+
+const liveNow = {
+  id: "s-live", channel_id: "ch-l", community_id: "c-1", host_id: coach.id,
+  host: { id: coach.id, full_name: coach.full_name, avatar_url: null },
+  title: "Morning mobility", description: "", starts_at: "2026-09-30T18:00:00Z", duration_min: 45,
+  join_url: null, status: "live" as const, started_at: "2026-09-30T18:00:00Z", ended_at: null,
+  rsvp_count: 2, rsvped: false, community_name: "Iron Club", channel_name: "morning",
+};
+
+async function discovery(page: Page, sessions: unknown[]) {
+  await page.addInitScript(() => localStorage.setItem("ironflow_token", JSON.stringify("member-token")));
+  await page.route("**/api/**", async route => {
+    const url = new URL(route.request().url());
+    const path = url.pathname.replace(/^\/api/, "");
+    const method = route.request().method();
+    const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
+    if (path === "/auth/me") return json(member);
+    if (path === "/live-now") return json(sessions);
+    if (path === "/dashboard") return json({ workouts_this_week: 1, training: {}, wearable_connected: true, active_workout: null });
+    if (path === "/muscle-heatmap") return json({ volumes: {}, max: 0 });
+    if (path === "/communities") return json([]);
+    if (path === "/coaches") return json([]);
+    if (path === "/community-rankings") return json({ communities: [], coaches: [], users: [], channels: [], window_days: 30 });
+    if (path === "/feed") return json([]);
+    if (path === "/live-sessions/s-live" && method === "GET") {
+      return json({ session: liveNow, participants: [], realtime_channel: "live:s-live", subscription_token: null, joined: true });
+    }
+    if (path === "/live-sessions/s-live/messages") return json([]);
+    if (path === "/channels/ch-l") return json({ id: "ch-l", community_id: "c-1", name: "morning", permissions: 1, kind: "live" });
+    if (path === "/realtime/token") return json({ enabled: false, token: null, url: null });
+    if (path === "/realtime/subscription-token") return json({ enabled: false, token: null });
+    if (path === "/notifications/unread-count" || path === "/dm/unread-count") return json({ count: 0 });
+    return json([]);
+  });
+}
+
+async function below(upper: Locator, lower: Locator) {
+  const top = await upper.boundingBox();
+  const bottom = await lower.boundingBox();
+  expect(top && bottom && top.y + top.height <= bottom.y + 2).toBeTruthy();
+}
+
+test("LIVE NOW strip lists a joinable session and hides when there are none", async ({ page }) => {
+  await discovery(page, [liveNow]);
+  await page.goto("/home");
+  await expect(page.getByTestId("home-screen")).toBeVisible();
+  await expect(page.getByTestId("live-now-s-live")).toContainText("Morning mobility");
+  await expect(page.getByTestId("live-now-s-live")).toContainText("Iron Club");
+  await below(page.getByTestId("streak-badge"), page.getByTestId("live-now-strip"));
+  await below(page.getByTestId("live-now-strip"), page.getByTestId("rings-card"));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+  await page.goto("/community");
+  await expect(page.getByTestId("community-screen")).toBeVisible();
+  await expect(page.getByTestId("live-now-s-live")).toBeVisible();
+  await below(page.getByText("Find your people. Build momentum."), page.getByTestId("live-now-strip"));
+  await below(page.getByTestId("live-now-strip"), page.getByTestId("community-tab-feed"));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+  await page.getByTestId("live-now-s-live").click();
+  await expect(page).toHaveURL(/\/live\/s-live/);
+  await expect(page.getByTestId("live-room")).toBeVisible();
+  await expect(page.getByTestId("live-room-title")).toHaveText("Morning mobility");
+});
+
+test("LIVE NOW strip is absent when the member has nothing to join", async ({ page }) => {
+  await discovery(page, []);
+  const homeNow = page.waitForResponse(response => response.url().includes("/live-now") && response.ok());
+  await page.goto("/home");
+  await homeNow;
+  await expect(page.getByTestId("live-now-strip")).toHaveCount(0);
+  await expect(page.getByTestId("rings-card")).toBeVisible();
+  const communityNow = page.waitForResponse(response => response.url().includes("/live-now") && response.ok());
+  await page.goto("/community");
+  await communityNow;
+  await expect(page.getByTestId("live-now-strip")).toHaveCount(0);
+  await expect(page.getByTestId("community-tab-feed")).toBeVisible();
 });

@@ -15,6 +15,7 @@ import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
 import { DidYouKnow } from "@/src/components/did-you-know";
+import { LiveNowStrip } from "@/src/components/live-now-strip";
 import { colors, radius, spacing, type, card } from "@/src/theme";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
@@ -177,6 +178,8 @@ export default function Home() {
             <Text style={styles.streakLabel}>{t("workouts")}</Text>
           </View>
         </View>
+
+        <LiveNowStrip />
 
         <View style={styles.ringsCard} testID="rings-card">
           <View style={styles.cardHead}>

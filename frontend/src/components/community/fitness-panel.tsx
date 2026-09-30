@@ -208,17 +208,41 @@ export function ProgramCard({ message }: { message: CommunityMessage & { program
 
 const DURATIONS = [30, 45, 60, 90];
 
+function pastStatusLabel(status: LiveSession["status"], t: (source: string) => string): string {
+  switch (status) {
+    case "ended":
+      return t("ENDED");
+    case "cancelled":
+      return t("CANCELLED");
+    case "scheduled":
+    case "live":
+      return "";
+    default: {
+      const unexpected: never = status;
+      return unexpected;
+    }
+  }
+}
+
 /** Upcoming and live sessions, with RSVP, join, host controls and scheduling. */
 function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string; refreshKey: number; mask: number; userId?: string }) {
   const { t, formatDate } = useI18n();
   const router = useRouter();
   const [sessions, setSessions] = useState<LiveSession[] | null>(null);
+  const [past, setPast] = useState<LiveSession[]>([]);
   const [scheduling, setScheduling] = useState(false);
   const [form, setForm] = useState({ title: "", starts: nextSlot(), duration: 60, url: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
-    try { setSessions((await api.liveSessions(channelId)).upcoming); } catch { setSessions([]); }
+    try {
+      const bundle = await api.liveSessions(channelId);
+      setSessions(bundle.upcoming);
+      setPast(bundle.past ?? []);
+    } catch {
+      setSessions([]);
+      setPast([]);
+    }
   }, [channelId]);
   // The badge is the session's persisted status. Poll so a member watching the
   // list sees the coach go live, and so returning from the room drops an ended one.
@@ -282,6 +306,16 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
         </View>
       </View>;
     })}
+    {past.length ? <View style={{ gap: 4 }} testID="live-past">
+      <Text style={styles.meta}>{t("EARLIER")}</Text>
+      {past.map(session => {
+        const label = pastStatusLabel(session.status, t);
+        return <Pressable key={session.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })} style={styles.liveRow} testID={`live-past-${session.id}`}>
+          <Text style={styles.leaderName} numberOfLines={1}>{session.title}</Text>
+          <Text style={styles.meta}>{label ? `${label} · ` : ""}{formatDate(session.starts_at, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
+        </Pressable>;
+      })}
+    </View> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}
   </View>;
 }
