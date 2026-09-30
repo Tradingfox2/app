@@ -40,7 +40,8 @@ test("non-staff users cannot open the console", async ({ page }) => {
   await expect(page.getByText("This console is for the IronFlow staff team.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("admin-tab-users")).toHaveCount(0);
   await page.goto("/profile");
-  await expect(page.getByTestId("open-admin-console")).toHaveCount(0);
+  await page.getByTestId("open-settings").click();
+  await expect(page.getByTestId("settings-screen").getByTestId("open-admin-console")).toHaveCount(0);
 });
 
 test("support sees the queue read-only and cannot suspend", async ({ page }) => {
@@ -352,6 +353,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
 test("the Profile entry point actually opens the console", async ({ page }) => {
   await fixtures(page, support);
   await page.goto("/profile");
+  await page.getByTestId("open-settings").click();
   await page.getByTestId("open-admin-console").click();
   // Regression guard: app/admin/index.tsx is served at /admin, so pushing
   // "/admin/index" lands on the not-found screen instead.

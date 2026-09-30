@@ -134,6 +134,7 @@ test("profile opens support and an empty list explains itself", async ({ page })
   await fixtures(page, { tickets: [], messages: {}, events });
   await page.goto("/profile");
   await expect.poll(() => viewedScreens(events)).toContain("profile");
+  await page.getByTestId("open-settings").click();
   await page.getByTestId("open-support").click();
   await expect(page).toHaveURL(/\/support$/);
   await expect(page.getByTestId("support-empty")).toHaveText("No tickets yet.");

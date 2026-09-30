@@ -68,7 +68,7 @@ test("own profile publishes a post that shows on the feed and can be shared", as
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   await page.goto("/profile");
-  await page.getByTestId("view-my-profile").click();
+  await expect(page.getByTestId("profile-activity")).toBeVisible();
   await expect(page.getByTestId("profile-posts")).toBeVisible();
   await expect(page.getByTestId("feed-composer")).toBeVisible();
   await page.getByTestId("composer-text").fill("Profile session");

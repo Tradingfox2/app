@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { track } from "@/src/analytics";
+import { audienceHint, audienceLabel, audienceTestId, type PersonalAudience } from "@/src/audience-copy";
 import { api, mediaUrl } from "@/src/api";
 import { useI18n } from "@/src/i18n";
 import { colors, radius, spacing, type } from "@/src/theme";
@@ -21,7 +22,7 @@ export default function NewStory() {
   const [caption, setCaption] = useState("");
   const [highlight, setHighlight] = useState(false);
   const [title, setTitle] = useState("");
-  const [friends, setFriends] = useState(true);
+  const [storyAudience, setStoryAudience] = useState<PersonalAudience>("friends");
   const [media, setMedia] = useState<{ id: string; url: string } | null>(null);
   const [busy, setBusy] = useState<"upload" | "save" | null>(null);
   const [error, setError] = useState("");
@@ -65,7 +66,7 @@ export default function NewStory() {
         workout_id: selected,
         caption: caption.trim(),
         ...(media ? { media_ids: [media.id] } : {}),
-        audience: friends ? "friends" : "public",
+        audience: storyAudience,
         highlight,
         ...(highlight && title.trim() ? { highlight_title: title.trim() } : {}),
       });
@@ -104,13 +105,15 @@ export default function NewStory() {
       })}
       <Text style={styles.label}>{t("What did you train?")}</Text>
       <TextInput value={caption} onChangeText={setCaption} maxLength={300} multiline placeholder={t("Your sport, your goals, your coach credentials...")} placeholderTextColor={colors.textDim} style={styles.input} testID="story-caption" />
-      <View style={styles.row}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.rowTitle}>{t("Friends")}</Text>
-          <Text style={styles.meta}>{t("Only followers can see this story.")}</Text>
-        </View>
-        <Switch testID="story-friends-only" accessibilityLabel={t("Friends")} value={friends} onValueChange={setFriends} trackColor={{ true: colors.brand }} />
+      <Text style={styles.label}>{t("Choose audience")}</Text>
+      <View style={styles.audiences} testID="story-audience">
+        {(["friends", "public", "only_me"] as const).map(option => (
+          <Pressable key={option} accessibilityRole="button" testID={audienceTestId("story-audience", option)} onPress={() => setStoryAudience(option)} style={[styles.chip, storyAudience === option && styles.chipOn]}>
+            <Text style={[styles.chipText, storyAudience === option && styles.chipTextOn]}>{t(audienceLabel(option))}</Text>
+          </Pressable>
+        ))}
       </View>
+      <Text style={styles.meta} testID="story-audience-hint">{t(audienceHint(storyAudience))}</Text>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
           <Text style={styles.rowTitle}>{t("Save as highlight")}</Text>
@@ -150,6 +153,11 @@ const styles = StyleSheet.create({
   input: { minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
   rowTitle: { color: colors.text, fontWeight: "800" },
+  audiences: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  chip: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  chipOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  chipText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
+  chipTextOn: { color: colors.brand },
   secondary: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", alignSelf: "flex-start" },
   secondaryText: { color: colors.text, fontWeight: "900", fontSize: 12 },
   preview: { width: 160, height: 160, borderRadius: radius.sm, backgroundColor: colors.surface2 },

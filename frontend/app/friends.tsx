@@ -34,10 +34,10 @@ export default function FriendsFeed() {
   return <SafeAreaView style={styles.safe} testID="friends-screen">
     <View style={styles.header}>
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
-      <Text style={styles.title}>{t("FRIENDS")}</Text>
+      <Text style={styles.title} accessibilityLabel={t("Friends feed")}>{t("FRIENDS")}</Text>
     </View>
     <ScrollView contentContainerStyle={styles.body}>
-      <Text style={styles.hint}>{t("Posts from people you follow. A friends-only post stays off the public feed.")}</Text>
+      <Text style={styles.hint}>{t("Posts from people you follow. Not your Following list. A friends-only post stays off the public feed.")}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tray} testID="friends-stories">
         <Pressable accessibilityRole="button" testID="friends-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
           <Ionicons name="add" size={18} color={colors.brandOn} />
@@ -57,7 +57,7 @@ export default function FriendsFeed() {
       {storyError ? <Text accessibilityRole="alert" style={styles.error}>{storyError}</Text> : null}
       {!storyError && groups.length === 0 ? <Text style={styles.hint}>{t("No stories from people you follow.")}</Text> : null}
       <View testID="friends-feed">
-        <Composer personal onPublished={created => feed.prepend(created)} />
+        <Composer personal onPublished={created => { if (created.audience !== "only_me") feed.prepend(created); }} />
         {feed.loading ? <ActivityIndicator color={colors.brand} /> : null}
         {feed.error ? <Text accessibilityRole="alert" style={styles.error}>{feed.error}</Text> : null}
         {!feed.loading && !feed.error && feed.posts.length === 0 ? <Text style={styles.hint}>{t("Follow athletes and coaches to build your feed")}</Text> : null}

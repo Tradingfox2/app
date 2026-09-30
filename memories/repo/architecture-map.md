@@ -288,3 +288,24 @@ through the shared module.
   `deleted_at` is null). `POST /media` in `routers/social.py` is unchanged.
 - **Smoke:** `backend/tests/test_dual_media_smoke.py` is sync (no
   pytest-asyncio in this tree) and only touches a temp `MEDIA_ROOT`.
+
+## Added 2026-09-30 (You tab, only_me UI)
+
+- **Audience API owner:** `backend/routers/social.py` after #17. `Audience` is
+  `public | friends | only_me`. Create and `PATCH /posts` accept it. `club` and
+  a non-public community post are 422. No further SQL: migration 006 already
+  widened the check. Do not add a second audience router.
+- **Visibility:** `only_me` is included on the author's wall
+  (`GET /feed?author_id={self}`) and `scope=mine`. It is excluded from public
+  feeds, the friends feed, search, and trending. Other users get 404 on
+  `GET /posts/{id}`. Friends stays an accepted follow. Story lists use
+  `_friends_only_clause`: the author sees `only_me` stories; visitors do not.
+- **You tab:** `app/(tabs)/profile.tsx` renders `ProfileWall` (`variant="tab"`),
+  the same component as `app/user/[id].tsx`. Stories and highlights are the
+  first block in the scroll (`profile-activity`). Edit profile, saved posts,
+  and the Friends feed sit under the header. The gear opens `app/settings.tsx`,
+  which still holds language, privacy, plans, support, and sign-out.
+- **Copy:** Friends (feed and audience) is not the Followers or Following list.
+  Strings live in `frontend/src/personal-space-locales.ts`. The personal
+  composer and `app/story-new.tsx` send `only_me` through the existing
+  `api.publish` / `api.createStory` types.

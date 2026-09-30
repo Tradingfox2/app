@@ -65,15 +65,21 @@ test("profile, friends feed, and a workout story use the real forms", async ({ p
   await install(page, bag);
 
   await page.goto("/profile");
-  await page.getByTestId("open-friends-feed").click();
-  await expect(page.getByTestId("friends-screen")).toBeVisible();
-  await expect(page.getByTestId("friends-stories")).toBeVisible();
-  await expect(page.getByText("No stories from people you follow.", { exact: true })).toBeVisible();
+  const you = page.getByTestId("profile-screen");
+  await expect(you).toBeVisible();
+  await expect(you.getByTestId("profile-activity")).toBeVisible();
+  await you.getByTestId("open-friends-feed").click();
+  const friends = page.getByTestId("friends-screen");
+  await expect(friends).toBeVisible();
+  await expect(friends.getByTestId("friends-stories")).toBeVisible();
+  await expect(friends.getByText("Posts from people you follow. Not your Following list. A friends-only post stays off the public feed.", { exact: true })).toBeVisible();
+  await expect(friends.getByText("No stories from people you follow.", { exact: true })).toBeVisible();
+  await expect(friends.getByTestId("composer-audience-only-me")).toBeVisible();
 
-  await page.getByTestId("composer-text").fill("Friends session");
-  await expect(page.getByTestId("composer-audience-friends")).toBeVisible();
-  await page.getByTestId("feed-publish").click();
-  await expect(page.getByText("Friends session", { exact: true })).toBeVisible();
+  await friends.getByTestId("composer-text").fill("Friends session");
+  await expect(friends.getByTestId("composer-audience-friends")).toBeVisible();
+  await friends.getByTestId("feed-publish").click();
+  await expect(friends.getByText("Friends session", { exact: true })).toBeVisible();
   expect(bag.posts).toEqual([expect.objectContaining({ content: "Friends session", audience: "friends" })]);
 
   await page.getByTestId("friends-create-story").click();
@@ -88,10 +94,34 @@ test("profile, friends feed, and a workout story use the real forms", async ({ p
   })]);
 
   await page.goto("/profile");
-  await page.getByTestId("view-my-profile").click();
-  await expect(page.getByTestId("profile-sports")).toContainText("Powerlifting");
-  await page.getByTestId("profile-tab-about").click();
-  await expect(page.getByTestId("profile-about")).toContainText("Morning lifter");
-  await page.getByTestId("profile-tab-posts").click();
-  await expect(page.getByTestId("profile-posts")).toBeVisible();
+  const wall = page.getByTestId("profile-screen");
+  const activity = await wall.getByTestId("profile-activity").boundingBox();
+  const postTab = await wall.getByTestId("profile-posts").boundingBox();
+  expect(activity && postTab && activity.y < postTab.y).toBe(true);
+  await expect(wall.getByTestId("profile-sports")).toContainText("Powerlifting");
+  await wall.getByTestId("profile-tab-about").click();
+  await expect(wall.getByTestId("profile-about")).toContainText("Morning lifter");
+  await wall.getByTestId("profile-tab-posts").click();
+  await expect(wall.getByTestId("profile-posts")).toBeVisible();
+  await wall.getByTestId("composer-audience-only-me").click();
+  await expect(wall.getByTestId("personal-audience-hint")).toHaveText("Only you can see this.");
+  await wall.getByTestId("composer-text").fill("Just me");
+  await wall.getByTestId("feed-publish").click();
+  await expect(wall.getByText("Just me", { exact: true })).toBeVisible();
+  expect(bag.posts.at(-1)).toEqual(expect.objectContaining({ content: "Just me", audience: "only_me" }));
+
+  await wall.getByTestId("profile-new-story").click();
+  await page.getByTestId("story-audience-only-me").click();
+  await expect(page.getByTestId("story-audience-hint")).toHaveText("Only you can see this.");
+  await page.getByTestId("story-caption").fill("Private singles");
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("profile-screen")).toBeVisible();
+  expect(bag.stories.at(-1)).toEqual(expect.objectContaining({
+    workout_id: "w-1", caption: "Private singles", audience: "only_me", highlight: false,
+  }));
+
+  await wall.getByTestId("open-settings").click();
+  await expect(page.getByTestId("settings-screen")).toBeVisible();
+  await expect(page.getByTestId("settings-screen").getByTestId("edit-profile")).toBeVisible();
+  await expect(page.getByTestId("settings-screen").getByTestId("open-saved")).toBeVisible();
 });
