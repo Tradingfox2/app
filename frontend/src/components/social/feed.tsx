@@ -102,6 +102,9 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
   const [audience, setAudience] = useState<string | null>(communityId ?? null);
   const [mine, setMine] = useState<Community[] | null>(null);
   const [picking, setPicking] = useState(false);
+  const [workoutId, setWorkoutId] = useState<string | null>(null);
+  const [workouts, setWorkouts] = useState<{ id: string; title: string; ended_at?: string | null; duration_sec?: number | null }[] | null>(null);
+  const [pickingWorkout, setPickingWorkout] = useState(false);
   const busyRef = useRef(false);
 
   const pick = async () => {
@@ -126,8 +129,17 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
     if (!mine) api.communities("mine").then(rows => setMine(rows.filter(row => row.membership?.status === "active"))).catch(() => setMine([]));
   };
 
+  const openWorkouts = () => {
+    setPickingWorkout(open => !open);
+    if (workouts) return;
+    api.workouts()
+      .then(rows => setWorkouts((rows as { id: string; title: string; ended_at?: string | null; duration_sec?: number | null }[]).filter(row => row.ended_at)))
+      .catch(cause => setError(cause instanceof Error ? cause.message : t("Something went wrong")));
+  };
+
   const pollReady = !poll || (poll.options.filter(option => option.trim()).length >= 2 && text.trim().length > 0);
-  const canPublish = !busy && pollReady && (text.trim().length > 0 || media.length > 0);
+  const hasWorkout = !!communityId && !!workoutId;
+  const canPublish = !busy && pollReady && (text.trim().length > 0 || media.length > 0 || hasWorkout);
 
   const publish = async () => {
     if (busyRef.current || !canPublish) return;
@@ -140,6 +152,7 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
         media_ids: media.map(item => item.id),
         ...(audience && !personal ? { community_id: audience } : {}),
         ...(personal ? { audience: personalAudience } : {}),
+        ...(hasWorkout && workoutId ? { workout_id: workoutId } : {}),
         ...(poll ? { poll: { options: poll.options.map(option => option.trim()).filter(Boolean), duration_hours: poll.hours } } : {}),
       });
       // Best-effort: a failed analytics post must not fail the publish.
@@ -149,7 +162,7 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
         has_poll: poll !== null,
         ...(audience ? { community_id: audience } : {}),
       });
-      setText(""); setMedia([]); setPoll(null); onPublished(post);
+      setText(""); setMedia([]); setPoll(null); setWorkoutId(null); setPickingWorkout(false); onPublished(post);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("Something went wrong"));
     } finally { busyRef.current = false; setBusy(null); }
@@ -182,8 +195,23 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
         <Pressable accessibilityRole="button" onPress={() => { setAudience(null); setPicking(false); }} style={[styles.chip, !audience && styles.chipOn]} testID="audience-public"><Text style={[styles.chipText, !audience && styles.chipTextOn]}>{t("Public")}</Text></Pressable>
         {mine === null ? <ActivityIndicator color={colors.brand} /> : mine.map(row => <Pressable key={row.id} accessibilityRole="button" onPress={() => { setAudience(row.id); setPicking(false); }} style={[styles.chip, audience === row.id && styles.chipOn]} testID={`audience-${row.id}`}><Text style={[styles.chipText, audience === row.id && styles.chipTextOn]}>{row.name}</Text></Pressable>)}
       </View> : null}
+      {communityId && pickingWorkout ? <View style={styles.chips} testID="composer-workouts">
+        {workouts === null ? <ActivityIndicator color={colors.brand} /> : workouts.length === 0 ? <Text style={styles.time}>{t("Finish a workout to share it on the wall.")}</Text> : workouts.map(workout => {
+          const on = workout.id === workoutId;
+          return <Pressable key={workout.id} accessibilityRole="button" testID={`composer-workout-${workout.id}`} onPress={() => { setWorkoutId(workout.id); setPickingWorkout(false); }} style={[styles.chip, on && styles.chipOn]}>
+            <Text style={[styles.chipText, on && styles.chipTextOn]}>{workout.title}</Text>
+          </Pressable>;
+        })}
+      </View> : null}
+      {hasWorkout ? <View style={styles.chips} testID="composer-workout-selected">
+        <Text style={styles.chipTextOn}>{workouts?.find(row => row.id === workoutId)?.title || t("Workout")}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Remove workout")} testID="composer-workout-remove" onPress={() => setWorkoutId(null)} style={styles.iconButton}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable>
+      </View> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       <View style={styles.composerRow}>
+        {communityId ? <Pressable accessibilityRole="button" accessibilityLabel={t("Attach workout")} testID="composer-attach-workout" disabled={!!busy} onPress={openWorkouts} style={[styles.iconButton, !!busy && styles.disabled]}>
+          <Ionicons name={workoutId ? "barbell" : "barbell-outline"} size={20} color={colors.brand} />
+        </Pressable> : null}
         <Pressable accessibilityRole="button" accessibilityLabel={t("Add photo or video")} disabled={!!busy || media.length >= MAX_ATTACHMENTS} onPress={() => void pick()} style={[styles.iconButton, (!!busy || media.length >= MAX_ATTACHMENTS) && styles.disabled]}>
           {busy === "upload" ? <ActivityIndicator color={colors.brand} /> : <Ionicons name="image-outline" size={20} color={colors.brand} />}
         </Pressable>

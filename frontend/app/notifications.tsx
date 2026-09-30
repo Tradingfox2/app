@@ -30,6 +30,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   comment_like: "heart-outline",
   live_session: "radio-outline",
   program_adopted: "barbell-outline",
+  join_request: "person-add-outline",
 };
 
 const PAGE = 30;
@@ -108,7 +109,9 @@ export default function NotificationsScreen() {
       switch (row.metadata?.target_type) {
         case "user": return router.push({ pathname: "/user/[id]", params: { id: target } });
         case "dm": return router.push({ pathname: "/dm/[id]", params: { id: target } });
-        case "community": return router.push({ pathname: "/community/[id]", params: { id: target } });
+        case "community":
+          if (row.metadata?.manage) return router.push({ pathname: "/community/[id]/manage", params: { id: target } });
+          return router.push({ pathname: "/community/[id]", params: { id: target } });
         case "post": return router.push({ pathname: "/post/[id]", params: { id: target } });
         default: break;
       }

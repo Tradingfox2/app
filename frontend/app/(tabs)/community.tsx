@@ -43,7 +43,7 @@ export default function CommunityScreen() {
     setError("");
     try {
       const [discoverResult, mineResult, coachResult, rankingResult] = await Promise.all([
-        api.communities("discover", { category }), api.communities("mine"), api.coaches(), api.communityRankings(),
+        api.communities("discover", { category, sort: "trending" }), api.communities("mine"), api.coaches(), api.communityRankings(),
       ]);
       if (requestRevision !== revision.current) return;
       setCommunities(discoverResult);
@@ -67,7 +67,7 @@ export default function CommunityScreen() {
 
   const loadMoreCommunities = async () => {
     try {
-      const rows = await api.communities("discover", { category, offset: communities.length });
+      const rows = await api.communities("discover", { category, offset: communities.length, sort: "trending" });
       setCommunities(current => [...current, ...rows.filter(row => !current.some(existing => existing.id === row.id))]);
       setMoreCommunities(rows.length === DISCOVER_PAGE);
     } catch { setError(t("Something went wrong")); }
@@ -86,6 +86,8 @@ export default function CommunityScreen() {
 
   const openCommunity = (community: Pick<Community, "id">) => router.push({ pathname: "/community/[id]", params: { id: community.id } });
   const isCoach = user?.role === "coach";
+  const hasClub = mine.some(row => row.membership?.status === "active");
+  const clubFirst = !isCoach && !loading && !hasClub;
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="community-screen">
@@ -118,10 +120,23 @@ export default function CommunityScreen() {
             <Text style={styles.signalTitle}>{t("Find your people. Build momentum.")}</Text>
             <Text style={styles.signalBody}>{t("Join focused training groups, learn from coaches, and keep the conversation moving between sessions.")}</Text>
           </View>
-          <Pressable style={styles.primaryAction} onPress={() => router.push(isCoach ? "/community/new" : "/coach/onboarding")}>
-            <Ionicons name={isCoach ? "add" : "arrow-forward"} size={17} color={colors.brandOn} />
-            <Text style={styles.primaryActionText}>{t(isCoach ? "CREATE" : "BECOME A COACH")}</Text>
-          </Pressable>
+          <View style={styles.signalActions}>
+            {isCoach ? <Pressable style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/community/new")}>
+              <Ionicons name="add" size={17} color={colors.brandOn} />
+              <Text style={styles.primaryActionText}>{t("CREATE")}</Text>
+            </Pressable> : clubFirst ? <>
+              <Pressable style={styles.primaryAction} testID="community-primary-cta" onPress={() => setTab("discover")}>
+                <Ionicons name="search" size={17} color={colors.brandOn} />
+                <Text style={styles.primaryActionText}>{t("FIND A CLUB")}</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
+                <Text style={styles.secondaryActionText}>{t("START A CLUB")}</Text>
+              </Pressable>
+            </> : !loading ? <Pressable style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
+              <Ionicons name="arrow-forward" size={17} color={colors.brandOn} />
+              <Text style={styles.primaryActionText}>{t("BECOME A COACH")}</Text>
+            </Pressable> : null}
+          </View>
         </View>
 
         <LiveNowStrip inset />
@@ -174,6 +189,7 @@ export default function CommunityScreen() {
               <Text style={styles.sectionTitle}>{t(tab === "discover" ? "TRENDING COMMUNITIES" : "YOUR COMMUNITIES")}</Text>
               <Text style={styles.count}>{formatNumber((tab === "discover" ? communities : mine).length)}</Text>
             </View>
+            {tab === "discover" ? <Text style={styles.rankingNote}>{t("New members in the last 14 days.")}</Text> : null}
             {tab === "discover" ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.sm }} testID="category-filter">
               {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Pressable key={item ?? "all"} accessibilityRole="button" {...selectedControl(category === item)} testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
                 <Text style={[styles.scopeText, category === item && styles.scopeTextActive]}>{t(item ? item.replace("_", " ").toUpperCase() : "ALL")}</Text>
@@ -213,6 +229,7 @@ export default function CommunityScreen() {
         {!loading && !error && tab === "coaches" ? (
           <View style={styles.list}>
             <View style={styles.sectionHead}><Text style={styles.sectionTitle}>{t("TOP COACHES")}</Text><Text style={styles.count}>{formatNumber(coaches.length)}</Text></View>
+            <Text style={styles.rankingNote} testID="coaches-basis">{t("Athletes in active public clubs. The coach is not counted.")}</Text>
             {coaches.map((coach) => (
               <Pressable key={coach.id} accessibilityRole="button" testID={`coach-${coach.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: coach.id } })} style={styles.coachRow}>
                 <Avatar user={coach} size={44} />
@@ -344,6 +361,9 @@ const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: sp
   scopeChip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" }, scopeChipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
   scopeText: { color: colors.textMuted, fontSize: 10, fontWeight: "900", letterSpacing: 1 }, scopeTextActive: { color: colors.brand },
   signalBand: { padding: spacing.lg, backgroundColor: colors.surface2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, gap: spacing.lg },
+  signalActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" },
+  secondaryAction: { minHeight: 44, paddingHorizontal: spacing.md, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong },
+  secondaryActionText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.6 },
   signalCopy: { maxWidth: 640 }, signalTitle: { color: colors.text, fontSize: 21, lineHeight: 25, fontWeight: "900" },
   signalBody: { color: colors.textMuted, lineHeight: 20, marginTop: spacing.sm, maxWidth: 560 },
   primaryAction: { minHeight: 44, alignSelf: "flex-start", paddingHorizontal: spacing.md, flexDirection: "row", gap: spacing.sm, alignItems: "center", backgroundColor: colors.brand, borderRadius: radius.sm },

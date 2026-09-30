@@ -118,6 +118,28 @@ def test_an_unfinished_workout_cannot_be_shared(monkeypatch):
     run_isolated(scenario)
 
 
+def test_a_club_wall_post_can_carry_the_authors_workout(monkeypatch):
+    async def scenario(db):
+        await seed_social(db, monkeypatch)
+        await finished_workout(db, "w-1", "mem")
+        await finished_workout(db, "w-out", "out")
+        post = await social.create_post(
+            social.PostIn(content="club session", community_id="c-1", workout_id="w-1"), account("mem"))
+        assert post["community_id"] == "c-1"
+        assert post["audience"] == "public"
+        assert post["workout_summary"]["workout_id"] == "w-1"
+        assert post["workout_summary"]["sets"] == 3
+        with pytest.raises(HTTPException) as outsider:
+            await social.create_post(social.PostIn(community_id="c-1", workout_id="w-out"), account("out"))
+        assert outsider.value.status_code == 403
+        # A club post keeps the community as its audience. only_me stays off this surface.
+        with pytest.raises(HTTPException) as private:
+            await social.create_post(
+                social.PostIn(content="mine", community_id="c-1", audience="only_me"), account("mem"))
+        assert private.value.status_code == 422
+    run_isolated(scenario)
+
+
 def test_an_empty_post_is_still_refused(monkeypatch):
     async def scenario(db):
         await seed_social(db, monkeypatch)

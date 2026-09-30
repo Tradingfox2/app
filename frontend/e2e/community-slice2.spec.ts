@@ -211,6 +211,144 @@ test("search finds people and communities by tab, after two letters", async ({ p
   expect(queries.filter(q => q.startsWith("users:"))).toEqual(["users:dana"]);
 });
 
+test("the club wall and member list show the error and a retry", async ({ page }) => {
+  let wallCalls = 0;
+  let memberCalls = 0;
+  const post = {
+    id: "p-1", author_id: "u-9", author: { id: "u-9", full_name: "Owner", avatar_url: null },
+    content: "Wall is back", community_id: "c-1", media: [], repost_of: null,
+    like_count: 0, comment_count: 0, repost_count: 0, liked_by_me: false, reposted_by_me: false,
+    created_at: "2026-09-14T08:00:00Z",
+  };
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: community }); return true; }
+    if (path === "/communities/c-1/channels") { await route.fulfill({ json: [] }); return true; }
+    if (path === "/feed") {
+      wallCalls += 1;
+      if (wallCalls === 1) {
+        await route.fulfill({ status: 502, contentType: "text/html", body: "<html>bad gateway</html>" });
+        return true;
+      }
+      await route.fulfill({ json: [post] });
+      return true;
+    }
+    if (path === "/communities/c-1/directory") {
+      memberCalls += 1;
+      if (memberCalls === 1) {
+        await route.fulfill({ status: 500, json: { detail: "Directory down" } });
+        return true;
+      }
+      await route.fulfill({ json: [{ id: "u-2", full_name: "Coach Two", avatar_url: null }] });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await page.getByTestId("community-detail-tab-wall").click();
+  await expect(page.getByTestId("wall-error")).toHaveText(/Request failed: 502/);
+  await expect(page.getByText("No posts on the wall yet. Start the conversation.")).toHaveCount(0);
+  await page.getByTestId("wall-retry").click();
+  await expect(page.getByText("Wall is back", { exact: true })).toBeVisible();
+  await page.getByTestId("community-detail-tab-members").click();
+  await expect(page.getByTestId("members-error")).toHaveText(/Directory down/);
+  await page.getByTestId("members-retry").click();
+  await expect(page.getByTestId("directory-u-2")).toContainText("Coach Two");
+});
+
+test("a pending member of a private club sees the request, not the room", async ({ page }) => {
+  const pending = {
+    ...community, is_public: false, description: "secret plan", rules: ["no secrets"], welcome_message: "come in",
+    redacted: true, membership: { ...community.membership, status: "pending" },
+  };
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: pending }); return true; }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await expect(page.getByText("REQUEST PENDING", { exact: true })).toBeVisible();
+  await expect(page.getByText("A community manager will review your request.")).toBeVisible();
+  await expect(page.getByText("secret plan")).toHaveCount(0);
+  await expect(page.getByText("no secrets")).toHaveCount(0);
+  await expect(page.getByTestId("community-about")).toHaveCount(0);
+  await expect(page.getByText("Iron Club", { exact: true })).toBeVisible();
+});
+
+test("a declined request says so and can be sent again", async ({ page }) => {
+  const declined = {
+    ...community, join_policy: "approval", membership: { ...community.membership, status: "rejected" },
+  };
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: declined }); return true; }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await expect(page.getByText("REQUEST DECLINED", { exact: true })).toBeVisible();
+  await expect(page.getByText("A manager declined this request.")).toBeVisible();
+  await expect(page.getByTestId("join-community")).toContainText("REQUEST");
+});
+
+test("an invite failure shows the API error, and a failed share is not silent", async ({ page }) => {
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: community }); return true; }
+    if (path === "/communities/c-1/invites" && route.request().method() === "POST") {
+      await route.fulfill({ status: 429, json: { detail: "Invite limit reached" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await page.getByTestId("invite-people").click();
+  await expect(page.getByTestId("invite-error")).toHaveText("Invite limit reached");
+});
+
+test("sharing an invite reports a failure instead of swallowing it", async ({ page }) => {
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: community }); return true; }
+    if (path === "/communities/c-1/invites" && route.request().method() === "POST") {
+      await route.fulfill({ status: 201, json: { id: "i-1", code: "AbC123", community_id: "c-1", created_by: me.id, max_uses: null, uses: 0, expires_at: null, skip_approval: false, revoked_at: null, created_at: "2026-09-14T08:00:00Z", unusable_reason: null } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await page.getByTestId("invite-people").click();
+  await expect(page.getByTestId("invite-link")).toBeVisible();
+  await page.getByTestId("invite-share").click();
+  await expect(page.getByTestId("invite-error")).toContainText(/copied instead|Could not share this invite/);
+});
+
+test("the club wall composer attaches a finished workout by id", async ({ page }) => {
+  const bodies: unknown[] = [];
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: community }); return true; }
+    if (path === "/communities/c-1/channels") { await route.fulfill({ json: [] }); return true; }
+    if (path === "/feed") { await route.fulfill({ json: [] }); return true; }
+    if (path === "/workouts") {
+      await route.fulfill({ json: [{ id: "w-1", title: "Leg day", ended_at: "2026-09-01T00:00:00Z" }, { id: "w-open", title: "Still going", ended_at: null }] });
+      return true;
+    }
+    if (path === "/posts" && route.request().method() === "POST") {
+      bodies.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, json: {
+        id: "p-new", author_id: me.id, author: me, content: "club session", community_id: "c-1", media: [],
+        repost_of: null, like_count: 0, comment_count: 0, repost_count: 0, liked_by_me: false, reposted_by_me: false,
+        workout_id: "w-1", created_at: "2026-09-14T08:00:00Z",
+      } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await page.getByTestId("community-detail-tab-wall").click();
+  await page.getByTestId("composer-attach-workout").click();
+  await expect(page.getByTestId("composer-workout-w-1")).toBeVisible();
+  await expect(page.getByTestId("composer-workout-w-open")).toHaveCount(0);
+  await page.getByTestId("composer-workout-w-1").click();
+  await page.getByTestId("composer-text").fill("club session");
+  await page.getByTestId("feed-publish").click();
+  await expect.poll(() => bodies).toEqual([{ content: "club session", media_ids: [], community_id: "c-1", workout_id: "w-1" }]);
+});
+
 test("the community tab opens search", async ({ page }) => {
   await base(page, async () => false);
   await page.goto("/community");

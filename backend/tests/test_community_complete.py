@@ -205,6 +205,99 @@ def test_discover_ranks_by_size_not_by_age(monkeypatch):
     run_isolated(scenario)
 
 
+def test_trending_ranks_recent_joins_ahead_of_a_larger_idle_club(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        moment = datetime.now(timezone.utc)
+        old = moment - timedelta(days=40)
+        recent = moment - timedelta(days=2)
+        await db.communities.insert_many([
+            {"id": "c-big", "owner_id": "owner", "name": "Big", "status": "active", "is_public": True, "created_at": old},
+            {"id": "c-hot", "owner_id": "owner", "name": "Hot", "status": "active", "is_public": True, "created_at": old},
+        ])
+        await db.community_members.insert_many(
+            [{"id": f"big-{i}", "community_id": "c-big", "user_id": f"big-{i}", "status": "active", "joined_at": old} for i in range(5)]
+            + [{"id": "hot-1", "community_id": "c-hot", "user_id": "hot-1", "status": "active", "joined_at": recent}]
+        )
+        trending = [row["id"] for row in await community.list_communities("discover", None, None, 0, 50, "trending")]
+        assert trending.index("c-hot") < trending.index("c-big")
+        # The default sort is still all-time size. c-1's three seed members outrank the hot club.
+        default = [row["id"] for row in await community.list_communities("discover", None)]
+        assert default.index("c-big") < default.index("c-1") < default.index("c-hot")
+    run_isolated(scenario)
+
+
+def test_coaches_are_ranked_by_athletes_in_active_public_clubs(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await db.users.update_one({"id": "owner"}, {"$set": {"role": "coach", "coach_status": "approved"}})
+        await db.users.update_one({"id": "mod"}, {"$set": {"role": "coach", "coach_status": "approved"}})
+        await db.communities.insert_many([
+            {"id": "c-mod", "owner_id": "mod", "name": "Mod Club", "status": "active", "is_public": True},
+            {"id": "c-priv", "owner_id": "mod", "name": "Hidden", "status": "active", "is_public": False},
+            {"id": "c-arch", "owner_id": "owner", "name": "Closed", "status": "archived", "is_public": True},
+        ])
+        await db.community_members.insert_many(
+            [{"id": f"mm-{i}", "community_id": "c-mod", "user_id": f"fan-{i}", "status": "active"} for i in range(4)]
+            + [{"id": "mm-self", "community_id": "c-mod", "user_id": "mod", "role": "owner", "status": "active"}]
+            + [{"id": f"pv-{i}", "community_id": "c-priv", "user_id": f"p-{i}", "status": "active"} for i in range(10)]
+            + [{"id": f"ar-{i}", "community_id": "c-arch", "user_id": f"a-{i}", "status": "active"} for i in range(8)]
+        )
+        coaches = await community.list_coaches()
+        assert [row["id"] for row in coaches] == ["mod", "owner"]
+        assert coaches[0]["member_count"] == 4 and coaches[0]["community_count"] == 1
+        # Seed club: moderator and member, not the owner. The archived club does not count.
+        assert coaches[1]["member_count"] == 2 and coaches[1]["community_count"] == 1
+    run_isolated(scenario)
+
+
+def test_a_pending_private_club_is_redacted_instead_of_forbidden(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await db.communities.update_one({"id": "c-1"}, {"$set": {
+            "is_public": False, "description": "secret plan", "rules": ["no secrets"], "welcome_message": "welcome in",
+        }})
+        await db.community_members.insert_one({
+            "id": "m-out", "community_id": "c-1", "user_id": "out", "role": "member", "status": "pending",
+        })
+        view = await community.get_community("c-1", account("out"))
+        assert view["redacted"] is True
+        assert view["name"] == "Iron Club"
+        assert view["description"] == "" and view["rules"] == [] and view["welcome_message"] == ""
+        assert view["membership"]["status"] == "pending"
+        await expect(403, community.get_community("c-1", account("ghost")))
+        await db.community_members.update_one({"id": "m-out"}, {"$set": {"status": "rejected"}})
+        declined = await community.get_community("c-1", account("out"))
+        assert declined["redacted"] is True and declined["membership"]["status"] == "rejected"
+        await db.community_members.update_one({"id": "m-out"}, {"$set": {"status": "banned"}})
+        await expect(403, community.get_community("c-1", account("out")))
+    run_isolated(scenario)
+
+
+def test_a_join_request_alerts_managers_and_aggregates(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await db.communities.update_one({"id": "c-1"}, {"$set": {"join_policy": "approval"}})
+        editor = await community.create_role(
+            "c-1", community.RoleIn(name="editor", rank=3, permissions=p.DEFAULT_MEMBER | p.MANAGE_CHANNEL), account("owner"))
+        await community.assign_member_roles("c-1", "m-mem", community.MemberRolesIn(role_ids=[editor["id"]]), account("owner"))
+        joined = await community.join_community("c-1", account("out"))
+        assert joined["status"] == "pending"
+        notes = [row async for row in db.notifications.find({"type": "join_request"}, {"_id": 0})]
+        assert {row["user_id"] for row in notes} == {"owner", "mod", "mem"}
+        assert all(row["metadata"]["manage"] is True and row["metadata"]["target_id"] == "c-1" for row in notes)
+        await db.users.insert_one(account("out2"))
+        await community.join_community("c-1", account("out2"))
+        owner_notes = [row async for row in db.notifications.find({"user_id": "owner", "type": "join_request"})]
+        assert len(owner_notes) == 1 and owner_notes[0]["actor_count"] == 2
+        reviewed = await community.review_membership(
+            "c-1", joined["id"], community.MembershipReviewIn(status="rejected"), account("owner"))
+        assert reviewed["status"] == "rejected"
+        declined = await db.notifications.find_one({"user_id": "out", "type": "membership"})
+        assert declined and "declined" in declined["title"]
+    run_isolated(scenario)
+
+
 def test_archived_communities_leave_mine_and_can_be_restored(monkeypatch):
     async def scenario(db):
         await seed_all(db, monkeypatch)

@@ -147,6 +147,44 @@ test("an ended challenge offers no join button", async ({ page }) => {
   await expect(page.getByTestId("challenge-toggle")).toHaveCount(0);
 });
 
+test("an open challenge is on the club home, and an ended one is not", async ({ page }) => {
+  const ends = new Date(Date.now() + 5 * 86_400_000).toISOString();
+  const ended = new Date(Date.now() - 86_400_000).toISOString();
+  const community = {
+    id: "c-1", owner_id: me.id, name: "Iron Club", slug: "iron-club", description: "", is_public: true,
+    join_policy: "open", price_cents: 0, currency: "EUR", member_count: 1, owner: null,
+    membership: { id: "m-1", community_id: "c-1", user_id: me.id, role: "owner", status: "active", entitlement_source: "ownership", joined_at: null },
+    created_at: "2026-01-01T00:00:00Z",
+  };
+  let joined = false;
+  await base(page, async (route, path) => {
+    if (path === "/communities/c-1") { await route.fulfill({ json: community }); return true; }
+    if (path === "/communities/c-1/channels") {
+      await route.fulfill({ json: [
+        { id: "ch-goal", community_id: "c-1", name: "september", description: "", is_default: false, kind: "challenge", permissions: 0b1111, challenge: { metric: "workouts", starts_at: "2026-09-01T00:00:00Z", ends_at: ends, goal: 100 } },
+        { id: "ch-old", community_id: "c-1", name: "last month", description: "", is_default: false, kind: "challenge", permissions: 0b1111, challenge: { metric: "workouts", starts_at: "2026-01-01T00:00:00Z", ends_at: ended, goal: 10 } },
+      ] });
+      return true;
+    }
+    if (path === "/channels/ch-goal/challenge") {
+      await route.fulfill({ json: joined ? board({ joined: true, participant_count: 4, me: { place: 3, score: 4 }, channel_id: "ch-goal" }) : board({ channel_id: "ch-goal" }) });
+      return true;
+    }
+    if (path === "/channels/ch-goal/challenge/participants" && route.request().method() === "POST") {
+      joined = true;
+      await route.fulfill({ status: 201, json: { joined: true } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/community/c-1");
+  await expect(page.getByTestId("club-challenge-ch-goal")).toBeVisible();
+  await expect(page.getByTestId("club-challenge-ch-old")).toHaveCount(0);
+  await expect(page.getByTestId("challenge-panel")).toContainText("Only members who join are scored");
+  await page.getByTestId("challenge-toggle").click();
+  await expect(page.getByTestId("challenge-me")).toHaveText("You are #3 with 4 workouts");
+});
+
 test("a plain text channel shows no fitness panel", async ({ page }) => {
   await base(page, async (route, path) => {
     if (path === "/channels/fixture-channel") { await route.fulfill({ json: channel("text") }); return true; }

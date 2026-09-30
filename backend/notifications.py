@@ -35,11 +35,12 @@ LIVE_SESSION = "live_session"
 PROGRAM_ADOPTED = "program_adopted"
 COMMENT_REPLY = "comment_reply"
 COMMENT_LIKE = "comment_like"
+JOIN_REQUEST = "join_request"
 
 #: Repeated events on the same object collapse into one row instead of
 #: flooding the list — "X and 4 others liked your post". Only unread rows
 #: inside this window absorb a new actor; anything older starts a fresh one.
-AGGREGATABLE = {POST_LIKE, POST_COMMENT, POST_REPOST, PROGRAM_ADOPTED, COMMENT_LIKE, DIRECT_MESSAGE}
+AGGREGATABLE = {POST_LIKE, POST_COMMENT, POST_REPOST, PROGRAM_ADOPTED, COMMENT_LIKE, DIRECT_MESSAGE, JOIN_REQUEST}
 AGGREGATION_WINDOW = timedelta(hours=24)
 
 #: `<@a1b2c3d4-...>` — what the composer emits when a member picks a suggestion.
@@ -92,7 +93,7 @@ MANDATORY = {MEMBERSHIP, COACH_DECISION, "moderation_action", "lab_report_ready"
 CONFIGURABLE = (
     FOLLOW, FOLLOW_REQUEST, FOLLOW_ACCEPTED, POST_LIKE, POST_COMMENT, POST_REPOST,
     POST_MENTION, MENTION, COMMENT_REPLY, COMMENT_LIKE, DIRECT_MESSAGE,
-    LIVE_SESSION, PROGRAM_ADOPTED,
+    LIVE_SESSION, PROGRAM_ADOPTED, JOIN_REQUEST,
 )
 
 
