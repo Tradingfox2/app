@@ -27,7 +27,11 @@ export default function TagScreen() {
     </View>
     <ScrollView>
       {feed.loading ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} /> : null}
-      {!feed.loading && feed.posts.length === 0 ? <Text style={styles.empty}>{t("No posts with this tag yet.")}</Text> : null}
+      {feed.error ? <View accessibilityRole="alert" testID="tag-feed-error" style={styles.errorBox}>
+        <Text style={styles.error}>{feed.error}</Text>
+        <Pressable accessibilityRole="button" testID="tag-feed-retry" onPress={() => void feed.load()}><Text style={styles.moreText}>{t("Retry")}</Text></Pressable>
+      </View> : null}
+      {!feed.loading && !feed.error && feed.posts.length === 0 ? <Text style={styles.empty}>{t("No posts with this tag yet.")}</Text> : null}
       {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={feed.prepend} />)}
       {feed.hasMore ? <Pressable accessibilityRole="button" onPress={() => void feed.loadMore()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Pressable> : null}
     </ScrollView>
@@ -40,6 +44,8 @@ const styles = StyleSheet.create({
   icon: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   title: { color: colors.brand, fontWeight: "900", fontSize: 18 },
   empty: { color: colors.textMuted, textAlign: "center", padding: spacing.xl },
+  errorBox: { alignItems: "center", gap: spacing.sm, padding: spacing.xl },
+  error: { color: colors.error, textAlign: "center" },
   more: { padding: spacing.lg, alignItems: "center" },
   moreText: { color: colors.brand, fontWeight: "900", letterSpacing: 1 },
 });

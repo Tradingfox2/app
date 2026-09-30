@@ -761,7 +761,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const body = text ? JSON.parse(text) : null;
   if (!res.ok) {
     const msg = body?.detail || `Request failed: ${res.status}`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const error = new Error(typeof msg === "string" ? msg : JSON.stringify(msg)) as Error & { status: number };
+    error.status = res.status;
+    throw error;
   }
   return body as T;
 }

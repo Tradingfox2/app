@@ -41,12 +41,13 @@ export function useFeed(filters: FeedFilters = {}, initialScope: Scope = "all") 
 
   const load = useCallback(async (nextScope: Scope = scope) => {
     const current = ++revision.current;
-    setError("");
     try {
       const rows = await api.feed(nextScope, undefined, { author_id, tag, community_id });
       if (current !== revision.current) return;
       setPosts(rows);
       setHasMore(rows.length === PAGE_SIZE);
+      // Clear only after a real page arrives, so a retry never flashes "No posts".
+      setError("");
     } catch (cause) {
       if (current === revision.current) setError(cause instanceof Error ? cause.message : t("Something went wrong"));
     } finally {
@@ -386,8 +387,10 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [editError, setEditError] = useState("");
   const loaded = useRef(false);
+  const commentGen = useRef(0);
 
   const guard = async (action: () => Promise<void>) => {
     if (busy) return;
@@ -395,10 +398,27 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
     try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
     finally { setBusy(false); }
   };
+  const loadComments = () => {
+    const gen = ++commentGen.current;
+    setLoadError("");
+    api.comments(post.id).then(page => {
+      if (gen !== commentGen.current) return;
+      setRows(page);
+      setHasOlder(page.length === 50);
+    }).catch(cause => {
+      if (gen !== commentGen.current) return;
+      setLoadError(cause instanceof Error ? cause.message : t("Something went wrong"));
+    });
+  };
   if (!loaded.current) {
     loaded.current = true;
-    api.comments(post.id).then(page => { setRows(page); setHasOlder(page.length === 50); }).catch(() => setRows([]));
+    loadComments();
   }
+  const retryComments = () => {
+    setRows(null);
+    setHasOlder(false);
+    loadComments();
+  };
   const older = () => guard(async () => {
     if (!rows?.length) return;
     const page = await api.comments(post.id, rows[0].id);
@@ -473,9 +493,13 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
   };
 
   return <View style={styles.comments}>
-    {rows === null ? <ActivityIndicator color={colors.brand} /> : null}
+    {rows === null && !loadError ? <ActivityIndicator color={colors.brand} /> : null}
+    {loadError ? <View accessibilityRole="alert" testID="comments-error">
+      <Text style={styles.error}>{loadError}</Text>
+      <Pressable accessibilityRole="button" testID="comments-retry" onPress={retryComments}><Text style={styles.link}>{t("Retry")}</Text></Pressable>
+    </View> : null}
     {hasOlder ? <Pressable accessibilityRole="button" onPress={() => void older()} testID="comments-older"><Text style={styles.link}>{t("View earlier comments")}</Text></Pressable> : null}
-    {rows && rows.length === 0 ? <Text style={styles.time}>{t("Be the first to comment")}</Text> : null}
+    {rows && rows.length === 0 && !loadError ? <Text style={styles.time}>{t("Be the first to comment")}</Text> : null}
     {topLevel.map(comment => renderComment(comment, false))}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {replyTo ? <View style={styles.replyingTo}><Text style={styles.time}>{t("Replying to {name}").replace("{name}", replyTo.author?.full_name || t("Member"))}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel reply")} onPress={() => setReplyTo(null)}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable></View> : null}
