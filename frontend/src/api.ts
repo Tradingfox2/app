@@ -587,7 +587,7 @@ export type Post = {
   link_preview?: LinkPreview | null;
   edited_at?: string | null;
   /** Missing on older posts; the server treats that as public. */
-  audience?: "public" | "friends";
+  audience?: "public" | "friends" | "only_me";
 };
 
 export type Poll = {
@@ -610,7 +610,7 @@ export type Story = {
   media: MediaItem[];
   workout_id: string | null;
   workout_summary: WorkoutSummary | null;
-  audience: "friends" | "public";
+  audience: "public" | "friends" | "only_me";
   highlight: boolean;
   highlight_title: string | null;
   expires_at: string | null;
@@ -820,7 +820,13 @@ export const api = {
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 
   dashboard: () => request<any>("/dashboard"),
+  /** Same document as dashboard, named for the home screen. */
+  homeToday: () => request<any>("/home/today"),
 
+  previousSets: (exerciseId: string, limit = 1) =>
+    request<{ exercise_id: string; sessions: { workout_id: string; started_at: string; ended_at: string; sets: Record<string, unknown>[] }[] }>(
+      `/exercises/${encodeURIComponent(exerciseId)}/previous-sets?limit=${limit}`,
+    ),
   exercises: (params?: { category?: string; muscle?: string }) => {
     const qs = new URLSearchParams();
     if (params?.category) qs.set("category", params.category);
@@ -843,6 +849,7 @@ export const api = {
       body: JSON.stringify({ exercise_slugs }),
     }),
   finishWorkout: (id: string) => request<any>(`/workouts/${id}/finish`, { method: "POST" }),
+  repeatWorkout: (id: string) => request<any>(`/workouts/${id}/repeat`, { method: "POST" }),
   listSets: (workoutId: string) => request<any[]>(`/workouts/${workoutId}/sets`),
   addSet: (workoutId: string, payload: any) =>
     request<any>(`/workouts/${workoutId}/sets`, {
@@ -1091,7 +1098,7 @@ export const api = {
   likeComment: (id: string) => request<{ liked: boolean; like_count: number }>(`/comments/${id}/like`, { method: "POST" }),
   unlikeComment: (id: string) => request<{ liked: boolean; like_count: number }>(`/comments/${id}/like`, { method: "DELETE" }),
   /** Omit `workout_id` entirely when unset: the publish body is asserted exactly in e2e. */
-  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string; poll?: { options: string[]; duration_hours: number }; audience?: "public" | "friends" }) =>
+  publish: (payload: { content: string; media_ids?: string[]; community_id?: string | null; workout_id?: string; poll?: { options: string[]; duration_hours: number }; audience?: "public" | "friends" | "only_me" }) =>
     request<Post>("/posts", { method: "POST", body: JSON.stringify(payload) }),
   deletePost: (id: string) => request<void>(`/posts/${id}`, { method: "DELETE" }),
   likePost: (id: string) => request<{ liked: boolean; like_count: number }>(`/posts/${id}/like`, { method: "POST" }),
@@ -1115,7 +1122,7 @@ export const api = {
   userStories: (userId: string) => request<Story[]>(`/users/${userId}/stories`),
   userHighlights: (userId: string) => request<Story[]>(`/users/${userId}/highlights`),
   storyFeed: () => request<StoryGroup[]>("/stories/feed"),
-  createStory: (body: { workout_id: string; caption?: string; media_ids?: string[]; audience?: "friends" | "public"; highlight?: boolean; highlight_title?: string }) =>
+  createStory: (body: { workout_id: string; caption?: string; media_ids?: string[]; audience?: "public" | "friends" | "only_me"; highlight?: boolean; highlight_title?: string }) =>
     request<Story>("/stories", { method: "POST", body: JSON.stringify(body) }),
   deleteStory: (id: string) => request<void>(`/stories/${id}`, { method: "DELETE" }),
 
@@ -1230,6 +1237,11 @@ export const api = {
       body: JSON.stringify({ program_id, week_index, day_index }),
     }),
   programs: () => request<any[]>("/programs"),
+  startProgramDay: (programId: string, body: { week_index?: number; day_index?: number } = {}) =>
+    request<any>(`/programs/${encodeURIComponent(programId)}/start-day`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   coachStatus: () =>
     request<{
       provider: string;

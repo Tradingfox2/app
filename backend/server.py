@@ -20,7 +20,7 @@ from typing import Annotated, Any, Optional
 import bcrypt
 import jwt
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -155,6 +155,9 @@ class SetIn(BaseModel):
     duration_sec: Optional[int] = None
     distance_m: Optional[float] = None
     rpe: Optional[float] = None
+    #: Rest taken before this set. Same name as ProgramExercise.rest_sec.
+    #: Omitted stays null so older clients keep working. 0 is a real value.
+    rest_sec: Optional[int] = Field(default=None, ge=0, le=600)
 
 
 class BiomarkerIn(BaseModel):
@@ -308,7 +311,9 @@ async def lifespan(app: FastAPI):
     await db.exercises.create_index("slug", unique=True)
     await db.muscles.create_index("slug", unique=True)
     await db.workouts.create_index([("user_id", 1), ("started_at", -1)])
+    await db.workouts.create_index([("user_id", 1), ("ended_at", -1)])
     await db.workout_sets.create_index([("workout_id", 1), ("set_index", 1)])
+    await db.workout_sets.create_index([("exercise_id", 1), ("workout_id", 1)])
     await db.biomarkers.create_index([("user_id", 1), ("measured_at", -1)])
     await db.biomarkers.create_index(
         [("terra_session_id", 1), ("terra_result_index", 1)],
@@ -586,6 +591,54 @@ async def list_exercises(category: Optional[str] = None, muscle: Optional[str] =
     return [clean(e) async for e in db.exercises.find(q, {"_id": 0}).sort("name", 1)]
 
 
+_LOGGED_SET_FIELDS = (
+    "id", "exercise_id", "set_index", "reps", "weight_kg",
+    "duration_sec", "distance_m", "rpe", "rest_sec",
+)
+
+
+@api.get("/exercises/{exercise_id}/previous-sets")
+async def previous_sets(
+    exercise_id: str,
+    limit: int = Query(default=1, ge=1, le=8),
+    user: dict = Depends(current_user),
+):
+    """Most recent finished sessions that logged this exercise, for autofill.
+
+    Open workouts are excluded: a set counts only after finish writes
+    ended_at. Only the caller's own log is read — this is the logger's
+    previous performance, not a coach view of a client.
+    """
+    pipeline = [
+        {"$match": {"user_id": user["id"], "ended_at": {"$type": "date"}}},
+        {"$sort": {"ended_at": -1, "started_at": -1}},
+        {"$lookup": {
+            "from": "workout_sets",
+            "let": {"wid": "$id"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$workout_id", "$$wid"]},
+                    {"$eq": ["$exercise_id", exercise_id]},
+                ]}}},
+                {"$sort": {"set_index": 1, "created_at": 1}},
+                {"$project": {"_id": 0, **{key: 1 for key in _LOGGED_SET_FIELDS}}},
+            ],
+            "as": "sets",
+        }},
+        {"$match": {"sets.0": {"$exists": True}}},
+        {"$limit": limit},
+        {"$project": {
+            "_id": 0,
+            "workout_id": "$id",
+            "started_at": 1,
+            "ended_at": 1,
+            "sets": 1,
+        }},
+    ]
+    sessions = [row async for row in db.workouts.aggregate(pipeline)]
+    return {"exercise_id": exercise_id, "sessions": sessions}
+
+
 # ---- Workouts ------------------------------------------------------------- #
 @api.get("/workouts")
 async def list_workouts(user: dict = Depends(current_user), owner_id: Optional[str] = None):
@@ -668,6 +721,66 @@ async def finish_workout(workout_id: str, user: dict = Depends(current_user)):
     return clean(updated)
 
 
+def _suggestion(row: dict) -> dict:
+    """A prefill hint. No set id: the client logs a new row when the athlete saves."""
+    return {
+        "exercise_id": row.get("exercise_id"),
+        "set_index": row.get("set_index"),
+        "reps": row.get("reps"),
+        "weight_kg": row.get("weight_kg"),
+        "duration_sec": row.get("duration_sec"),
+        "distance_m": row.get("distance_m"),
+        "rpe": row.get("rpe"),
+        "rest_sec": row.get("rest_sec"),
+    }
+
+
+@api.post("/workouts/{workout_id}/repeat", status_code=201)
+async def repeat_workout(workout_id: str, user: dict = Depends(current_user)):
+    """Start a new open session from a finished workout. No template collection.
+
+    Copies the plan (and, when the plan is empty, the exercise order of the
+    log) plus the logged numbers as suggestions. Those suggestions are not
+    written to workout_sets — the new session stays unfinished until
+    /finish, and previous-sets keeps ignoring it until then.
+    """
+    source = await _load_workout_for(user, workout_id)
+    if not source.get("ended_at"):
+        raise HTTPException(409, "Finish the workout before repeating it")
+    logged = [
+        clean(row) async for row in db.workout_sets.find(
+            {"workout_id": workout_id}, {"_id": 0},
+        ).sort([("created_at", 1), ("set_index", 1)])
+    ]
+    slugs = list(source.get("planned_exercise_slugs") or [])
+    if not slugs and logged:
+        ids = list(dict.fromkeys(row["exercise_id"] for row in logged if row.get("exercise_id")))
+        by_id = {
+            row["id"]: row
+            async for row in db.exercises.find(
+                {"id": {"$in": ids}}, {"_id": 0, "id": 1, "slug": 1},
+            )
+        }
+        slugs = [by_id[eid]["slug"] for eid in ids if by_id.get(eid, {}).get("slug")]
+    doc = {
+        "id": new_id(),
+        "user_id": source["user_id"],
+        "title": source.get("title") or "Workout",
+        "notes": source.get("notes"),
+        "started_at": now(),
+        "ended_at": None,
+        "duration_sec": None,
+        "perceived_effort": None,
+        "planned_exercise_slugs": slugs,
+        "source": {"kind": "repeat", "workout_id": source["id"]},
+        "created_at": now(),
+    }
+    await db.workouts.insert_one(dict(doc))
+    created = await get_workout(doc["id"], user)
+    created["suggestions"] = [_suggestion(row) for row in logged]
+    return created
+
+
 @api.get("/workouts/{workout_id}/sets")
 async def list_sets(workout_id: str, user: dict = Depends(current_user)):
     w = await db.workouts.find_one({"id": workout_id})
@@ -747,10 +860,156 @@ async def add_wearable(body: WearableMetricIn, user: dict = Depends(current_user
     return clean(doc)
 
 
+async def light_club_activity(uid: str) -> list[dict]:
+    """A short glance at clubs this user belongs to.
+
+    Unread comes from channel_reads when a marker exists, otherwise from
+    joined_at, and is capped. Messages, today's check-ins, and open live
+    sessions are a window, not a second channel API.
+    """
+    memberships = [
+        row async for row in db.community_members.find(
+            {"user_id": uid, "status": "active"},
+            {"_id": 0, "community_id": 1, "joined_at": 1},
+        ).limit(8)
+    ]
+    if not memberships:
+        return []
+    joined = {row["community_id"]: row.get("joined_at") for row in memberships}
+    communities = {
+        row["id"]: row
+        async for row in db.communities.find(
+            {"id": {"$in": list(joined)}, "status": {"$ne": "archived"}},
+            {"_id": 0, "id": 1, "name": 1},
+        )
+    }
+    if not communities:
+        return []
+    channels = [
+        row async for row in db.channels.find(
+            {"community_id": {"$in": list(communities)}, "status": "active"},
+            {"_id": 0, "id": 1, "community_id": 1},
+        ).limit(48)
+    ]
+    by_community: dict[str, list[str]] = {cid: [] for cid in communities}
+    channel_community: dict[str, str] = {}
+    for channel in channels:
+        cid = channel.get("community_id")
+        if cid not in by_community:
+            continue
+        by_community[cid].append(channel["id"])
+        channel_community[channel["id"]] = cid
+    channel_ids = list(channel_community)
+    reads = {}
+    if channel_ids:
+        reads = {
+            row["channel_id"]: row.get("last_read_at")
+            async for row in db.channel_reads.find(
+                {"user_id": uid, "channel_id": {"$in": channel_ids}},
+                {"_id": 0, "channel_id": 1, "last_read_at": 1},
+            )
+        }
+    recent: list[dict] = []
+    if channel_ids:
+        recent = [
+            row async for row in db.messages.find(
+                {"channel_id": {"$in": channel_ids}, "status": "active"},
+                {"_id": 0, "id": 1, "channel_id": 1, "author_id": 1, "content": 1,
+                 "created_at": 1, "checkin_day": 1},
+            ).sort("created_at", -1).limit(24)
+        ]
+    today = now().astimezone(timezone.utc).date().isoformat()
+    checkins_today = {cid: 0 for cid in communities}
+    if channel_ids:
+        async for row in db.messages.find(
+            {"channel_id": {"$in": channel_ids}, "status": "active", "checkin_day": today},
+            {"_id": 0, "channel_id": 1},
+        ).limit(80):
+            cid = channel_community.get(row["channel_id"])
+            if cid:
+                checkins_today[cid] += 1
+    live_rows: list[dict] = []
+    if channel_ids:
+        live_rows = [
+            row async for row in db.live_sessions.find(
+                {"channel_id": {"$in": channel_ids}, "status": {"$in": ["scheduled", "live"]}},
+                {"_id": 0, "id": 1, "channel_id": 1, "title": 1, "status": 1, "starts_at": 1},
+            ).sort("starts_at", 1).limit(12)
+        ]
+
+    activity_by: dict[str, list[dict]] = {cid: [] for cid in communities}
+    for row in recent:
+        cid = channel_community.get(row["channel_id"])
+        if not cid or sum(1 for item in activity_by[cid] if item["type"] != "live") >= 3:
+            continue
+        kind = "checkin" if row.get("checkin_day") else "message"
+        item = {
+            "type": kind,
+            "id": row.get("id"),
+            "channel_id": row["channel_id"],
+            "author_id": row.get("author_id"),
+            "preview": (row.get("content") or "").strip()[:140],
+            "created_at": row.get("created_at"),
+        }
+        if kind == "checkin":
+            item["checkin_day"] = row.get("checkin_day")
+        activity_by[cid].append(item)
+    for row in live_rows:
+        cid = channel_community.get(row["channel_id"])
+        if not cid:
+            continue
+        activity_by[cid].append({
+            "type": "live",
+            "id": row.get("id"),
+            "channel_id": row["channel_id"],
+            "title": row.get("title") or "",
+            "status": row.get("status"),
+            "starts_at": row.get("starts_at"),
+        })
+        activity_by[cid] = activity_by[cid][:4]
+
+    clubs = []
+    for cid, community in communities.items():
+        ids = by_community.get(cid) or []
+        unread = 0
+        if ids:
+            ors = []
+            for channel_id in ids:
+                clause: dict = {"channel_id": channel_id}
+                since = reads.get(channel_id) or joined.get(cid)
+                if since:
+                    clause["created_at"] = {"$gt": since}
+                ors.append(clause)
+            unread = await db.messages.count_documents(
+                {"status": "active", "author_id": {"$ne": uid}, "$or": ors},
+                limit=99,
+            )
+        clubs.append({
+            "community_id": cid,
+            "name": community.get("name") or "",
+            "unread_count": unread,
+            "checkins_today": checkins_today.get(cid, 0),
+            "activity": activity_by.get(cid) or [],
+        })
+    clubs.sort(key=lambda row: (-row["unread_count"], row["name"]))
+    return clubs
+
+
 @api.get("/dashboard")
 async def dashboard(user: dict = Depends(current_user)):
-    """Aggregated glanceable stats for the Home screen."""
-    return await dashboard_snapshot(user["id"])
+    """Home aggregate. Same document as GET /home/today."""
+    return await home_today_for(user["id"])
+
+
+@api.get("/home/today")
+async def home_today(user: dict = Depends(current_user)):
+    """One home call: streak, active workout, next program day, club activity.
+
+    GET /dashboard returns this same document so the existing home client
+    does not need a second request. Daily tips still call dashboard_snapshot
+    on its own and do not load club activity.
+    """
+    return await home_today_for(user["id"])
 
 
 async def dashboard_snapshot(uid: str) -> dict:
@@ -1016,7 +1275,7 @@ import analytics  # noqa: E402
 from routers.labs import router as labs_router  # noqa: E402
 from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
-from routers.program import router as program_router  # noqa: E402
+from routers.program import next_planned_session, router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
@@ -1025,6 +1284,19 @@ from routers.analytics import router as analytics_router  # noqa: E402
 from routers.notifications import router as notifications_router  # noqa: E402
 from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
+
+
+async def home_today_for(uid: str) -> dict:
+    """Dashboard snapshot plus the next program day and a light club glance.
+
+    Tips keep calling dashboard_snapshot directly so a coach sentence does
+    not scan communities.
+    """
+    snap = await dashboard_snapshot(uid)
+    snap["next_session"] = await next_planned_session(uid)
+    snap["clubs"] = await light_club_activity(uid)
+    return snap
+
 
 api.include_router(program_router)
 api.include_router(community_router)

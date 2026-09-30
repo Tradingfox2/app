@@ -20,6 +20,7 @@ type SetPayload = {
   duration_sec?: number | null;
   distance_m?: number | null;
   rpe?: number | null;
+  rest_sec?: number | null;
 };
 
 type QueueItem = {
