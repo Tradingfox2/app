@@ -107,6 +107,7 @@ def test_kudos_exist_only_on_a_shared_workout(monkeypatch):
         assert denied.value.status_code == 422
 
         shared = await social.create_post(social.PostIn(content="", workout_id="w1"), people["alice"])
+        await db.post_kudos.create_index([("post_id", 1), ("user_id", 1)], unique=True)
         first = await social.give_kudos(shared["id"], people["bob"])
         assert first["kudos"] is True and first["kudos_count"] == 1
         again = await social.give_kudos(shared["id"], people["bob"])
