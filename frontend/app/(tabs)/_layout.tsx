@@ -32,7 +32,7 @@ export default function TabsLayout() {
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
-        <ActivityIndicator color={colors.brand} size="large" />
+        <ActivityIndicator color={colors.text} size="large" />
       </View>
     );
   }
@@ -58,7 +58,7 @@ export default function TabsLayout() {
           paddingBottom: Platform.OS === "ios" ? 28 : 10,
         },
         tabBarItemStyle: { minHeight: 44, minWidth: 44 },
-        tabBarBadgeStyle: { backgroundColor: colors.brand, color: colors.brandOn, fontSize: 10, fontWeight: "900" },
+        tabBarBadgeStyle: { backgroundColor: colors.text, color: colors.bg, fontSize: 10, fontWeight: "700" },
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "700",

@@ -141,7 +141,7 @@ export default function CheckinScreen() {
         ) : (
           <>
             <View style={styles.explainCard}>
-              <Ionicons name="qr-code" size={30} color={colors.brand} />
+              <Ionicons name="qr-code" size={30} color={colors.text} />
               <Text style={styles.explainTitle}>{t("Scan your gym's QR code")}</Text>
               <Text style={styles.explainTxt}>
                 {t("Log your visit, link it to today's session and unlock partner rewards every 10 check-ins.")}
@@ -192,7 +192,7 @@ export default function CheckinScreen() {
                 <Ionicons
                   name={result.reward_unlocked ? "trophy" : "checkmark-circle"}
                   size={34}
-                  color={colors.brand}
+                  color={colors.text}
                 />
                 <Text style={styles.resultTitle}>
                   {result.reward_unlocked ? t("REWARD UNLOCKED!") : t("CHECKED IN")}
@@ -224,7 +224,7 @@ export default function CheckinScreen() {
               </View>
             )}
 
-            {loading ? <ActivityIndicator color={colors.brand} style={{ marginVertical: spacing.lg }} testID="checkin-loading" accessibilityLabel={t("Loading...")} /> : null}
+            {loading ? <ActivityIndicator color={colors.text} style={{ marginVertical: spacing.lg }} testID="checkin-loading" accessibilityLabel={t("Loading...")} /> : null}
             {loadError ? (
               <View accessibilityRole="alert" testID="checkin-load-error" style={styles.errBanner}>
                 <Text style={styles.errTxt}>{loadError}</Text>
@@ -254,7 +254,7 @@ export default function CheckinScreen() {
                     style={styles.gymBtn}
                   >
                     {busy ? (
-                      <ActivityIndicator size="small" color={colors.brand} />
+                      <ActivityIndicator size="small" color={colors.text} />
                     ) : (
                       <Text style={styles.gymBtnTxt}>{t("CHECK IN")}</Text>
                     )}
@@ -349,24 +349,24 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     alignSelf: "flex-start",
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.text,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
     minHeight: 40,
     justifyContent: "center",
   },
-  settingsTxt: { color: colors.brand, fontWeight: "900", fontSize: 11, letterSpacing: 1 },
+  settingsTxt: { color: colors.text, fontWeight: "900", fontSize: 11, letterSpacing: 1 },
   resultCard: {
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.text,
     padding: spacing.xl,
     alignItems: "center",
     marginTop: spacing.md,
   },
   resultTitle: {
-    color: colors.brand,
+    color: colors.text,
     fontWeight: "900",
     letterSpacing: 2,
     fontSize: 14,
@@ -396,13 +396,13 @@ const styles = StyleSheet.create({
   gymCity: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   gymBtn: {
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.text,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     minHeight: 40,
     justifyContent: "center",
   },
-  gymBtnTxt: { color: colors.brand, fontWeight: "900", fontSize: 10, letterSpacing: 1 },
+  gymBtnTxt: { color: colors.text, fontWeight: "900", fontSize: 10, letterSpacing: 1 },
   visitRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -66,7 +66,7 @@ export function SupportTicketList({
           onPress={onCreate}
           style={styles.icon}
         >
-          <Ionicons name="add" size={24} color={colors.brand} />
+          <Ionicons name="add" size={24} color={colors.text} />
         </Pressable>
       )}
     >
@@ -78,7 +78,7 @@ export function SupportTicketList({
           </Pressable>
         </View>
       ) : null}
-      {loading ? <ActivityIndicator testID="support-loading" accessibilityLabel={t("Loading...")} color={colors.brand} style={styles.spinner} /> : null}
+      {loading ? <ActivityIndicator testID="support-loading" accessibilityLabel={t("Loading...")} color={colors.text} style={styles.spinner} /> : null}
       <FlatList
         style={{ flex: 1 }}
         data={tickets ?? []}
@@ -120,7 +120,7 @@ export function SupportTicketList({
 function StatusPill({ status }: { status: string }) {
   const { t } = useI18n();
   const tone = statusTone(status);
-  const color = tone === "warning" ? colors.warning : tone === "muted" ? colors.textMuted : colors.brand;
+  const color = tone === "warning" ? colors.warning : tone === "muted" ? colors.textMuted : colors.text;
   return (
     <View style={[styles.pill, { borderColor: color }]}>
       <Text style={[styles.pillText, { color }]}>{ticketStatusText(status, t)}</Text>

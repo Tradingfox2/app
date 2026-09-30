@@ -180,7 +180,7 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
         {poll.options.length < 4 ? <Pressable accessibilityRole="button" onPress={() => setPoll({ ...poll, options: [...poll.options, ""] })} testID="poll-add-option"><Text style={styles.link}>{t("+ Add option")}</Text></Pressable> : null}
         <View style={styles.chips}>{POLL_DURATIONS.map(([hours, label]) => <Pressable key={hours} accessibilityRole="button" onPress={() => setPoll({ ...poll, hours })} style={[styles.chip, poll.hours === hours && styles.chipOn]} testID={`poll-duration-${hours}`}><Text style={[styles.chipText, poll.hours === hours && styles.chipTextOn]}>{t(label)}</Text></Pressable>)}</View>
       </View> : null}
-      {media.length ? <View style={styles.thumbs}>{media.map(item => <View key={item.id} style={styles.thumbWrap}>{item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={22} color={colors.brand} /></View>}<Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setMedia(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={12} color={colors.brandOn} /></Pressable></View>)}</View> : null}
+      {media.length ? <View style={styles.thumbs}>{media.map(item => <View key={item.id} style={styles.thumbWrap}>{item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={22} color={colors.text} /></View>}<Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setMedia(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={12} color={colors.text} /></Pressable></View>)}</View> : null}
       {personal ? <View testID="personal-audience">
         <View style={styles.chips}>
           {PERSONAL_AUDIENCES.map(option => (
@@ -193,10 +193,10 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
       </View> : null}
       {picking && !communityId && !personal ? <View style={styles.chips} testID="audience-picker">
         <Pressable accessibilityRole="button" onPress={() => { setAudience(null); setPicking(false); }} style={[styles.chip, !audience && styles.chipOn]} testID="audience-public"><Text style={[styles.chipText, !audience && styles.chipTextOn]}>{t("Public")}</Text></Pressable>
-        {mine === null ? <ActivityIndicator color={colors.brand} /> : mine.map(row => <Pressable key={row.id} accessibilityRole="button" onPress={() => { setAudience(row.id); setPicking(false); }} style={[styles.chip, audience === row.id && styles.chipOn]} testID={`audience-${row.id}`}><Text style={[styles.chipText, audience === row.id && styles.chipTextOn]}>{row.name}</Text></Pressable>)}
+        {mine === null ? <ActivityIndicator color={colors.text} /> : mine.map(row => <Pressable key={row.id} accessibilityRole="button" onPress={() => { setAudience(row.id); setPicking(false); }} style={[styles.chip, audience === row.id && styles.chipOn]} testID={`audience-${row.id}`}><Text style={[styles.chipText, audience === row.id && styles.chipTextOn]}>{row.name}</Text></Pressable>)}
       </View> : null}
       {communityId && pickingWorkout ? <View style={styles.chips} testID="composer-workouts">
-        {workouts === null ? <ActivityIndicator color={colors.brand} /> : workouts.length === 0 ? <Text style={styles.time}>{t("Finish a workout to share it on the wall.")}</Text> : workouts.map(workout => {
+        {workouts === null ? <ActivityIndicator color={colors.text} /> : workouts.length === 0 ? <Text style={styles.time}>{t("Finish a workout to share it on the wall.")}</Text> : workouts.map(workout => {
           const on = workout.id === workoutId;
           return <Pressable key={workout.id} accessibilityRole="button" testID={`composer-workout-${workout.id}`} onPress={() => { setWorkoutId(workout.id); setPickingWorkout(false); }} style={[styles.chip, on && styles.chipOn]}>
             <Text style={[styles.chipText, on && styles.chipTextOn]}>{workout.title}</Text>
@@ -210,13 +210,13 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       <View style={styles.composerRow}>
         {communityId ? <Pressable accessibilityRole="button" accessibilityLabel={t("Attach workout")} testID="composer-attach-workout" disabled={!!busy} onPress={openWorkouts} style={[styles.iconButton, !!busy && styles.disabled]}>
-          <Ionicons name={workoutId ? "barbell" : "barbell-outline"} size={20} color={colors.brand} />
+          <Ionicons name={workoutId ? "barbell" : "barbell-outline"} size={20} color={colors.text} />
         </Pressable> : null}
         <Pressable accessibilityRole="button" accessibilityLabel={t("Add photo or video")} disabled={!!busy || media.length >= MAX_ATTACHMENTS} onPress={() => void pick()} style={[styles.iconButton, (!!busy || media.length >= MAX_ATTACHMENTS) && styles.disabled]}>
-          {busy === "upload" ? <ActivityIndicator color={colors.brand} /> : <Ionicons name="image-outline" size={20} color={colors.brand} />}
+          {busy === "upload" ? <ActivityIndicator color={colors.text} /> : <Ionicons name="image-outline" size={20} color={colors.text} />}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t(poll ? "Remove poll" : "Add poll")} testID="composer-poll" onPress={() => setPoll(poll ? null : { options: ["", ""], hours: 24 })} style={styles.iconButton}>
-          <Ionicons name={poll ? "stats-chart" : "stats-chart-outline"} size={19} color={colors.brand} />
+          <Ionicons name={poll ? "stats-chart" : "stats-chart-outline"} size={19} color={colors.text} />
         </Pressable>
         {!communityId && !personal ? <Pressable accessibilityRole="button" accessibilityLabel={t("Choose audience")} testID="composer-audience" onPress={() => void openAudience()} style={styles.audience}>
           <Ionicons name={audience ? "people" : "globe-outline"} size={14} color={colors.textMuted} /><Text style={styles.audienceText} numberOfLines={1}>{audienceName}</Text>
@@ -349,18 +349,18 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen,
       {quoted ? <QuotedPost post={quoted} /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.liked_by_me ? t("Unlike") : t("Like")} accessibilityState={{ selected: !!shown.liked_by_me }} disabled={busy} onPress={() => void toggleLike()} style={styles.action}><Ionicons name={shown.liked_by_me ? "heart" : "heart-outline"} size={20} color={shown.liked_by_me ? colors.brand : colors.textMuted} /><Text style={[styles.actionText, shown.liked_by_me && styles.actionActive]}>{formatNumber(shown.like_count)}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={shown.liked_by_me ? t("Unlike") : t("Like")} accessibilityState={{ selected: !!shown.liked_by_me }} disabled={busy} onPress={() => void toggleLike()} style={styles.action}><Ionicons name={shown.liked_by_me ? "heart" : "heart-outline"} size={20} color={shown.liked_by_me ? colors.text : colors.textMuted} /><Text style={[styles.actionText, shown.liked_by_me && styles.actionActive]}>{formatNumber(shown.like_count)}</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t("Comments")} onPress={() => setOpen(value => !value)} style={styles.action}><Ionicons name="chatbubble-outline" size={19} color={colors.textMuted} /><Text style={styles.actionText}>{formatNumber(shown.comment_count)}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.reposted_by_me ? t("Undo repost") : t("Repost")} accessibilityState={{ selected: !!shown.reposted_by_me }} disabled={busy} onPress={() => void toggleRepost()} style={styles.action}><Ionicons name="repeat" size={21} color={shown.reposted_by_me ? colors.brand : colors.textMuted} /><Text style={[styles.actionText, shown.reposted_by_me && styles.actionActive]}>{formatNumber(shown.repost_count)}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Quote")} testID={`post-quote-${post.id}`} disabled={busy} onPress={() => setQuoting(quoting === null ? "" : null)} style={styles.action}><Ionicons name="chatbox-ellipses-outline" size={19} color={quoting !== null ? colors.brand : colors.textMuted} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={shown.reposted_by_me ? t("Undo repost") : t("Repost")} accessibilityState={{ selected: !!shown.reposted_by_me }} disabled={busy} onPress={() => void toggleRepost()} style={styles.action}><Ionicons name="repeat" size={21} color={shown.reposted_by_me ? colors.text : colors.textMuted} /><Text style={[styles.actionText, shown.reposted_by_me && styles.actionActive]}>{formatNumber(shown.repost_count)}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Quote")} testID={`post-quote-${post.id}`} disabled={busy} onPress={() => setQuoting(quoting === null ? "" : null)} style={styles.action}><Ionicons name="chatbox-ellipses-outline" size={19} color={quoting !== null ? colors.text : colors.textMuted} /></Pressable>
         <View style={{ flex: 1 }} />
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} accessibilityState={{ expanded: shareTargets || shareOpen }} testID={`post-share-${shown.id}`} onPress={() => setShareOpen(open => !open)} style={styles.action}><Ionicons name="share-outline" size={19} color={shareTargets || shareOpen ? colors.brand : colors.textMuted} /></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.saved_by_me ? t("Remove from saved") : t("Save post")} testID={`post-save-${post.id}`} disabled={busy} onPress={() => void toggleSave()} style={styles.action}><Ionicons name={shown.saved_by_me ? "bookmark" : "bookmark-outline"} size={19} color={shown.saved_by_me ? colors.brand : colors.textMuted} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} accessibilityState={{ expanded: shareTargets || shareOpen }} testID={`post-share-${shown.id}`} onPress={() => setShareOpen(open => !open)} style={styles.action}><Ionicons name="share-outline" size={19} color={shareTargets || shareOpen ? colors.text : colors.textMuted} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={shown.saved_by_me ? t("Remove from saved") : t("Save post")} testID={`post-save-${post.id}`} disabled={busy} onPress={() => void toggleSave()} style={styles.action}><Ionicons name={shown.saved_by_me ? "bookmark" : "bookmark-outline"} size={19} color={shown.saved_by_me ? colors.text : colors.textMuted} /></Pressable>
       </View>
       {shareTargets || shareOpen ? <ShareBar postId={shown.id} title={shown.author?.full_name || "IronFlow"} message={shown.content} /> : null}
       {quoting !== null ? <View style={styles.commentRow} testID={`quote-box-${post.id}`}>
         <MentionInput value={quoting} onChangeText={setQuoting} maxLength={4000} placeholder={t("Add your take...")} placeholderTextColor={colors.textDim} style={styles.commentInput} testID="quote-input" />
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Post quote")} testID="quote-send" disabled={busy || !quoting.trim()} onPress={() => void sendQuote()} style={[styles.iconButton, (busy || !quoting.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.brand} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Post quote")} testID="quote-send" disabled={busy || !quoting.trim()} onPress={() => void sendQuote()} style={[styles.iconButton, (busy || !quoting.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.text} /></Pressable>
       </View> : null}
       {open ? <CommentThread post={shown} onCountChange={delta => apply({ comment_count: Math.max(0, shown.comment_count + delta) })} onReport={setReporting} /> : null}
       <ActionSheet visible={menu} actions={actions} onClose={() => setMenu(false)} testID={`post-sheet-${post.id}`} />
@@ -516,14 +516,14 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
             <View style={styles.commentRow}>
               <TextInput value={editing.text} onChangeText={text => { setEditing({ id: comment.id, text }); if (text.trim()) setEditError(""); }} maxLength={2000} style={styles.commentInput} testID="comment-edit-input" />
               <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: busy || !editing.text.trim(), busy }} disabled={busy || !editing.text.trim()} onPress={() => void saveEdit()} testID="comment-edit-save">
-                {busy ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={[styles.link, !editing.text.trim() && styles.disabled]}>{t(SAVE_LABEL)}</Text>}
+                {busy ? <ActivityIndicator color={colors.text} size="small" /> : <Text style={[styles.link, !editing.text.trim() && styles.disabled]}>{t(SAVE_LABEL)}</Text>}
               </Pressable>
             </View>
             {!editing.text.trim() || editError ? <Text accessibilityRole="alert" testID="comment-edit-error" style={styles.error}>{editError || t("Write something before saving.")}</Text> : null}
           </View>
         : <RichText content={comment.content} mentions={comment.mentions} style={styles.commentText} />}
       <View style={styles.commentActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={comment.liked_by_me ? t("Unlike comment") : t("Like comment")} onPress={() => void like(comment)} style={styles.commentAction}><Ionicons name={comment.liked_by_me ? "heart" : "heart-outline"} size={14} color={comment.liked_by_me ? colors.brand : colors.textDim} />{comment.like_count ? <Text style={styles.time}>{comment.like_count}</Text> : null}</Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={comment.liked_by_me ? t("Unlike comment") : t("Like comment")} onPress={() => void like(comment)} style={styles.commentAction}><Ionicons name={comment.liked_by_me ? "heart" : "heart-outline"} size={14} color={comment.liked_by_me ? colors.text : colors.textDim} />{comment.like_count ? <Text style={styles.time}>{comment.like_count}</Text> : null}</Pressable>
         <Pressable accessibilityRole="button" onPress={() => setReplyTo(comment)} testID={`comment-reply-${comment.id}`}><Text style={styles.commentLink}>{t("Reply")}</Text></Pressable>
         {mine && comment.can_edit ? <Pressable accessibilityRole="button" onPress={() => { setEditError(""); setEditing({ id: comment.id, text: comment.content }); }} testID={`comment-edit-${comment.id}`}><Text style={styles.commentLink}>{t("Edit")}</Text></Pressable> : null}
         {canDelete ? <Pressable accessibilityRole="button" onPress={() => void remove(comment)} testID={`comment-delete-${comment.id}`}><Text style={[styles.commentLink, { color: colors.error }]}>{t("Delete")}</Text></Pressable> : null}
@@ -534,7 +534,7 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
   };
 
   return <View style={styles.comments}>
-    {rows === null && !loadError ? <ActivityIndicator color={colors.brand} /> : null}
+    {rows === null && !loadError ? <ActivityIndicator color={colors.text} /> : null}
     {loadError ? <View accessibilityRole="alert" testID="comments-error">
       <Text style={styles.error}>{loadError}</Text>
       <Pressable accessibilityRole="button" testID="comments-retry" onPress={retryComments}><Text style={styles.link}>{t("Retry")}</Text></Pressable>
@@ -546,7 +546,7 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
     {replyTo ? <View style={styles.replyingTo}><Text style={styles.time}>{t("Replying to {name}").replace("{name}", replyTo.author?.full_name || t("Member"))}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel reply")} onPress={() => setReplyTo(null)}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable></View> : null}
     <View style={styles.commentRow}>
       <View style={{ flex: 1 }}><MentionInput value={draft} onChangeText={setDraft} maxLength={2000} editable={!busy} placeholder={t("Write a comment...")} placeholderTextColor={colors.textDim} style={styles.commentInput} testID="comment-input" /></View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Send comment")} disabled={busy || !draft.trim()} onPress={() => void send()} style={[styles.iconButton, (busy || !draft.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.brand} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Send comment")} disabled={busy || !draft.trim()} onPress={() => void send()} style={[styles.iconButton, (busy || !draft.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.text} /></Pressable>
     </View>
   </View>;
 }
@@ -563,22 +563,22 @@ function WorkoutCard({ summary, kudosCount, kudosMine, busy, onKudos }: { summar
   ];
   const more = summary.exercise_count - summary.exercises.length;
   return <View style={styles.workoutCard} testID={`workout-card-${summary.workout_id}`}>
-    <View style={styles.workoutHead}><Ionicons name="barbell" size={16} color={colors.brand} /><Text style={styles.workoutTitle}>{summary.title}</Text></View>
+    <View style={styles.workoutHead}><Ionicons name="barbell" size={16} color={colors.text} /><Text style={styles.workoutTitle}>{summary.title}</Text></View>
     <View style={styles.workoutStats}>{stats.map(([value, label]) => <View key={label} style={styles.workoutStat}><Text style={styles.workoutValue}>{value}</Text><Text style={styles.workoutLabel}>{label}</Text></View>)}</View>
     {summary.exercises.length ? <Text style={styles.workoutExercises} numberOfLines={2}>{summary.exercises.join(" · ")}{more > 0 ? ` +${more}` : ""}</Text> : null}
     <Pressable accessibilityRole="button" accessibilityLabel={t("Kudos")} accessibilityState={{ selected: kudosMine }} testID={`post-kudos-${summary.workout_id}`} disabled={busy} onPress={onKudos} style={styles.kudos}>
-      <Ionicons name={kudosMine ? "ribbon" : "ribbon-outline"} size={16} color={kudosMine ? colors.brand : colors.textMuted} />
+      <Ionicons name={kudosMine ? "ribbon" : "ribbon-outline"} size={16} color={kudosMine ? colors.text : colors.textMuted} />
       <Text style={[styles.kudosText, kudosMine && styles.actionActive]}>{t("Kudos")} · {formatNumber(kudosCount)}</Text>
     </Pressable>
   </View>;
 }
 
-const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface2, gap: spacing.sm }, workoutHead: { flexDirection: "row", alignItems: "center", gap: 6 }, workoutTitle: { color: colors.text, fontWeight: "900", fontSize: 14 }, workoutStats: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg }, workoutStat: { minWidth: 56 }, workoutValue: { color: colors.text, fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] }, workoutLabel: { color: colors.textDim, fontSize: 9, fontWeight: "800", letterSpacing: 1 }, workoutExercises: { color: colors.textMuted, fontSize: 12 },
+const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, gap: spacing.sm }, workoutHead: { flexDirection: "row", alignItems: "center", gap: 6 }, workoutTitle: { color: colors.text, fontWeight: "600", fontSize: 16 }, workoutStats: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg }, workoutStat: { minWidth: 56 }, workoutValue: { color: colors.text, fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] }, workoutLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "400" }, workoutExercises: { color: colors.textMuted, fontSize: 13 },
   composer: { padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
   input: { minHeight: 56, maxHeight: 160, color: colors.text, fontSize: 15, lineHeight: 21 },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, thumbWrap: { position: "relative" },
   thumb: { width: 72, height: 72, borderRadius: radius.sm, backgroundColor: colors.surface2 }, videoThumb: { alignItems: "center", justifyContent: "center" },
-  removeThumb: { position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  removeThumb: { position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
   composerRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs }, counter: { flex: 1, color: colors.textDim, fontSize: 11, textAlign: "right" },
   audience: { maxWidth: 140, minHeight: 32, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   audienceText: { color: colors.textMuted, fontSize: 11, fontWeight: "700", flexShrink: 1 },
@@ -587,16 +587,16 @@ const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding
   error: { color: colors.error, fontSize: 12 },
   audienceHint: { color: colors.textDim, fontSize: 12, lineHeight: 16 },
   kudos: { alignSelf: "flex-start", minHeight: 36, flexDirection: "row", alignItems: "center", gap: 6 },
-  kudosText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
+  kudosText: { color: colors.textMuted, fontSize: 13, fontWeight: "600" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   chip: { minHeight: 32, paddingHorizontal: spacing.md, borderRadius: 16, borderWidth: 1, borderColor: colors.border, justifyContent: "center" },
-  chipOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
-  chipText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" }, chipTextOn: { color: colors.brand },
+  chipOn: { borderColor: colors.text, backgroundColor: colors.surface2 },
+  chipText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" }, chipTextOn: { color: colors.text },
   pollEditor: { gap: spacing.xs, padding: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
   pollOptionRow: { flexDirection: "row", alignItems: "center" },
   pollOptionInput: { flex: 1, minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
-  link: { color: colors.brand, fontWeight: "800", fontSize: 13 }, linkMuted: { color: colors.textMuted, fontWeight: "700", fontSize: 13 },
-  card: { padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
+  link: { color: colors.text, fontWeight: "800", fontSize: 13 }, linkMuted: { color: colors.textMuted, fontWeight: "700", fontSize: 13 },
+  card: { padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
   repostLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700" },
   head: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   author: { color: colors.text, fontWeight: "800" }, time: { color: colors.textDim, fontSize: 11, marginTop: 2 },
@@ -604,9 +604,9 @@ const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding
   editBox: { gap: spacing.xs }, editInput: { minHeight: 64, padding: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
   editRow: { flexDirection: "row", justifyContent: "flex-end", gap: spacing.lg },
   poll: { gap: spacing.xs },
-  pollOption: { minHeight: 40, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.brand, justifyContent: "center", paddingHorizontal: spacing.md },
+  pollOption: { minHeight: 40, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.text, justifyContent: "center", paddingHorizontal: spacing.md },
   pollResult: { minHeight: 40, borderRadius: radius.sm, overflow: "hidden", flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.md, backgroundColor: colors.surface2 },
-  pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: colors.surface3 }, pollBarMine: { backgroundColor: colors.brandDim },
+  pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: colors.surface3 }, pollBarMine: { backgroundColor: colors.surface2 },
   pollLabel: { flex: 1, color: colors.text, fontWeight: "700" }, pollOptionText: { color: colors.text, fontWeight: "700" }, pollPct: { color: colors.textMuted, fontWeight: "800", fontVariant: ["tabular-nums"] },
   linkCard: { borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   linkImage: { width: "100%", aspectRatio: 1.91, backgroundColor: colors.surface2 },
@@ -614,11 +614,11 @@ const styles = StyleSheet.create({ workoutCard: { marginTop: spacing.sm, padding
   quoted: { borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.xs },
   quotedHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   actions: { flexDirection: "row", alignItems: "center", gap: spacing.lg, marginTop: 2 }, action: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6 },
-  actionText: { color: colors.textMuted, fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] }, actionActive: { color: colors.brand },
+  actionText: { color: colors.textMuted, fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] }, actionActive: { color: colors.text },
   comments: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: spacing.sm },
   comment: { paddingVertical: 4, gap: 2 }, reply: { marginLeft: spacing.xl, paddingLeft: spacing.md, borderLeftWidth: 1, borderLeftColor: colors.border },
   commentHead: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  commentAuthor: { color: colors.brand, fontSize: 11, fontWeight: "900" }, commentText: { color: colors.text, lineHeight: 20 },
+  commentAuthor: { color: colors.text, fontSize: 11, fontWeight: "900" }, commentText: { color: colors.text, lineHeight: 20 },
   commentActions: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   commentAction: { flexDirection: "row", alignItems: "center", gap: 3, minHeight: 28 },
   commentLink: { color: colors.textDim, fontSize: 11, fontWeight: "800" },

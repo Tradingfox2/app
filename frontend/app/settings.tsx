@@ -151,13 +151,13 @@ export default function Settings() {
           {user?.bio ? <Text style={styles.refMeta} testID="my-bio">{user.bio}</Text> : null}
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
             <Pressable accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.logoutBtn}>
-              <Ionicons name="create-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("EDIT PROFILE")}</Text>
+              <Ionicons name="create-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("EDIT PROFILE")}</Text>
             </Pressable>
             {user ? <Pressable accessibilityRole="button" testID="view-my-profile" onPress={() => router.push({ pathname: "/user/[id]", params: { id: user.id } })} style={styles.logoutBtn}>
-              <Ionicons name="person-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("VIEW PROFILE")}</Text>
+              <Ionicons name="person-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("VIEW PROFILE")}</Text>
             </Pressable> : null}
             {user ? <Pressable accessibilityRole="button" testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.logoutBtn}>
-              <Ionicons name="people-outline" size={16} color={colors.brand} /><Text style={[styles.logoutTxt, { color: colors.brand }]}>{t("FRIENDS")}</Text>
+              <Ionicons name="people-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("FRIENDS")}</Text>
             </Pressable> : null}
           </View>
           <Pressable
@@ -201,7 +201,7 @@ export default function Settings() {
               <Text style={styles.refLabel}>{t(user?.role === "coach" ? "PARTNER DASHBOARD" : "BECOME A COACH")}</Text>
               <Text style={styles.refMeta}>{t(user?.role === "coach" ? "Manage communities, members, and verified earnings." : "Apply to create communities and paid memberships.")}</Text>
             </View>
-            <Ionicons name={user?.role === "coach" ? "analytics" : "ribbon"} size={28} color={colors.brand} />
+            <Ionicons name={user?.role === "coach" ? "analytics" : "ribbon"} size={28} color={colors.text} />
           </Pressable>
           <Pressable testID="open-follow-requests" style={styles.refCard} onPress={() => router.push("/follow-requests")}>
             <View style={{ flex: 1 }}>
@@ -209,7 +209,7 @@ export default function Settings() {
               <Text style={styles.refMeta}>{t("People asking to follow your private account.")}</Text>
             </View>
             {requestCount > 0 ? <View testID="follow-request-badge" style={styles.badge}><Text style={styles.badgeText}>{requestCount > 99 ? "99+" : requestCount}</Text></View> : null}
-            <Ionicons name="person-add" size={28} color={colors.brand} />
+            <Ionicons name="person-add" size={28} color={colors.text} />
           </Pressable>
           <Pressable testID="open-notifications" style={styles.refCard} onPress={() => router.push("/notifications")}>
             <View style={{ flex: 1 }}>
@@ -217,28 +217,28 @@ export default function Settings() {
               <Text style={styles.refMeta}>{t("Mentions, moderation decisions and lab results.")}</Text>
             </View>
             {unreadCount > 0 ? <View testID="notification-badge" style={styles.badge}><Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text></View> : null}
-            <Ionicons name="notifications" size={28} color={colors.brand} />
+            <Ionicons name="notifications" size={28} color={colors.text} />
           </Pressable>
           <Pressable testID="open-notification-settings" style={styles.refCard} onPress={() => router.push("/notification-settings")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("NOTIFICATION SETTINGS")}</Text>
               <Text style={styles.refMeta}>{t("Choose what reaches you, in the app and on your phone.")}</Text>
             </View>
-            <Ionicons name="options" size={28} color={colors.brand} />
+            <Ionicons name="options" size={28} color={colors.text} />
           </Pressable>
           <Pressable testID="open-saved" style={styles.refCard} onPress={() => router.push("/saved")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("SAVED POSTS")}</Text>
               <Text style={styles.refMeta}>{t("Posts you bookmarked. Only you can see this list.")}</Text>
             </View>
-            <Ionicons name="bookmark" size={28} color={colors.brand} />
+            <Ionicons name="bookmark" size={28} color={colors.text} />
           </Pressable>
           <Pressable testID="open-support" style={styles.refCard} onPress={() => router.push("/support")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("SUPPORT")}</Text>
               <Text style={styles.refMeta}>{t("Questions about billing, your account, or the app.")}</Text>
             </View>
-            <Ionicons name="help-buoy" size={28} color={colors.brand} />
+            <Ionicons name="help-buoy" size={28} color={colors.text} />
           </Pressable>
           {user?.staff_role ? (
             <Pressable testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>
@@ -246,7 +246,7 @@ export default function Settings() {
                 <Text style={styles.refLabel}>{t("STAFF CONSOLE")}</Text>
                 <Text style={styles.refMeta}>{t("Moderation queue, accounts and audit log.")}</Text>
               </View>
-              <Ionicons name="shield-checkmark" size={28} color={colors.brand} />
+              <Ionicons name="shield-checkmark" size={28} color={colors.text} />
             </Pressable>
           ) : null}
         </View>
@@ -269,7 +269,7 @@ export default function Settings() {
                   <Text style={[styles.languageText, active && styles.languageTextActive]}>
                     {language.label}
                   </Text>
-                  {active ? <Ionicons name="checkmark" size={14} color={colors.brandOn} /> : null}
+                  {active ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
                 </Pressable>
               );
             })}
@@ -285,14 +285,14 @@ export default function Settings() {
               <Text style={styles.refLabel}>{t("Appear in activity rankings")}</Text>
               <Text style={styles.refMeta}>{t("Publishes your name and active-day count from opted-in public channels. Off by default; opt out anytime.")}</Text>
             </View>
-            <Switch testID="activity-ranking-consent" accessibilityLabel={t("Appear in activity rankings")} value={rankingOptIn} disabled={savingRanking} onValueChange={value => void saveRanking(value)} trackColor={{ true: colors.brand }} />
+            <Switch testID="activity-ranking-consent" accessibilityLabel={t("Appear in activity rankings")} value={rankingOptIn} disabled={savingRanking} onValueChange={value => void saveRanking(value)} trackColor={{ true: colors.text }} />
           </View>
           <View style={styles.refCard}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("Private account")}</Text>
               <Text style={styles.refMeta}>{t("New followers have to be approved, and only approved followers see your posts.")}</Text>
             </View>
-            <Switch testID="private-account-toggle" accessibilityLabel={t("Private account")} value={isPrivate} disabled={savingPrivacy} onValueChange={value => void savePrivacy(value)} trackColor={{ true: colors.brand }} />
+            <Switch testID="private-account-toggle" accessibilityLabel={t("Private account")} value={isPrivate} disabled={savingPrivacy} onValueChange={value => void savePrivacy(value)} trackColor={{ true: colors.text }} />
           </View>
           {rankingError ? <Text accessibilityRole="alert" style={{ color: colors.error }}>{rankingError}</Text> : null}
         </View>
@@ -326,7 +326,7 @@ export default function Settings() {
                         key={f}
                         style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
                       >
-                        <Ionicons name="checkmark" size={12} color={colors.brand} />
+                        <Ionicons name="checkmark" size={12} color={colors.text} />
                         <Text style={styles.planFeature}>{t(f)}</Text>
                       </View>
                     ))}
@@ -345,7 +345,7 @@ export default function Settings() {
               <Text style={styles.refCode}>{ref?.code ?? "—"}</Text>
               <Text style={styles.refMeta}>{t("Share your code. Rewards appear after verified conversions.")}</Text>
             </View>
-            <Ionicons name="gift" size={28} color={colors.brand} />
+            <Ionicons name="gift" size={28} color={colors.text} />
           </View>
         </View>
 
@@ -394,16 +394,16 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: colors.brand,
+    borderColor: colors.text,
   },
-  heroAvatarTxt: { color: colors.brand, fontSize: 32, fontWeight: "900" },
+  heroAvatarTxt: { color: colors.text, fontSize: 32, fontWeight: "900" },
   heroName: { ...type.screenTitle, fontSize: 24, marginTop: spacing.md },
   heroRole: {
-    color: colors.brand,
+    color: colors.text,
     letterSpacing: 2,
     fontSize: 11,
     fontWeight: "800",
@@ -427,9 +427,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: colors.surface2,
   },
-  languageOptionActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  languageText: { color: colors.textMuted, fontSize: 10, fontWeight: "800" },
-  languageTextActive: { color: colors.brandOn },
+  languageOptionActive: { backgroundColor: colors.surface2, borderColor: colors.border },
+  languageText: { color: colors.textMuted, fontSize: 13, fontWeight: "400" },
+  languageTextActive: { color: colors.text, fontWeight: "600" },
   languageHint: { color: colors.textDim, fontSize: 11, marginTop: spacing.sm },
   languageError: { color: colors.error, fontSize: 12, marginTop: spacing.sm },
   planCard: {
@@ -438,18 +438,18 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.sm,
   },
-  planCardActive: { borderColor: colors.brand },
+  planCardActive: { borderColor: colors.text },
   planHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   planName: { color: colors.text, fontWeight: "900", letterSpacing: 2 },
   planBadge: {
-    backgroundColor: colors.brand,
+    backgroundColor: colors.surface2,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radius.pill,
   },
-  planBadgeTxt: { color: colors.brandOn, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  planBadgeTxt: { color: colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   planPrice: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 22,
     fontWeight: "800",
     marginTop: 4,
@@ -464,10 +464,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
-  badge: { minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
-  badgeText: { color: colors.brandOn, fontSize: 11, fontWeight: "900" },
+  badge: { minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: colors.text, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: colors.bg, fontSize: 11, fontWeight: "900" },
   refLabel: { color: colors.textMuted, fontSize: 10, letterSpacing: 1.5, fontWeight: "800" },
-  refCode: { color: colors.brand, fontSize: 22, fontWeight: "900", letterSpacing: 3, marginTop: 4 },
+  refCode: { color: colors.text, fontSize: 22, fontWeight: "900", letterSpacing: 3, marginTop: 4 },
   refMeta: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
   logoutBtn: {
     flexDirection: "row",

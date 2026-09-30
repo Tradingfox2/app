@@ -37,7 +37,7 @@ export function RichText({ content, mentions, style, numberOfLines }: { content:
 }
 
 const styles = StyleSheet.create({
-  mention: { color: colors.brand, fontWeight: "800" },
-  tag: { color: colors.brand, fontWeight: "700" },
-  link: { color: colors.brand, textDecorationLine: "underline" },
+  mention: { color: colors.text, fontWeight: "800" },
+  tag: { color: colors.text, fontWeight: "700" },
+  link: { color: colors.text, textDecorationLine: "underline" },
 });

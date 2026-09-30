@@ -207,7 +207,7 @@ function CircuitCard({
         <Text style={styles.circuitName}>{circuit.name}</Text>
         {isAi && (
           <View style={styles.aiBadge}>
-            <Ionicons name="sparkles" size={12} color="#FFF" />
+            <Ionicons name="sparkles" size={12} color={colors.text} />
             <Text style={styles.aiBadgeText}>AI</Text>
           </View>
         )}
@@ -221,9 +221,9 @@ function CircuitCard({
           accessibilityLabel={t("Add {name} to workout", { name: circuit.name })}
         >
           {adding ? (
-            <ActivityIndicator size="small" color={colors.brand} />
+            <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <Ionicons name="add-circle" size={18} color={colors.brand} />
+            <Ionicons name="add-circle" size={18} color={colors.text} />
           )}
           <Text style={styles.circuitAddText}>
             {t("Add {count} exercises to workout", { count: formatNumber(circuit.items.length) })}
@@ -574,9 +574,9 @@ export function MuscleDetailSheet({
           accessibilityLabel={t("Generate AI circuit")}
         >
           {regenerating ? (
-            <ActivityIndicator size="small" color="#FFF" />
+            <ActivityIndicator size="small" color={colors.brandOn} />
           ) : (
-            <Ionicons name="sparkles" size={18} color="#FFF" />
+            <Ionicons name="sparkles" size={18} color={colors.brandOn} />
           )}
           <Text style={styles.regenerateText}>
             {regenerating ? t("Generating...") : t("Generate AI Circuit")}
@@ -650,7 +650,7 @@ export function MuscleDetailSheet({
       <View style={styles.content}>
         {loading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color={colors.accent} />
+            <ActivityIndicator size="large" color={colors.text} />
             <Text style={styles.loadingText}>{t("Loading recommendations...")}</Text>
           </View>
         ) : error ? (
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: 18,
     fontWeight: "900",
-    color: colors.brand,
+    color: colors.text,
     letterSpacing: 0,
   },
   titleMeta: {
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   tabButtonActive: {
-    backgroundColor: colors.brand,
+    backgroundColor: colors.surface2,
   },
   tabLabel: {
     fontSize: 12,
@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
     color: muted,
   },
   tabLabelActive: {
-    color: colors.brandOn,
+    color: colors.text,
     fontWeight: "900",
   },
   closeButton: {
@@ -778,11 +778,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     borderRadius: radius.md,
   },
   retryText: {
-    color: "#FFF",
+    color: colors.brandOn,
     fontWeight: "600",
   },
   emptyState: {
@@ -941,12 +941,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: full,
     borderWidth: 1,
-    borderColor: colors.brand,
-    backgroundColor: colors.brandDim,
+    borderColor: colors.text,
+    backgroundColor: colors.surface2,
     marginBottom: spacing.sm,
   },
   circuitAddText: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1019,7 +1019,7 @@ const styles = StyleSheet.create({
   },
   circuitCardAi: {
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: colors.text,
   },
   circuitHeader: {
     flexDirection: "row",
@@ -1035,7 +1035,7 @@ const styles = StyleSheet.create({
   aiBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.surface2,
     paddingVertical: 2,
     paddingHorizontal: spacing.xs,
     borderRadius: radius.sm,
@@ -1044,7 +1044,7 @@ const styles = StyleSheet.create({
   aiBadgeText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#FFF",
+    color: colors.text,
   },
   circuitRationale: {
     fontSize: 13,
@@ -1090,7 +1090,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     gap: spacing.xs,
@@ -1100,7 +1100,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   regenerateText: {
-    color: "#FFF",
+    color: colors.brandOn,
     fontWeight: "600",
   },
 });

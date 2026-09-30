@@ -67,10 +67,7 @@ export default function ProgressionScreen() {
 
         {pr && (
           <View style={styles.prCard} testID="pr-card">
-            <View style={styles.prBadge}>
-              <Ionicons name="trophy" color={colors.bg} size={16} />
-              <Text style={styles.prBadgeTxt}>{t("PERSONAL RECORD")}</Text>
-            </View>
+            <Text style={styles.prMark}>{t("PR")}</Text>
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: spacing.sm }}>
               <Text style={styles.prVal}>{pr.e1rm}</Text>
               <Text style={styles.prUnit}>kg e1RM</Text>
@@ -100,7 +97,7 @@ export default function ProgressionScreen() {
               />
               <Polyline
                 points={chart.points.map((p: any) => `${p.x},${p.y}`).join(" ")}
-                stroke={colors.brand}
+                stroke={colors.text}
                 strokeWidth={3}
                 fill="none"
               />
@@ -110,7 +107,7 @@ export default function ProgressionScreen() {
                   cx={p.x}
                   cy={p.y}
                   r={4}
-                  fill={colors.brand}
+                  fill={colors.text}
                   stroke={colors.bg}
                   strokeWidth={2}
                 />
@@ -158,25 +155,15 @@ const styles = StyleSheet.create({
   exName: { color: colors.text, fontSize: 22, fontWeight: "900", marginBottom: spacing.lg },
   prCard: {
     backgroundColor: colors.surface,
-    borderColor: colors.pr,
+    borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
-  prBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.pr,
-    alignSelf: "flex-start",
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  prBadgeTxt: { color: colors.bg, fontWeight: "800", fontSize: 10, letterSpacing: 1 },
+  prMark: { color: colors.pr, fontWeight: "700", fontSize: 13, letterSpacing: 0.4 },
   prVal: {
-    color: colors.pr,
+    color: colors.hero,
     fontSize: 36,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],

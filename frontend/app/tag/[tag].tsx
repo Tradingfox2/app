@@ -26,7 +26,7 @@ export default function TagScreen() {
       <Text style={styles.title} testID="tag-title">#{tag}</Text>
     </View>
     <ScrollView>
-      {feed.loading ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} /> : null}
+      {feed.loading ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xl }} /> : null}
       {feed.error ? <View accessibilityRole="alert" testID="tag-feed-error" style={styles.errorBox}>
         <Text style={styles.error}>{feed.error}</Text>
         <Pressable accessibilityRole="button" testID="tag-feed-retry" onPress={() => void feed.load()}><Text style={styles.moreText}>{t("Retry")}</Text></Pressable>
@@ -42,10 +42,10 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   icon: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  title: { color: colors.brand, fontWeight: "900", fontSize: 18 },
+  title: { color: colors.text, fontWeight: "900", fontSize: 18 },
   empty: { color: colors.textMuted, textAlign: "center", padding: spacing.xl },
   errorBox: { alignItems: "center", gap: spacing.sm, padding: spacing.xl },
   error: { color: colors.error, textAlign: "center" },
   more: { padding: spacing.lg, alignItems: "center" },
-  moreText: { color: colors.brand, fontWeight: "900", letterSpacing: 1 },
+  moreText: { color: colors.text, fontWeight: "900", letterSpacing: 1 },
 });

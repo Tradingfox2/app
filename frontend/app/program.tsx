@@ -95,8 +95,8 @@ function DayCard({
           <Text style={styles.focusTxt}>{t(FOCUS_LABELS[day.focus] ?? day.focus)}</Text>
         </View>
         {badge ? (
-          <View style={[styles.focusBadge, { backgroundColor: colors.warning }]}>
-            <Text style={[styles.focusTxt, { color: "#000" }]}>{badge}</Text>
+          <View style={styles.focusBadge}>
+            <Text style={styles.focusTxt}>{badge}</Text>
           </View>
         ) : null}
       </View>
@@ -291,7 +291,7 @@ export default function ProgramScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>{t("AI COACH")}</Text>
+        <Text style={styles.headerTitle}>{t("Plan")}</Text>
         {program ? (
           <Pressable
             testID="regenerate-btn"
@@ -315,12 +315,12 @@ export default function ProgramScreen() {
         onPress={() => router.push((targetWorkoutId ? `/muscles?workoutId=${targetWorkoutId}` : "/muscles") as Href)}
         style={styles.musclesLink}
       >
-        <Ionicons name="body" size={16} color={colors.brand} />
+        <Ionicons name="body" size={16} color={colors.text} />
         <Text style={styles.musclesLinkTxt}>{t("Add from muscles")}</Text>
       </Pressable>
 
       {loading ? (
-        <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xxl }} />
+        <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xxl }} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
           {!program ? (
@@ -448,9 +448,9 @@ export default function ProgramScreen() {
                 style={[styles.adjustBtn, adjusting && { opacity: 0.6 }]}
               >
                 {adjusting ? (
-                  <ActivityIndicator color={colors.brand} size="small" />
+                  <ActivityIndicator color={colors.text} size="small" />
                 ) : (
-                  <Ionicons name="pulse" size={16} color={colors.brand} />
+                  <Ionicons name="pulse" size={16} color={colors.text} />
                 )}
                 <Text style={styles.adjustTxt}>
                   {adjusting ? t("CHECKING RECOVERY…") : t("ADJUST TODAY'S SESSION")}
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.xs,
   },
-  musclesLinkTxt: { color: colors.brand, fontWeight: "800" },
+  musclesLinkTxt: { color: colors.text, fontWeight: "800" },
   mergeBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: spacing.xl },
   mergeSheet: { backgroundColor: colors.surface2, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
   headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
@@ -555,9 +555,9 @@ const styles = StyleSheet.create({
     minHeight: 40,
     justifyContent: "center",
   },
-  chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  chipTxt: { color: colors.textMuted, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
-  chipTxtActive: { color: colors.brandOn },
+  chipActive: { backgroundColor: colors.surface2, borderColor: colors.border },
+  chipTxt: { color: colors.textMuted, fontWeight: "400", fontSize: 13 },
+  chipTxtActive: { color: colors.text, fontWeight: "600" },
   cta: {
     marginTop: spacing.xl,
     backgroundColor: colors.brand,
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm,
   },
-  phaseTxt: { color: colors.brand, fontWeight: "900", letterSpacing: 3, fontSize: 12 },
+  phaseTxt: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 12 },
   startDayBtn: {
     marginTop: spacing.md,
     minHeight: 44,
@@ -610,12 +610,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.text,
     borderRadius: radius.pill,
     minHeight: 48,
     marginBottom: spacing.md,
   },
-  adjustTxt: { color: colors.brand, fontWeight: "900", letterSpacing: 1.5, fontSize: 12 },
+  adjustTxt: { color: colors.text, fontWeight: "900", letterSpacing: 1.5, fontSize: 12 },
   dayCard: {
     backgroundColor: colors.surface2,
     borderWidth: 1,
@@ -627,12 +627,12 @@ const styles = StyleSheet.create({
   dayHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm },
   dayTitle: { color: colors.text, fontWeight: "900", letterSpacing: 2, fontSize: 13 },
   focusBadge: {
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  focusTxt: { color: colors.brand, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  focusTxt: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   exRow: {
     paddingVertical: spacing.sm,
     borderTopWidth: 1,

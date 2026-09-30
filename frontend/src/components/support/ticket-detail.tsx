@@ -109,7 +109,7 @@ export function SupportTicketDetail({
             </Pressable>
           </View>
         ) : null}
-        {loading && !ticket ? <ActivityIndicator testID="support-detail-loading" accessibilityLabel={t("Loading...")} color={colors.brand} style={{ marginTop: spacing.lg }} /> : null}
+        {loading && !ticket ? <ActivityIndicator testID="support-detail-loading" accessibilityLabel={t("Loading...")} color={colors.text} style={{ marginTop: spacing.lg }} /> : null}
         <ScrollView contentContainerStyle={supportStyles.scroll} keyboardShouldPersistTaps="handled">
           {ticket && messages.length === 0 && !loading ? (
             <Text testID="support-thread-empty" style={supportStyles.emptyText}>{t("No replies yet.")}</Text>
@@ -123,11 +123,11 @@ export function SupportTicketDetail({
                 padding: spacing.md,
                 borderRadius: radius.md,
                 borderWidth: 1,
-                borderColor: message.author_role === "staff" ? colors.brand : colors.border,
+                borderColor: message.author_role === "staff" ? colors.text : colors.border,
                 backgroundColor: colors.surface,
               }}
             >
-              <Text style={{ color: message.author_role === "staff" ? colors.brand : colors.textMuted, fontSize: 11, fontWeight: "800" }}>
+              <Text style={{ color: message.author_role === "staff" ? colors.text : colors.textMuted, fontSize: 11, fontWeight: "800" }}>
                 {ticketAuthorText(message.author_role, t)}
               </Text>
               <Text style={{ color: colors.text, fontSize: 15, lineHeight: 22, marginTop: 4 }}>{message.body}</Text>

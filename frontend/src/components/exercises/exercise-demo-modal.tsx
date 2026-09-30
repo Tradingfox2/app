@@ -45,7 +45,7 @@ export function ExerciseDemoModal({
               <Ionicons
                 name={canOpenVideo ? "play" : "barbell-outline"}
                 size={28}
-                color={colors.brand}
+                color={colors.text}
               />
             </View>
             <Text style={styles.stageLabel}>
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   titleBlock: { flex: 1 },
-  eyebrow: { color: colors.brand, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  eyebrow: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
   title: {
     color: colors.text,
     fontFamily: fonts.display,
@@ -142,14 +142,14 @@ const styles = StyleSheet.create({
     height: 58,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.brand,
-    backgroundColor: colors.brandDim,
+    borderColor: colors.text,
+    backgroundColor: colors.surface2,
     alignItems: "center",
     justifyContent: "center",
   },
   stageLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "800", letterSpacing: 1.4 },
   sectionLabel: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.4,

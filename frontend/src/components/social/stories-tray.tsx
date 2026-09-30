@@ -25,7 +25,7 @@ export function StoriesTray() {
   return <View testID="community-stories">
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tray}>
       <Pressable accessibilityRole="button" testID="community-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
-        <Ionicons name="add" size={18} color={colors.brandOn} />
+        <Ionicons name="add" size={18} color={colors.text} />
         <Text style={styles.addText}>{t("YOUR STORY")}</Text>
       </Pressable>
       {groups.map(group => {
@@ -49,12 +49,12 @@ export function StoriesTray() {
 
 const styles = StyleSheet.create({
   tray: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, alignItems: "flex-start" },
-  add: { width: 76, minHeight: 88, borderRadius: radius.md, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", gap: 4, padding: spacing.sm },
-  addText: { color: colors.brandOn, fontSize: 9, fontWeight: "900", letterSpacing: 0.4, textAlign: "center" },
+  add: { width: 76, minHeight: 88, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: "transparent", alignItems: "center", justifyContent: "center", gap: 4, padding: spacing.sm },
+  addText: { color: colors.text, fontSize: 11, fontWeight: "600", textAlign: "center" },
   bubble: { width: 84, alignItems: "center", gap: 4 },
   bubbleName: { color: colors.text, fontSize: 11, fontWeight: "700", maxWidth: 84 },
   bubbleMeta: { color: colors.textDim, fontSize: 10, maxWidth: 84 },
   hint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, paddingHorizontal: spacing.lg },
-  error: { color: colors.error, paddingHorizontal: spacing.lg },
-  retry: { color: colors.brand, fontWeight: "800", paddingHorizontal: spacing.lg },
+  error: { color: colors.text, backgroundColor: colors.errorWash, padding: spacing.md, marginHorizontal: spacing.lg, borderRadius: radius.sm },
+  retry: { color: colors.text, fontWeight: "800", paddingHorizontal: spacing.lg },
 });

@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   brand: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 42,
     fontWeight: "900",
     letterSpacing: 4,
@@ -210,9 +210,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2,
     alignItems: "center",
   },
-  roleChipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  roleTxt: { color: colors.textMuted, fontWeight: "700", letterSpacing: 1 },
-  roleTxtActive: { color: colors.brandOn },
+  roleChipActive: { backgroundColor: colors.surface2, borderColor: colors.border },
+  roleTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0 },
+  roleTxtActive: { color: colors.text, fontWeight: "600" },
   err: {
     color: colors.error,
     marginBottom: spacing.sm,

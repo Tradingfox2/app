@@ -88,7 +88,7 @@ export default function NewStory() {
     <ScrollView contentContainerStyle={styles.body}>
       <Text style={styles.hint}>{t("A highlight stays on your profile. A story disappears after 24 hours.")}</Text>
       <Text style={styles.label}>{t("Choose a finished workout")}</Text>
-      {loading ? <ActivityIndicator color={colors.brand} /> : null}
+      {loading ? <ActivityIndicator color={colors.text} /> : null}
       {!loading && workouts.length === 0 ? <View style={styles.empty} testID="story-no-workouts">
         <Text style={styles.hint}>{t("Finish a workout to share it as a story.")}</Text>
         <Pressable accessibilityRole="button" testID="story-open-workouts" onPress={() => router.push("/workouts" as Href)} style={styles.secondary}><Text style={styles.secondaryText}>{t("OPEN WORKOUTS")}</Text></Pressable>
@@ -96,7 +96,7 @@ export default function NewStory() {
       {workouts.map(workout => {
         const on = workout.id === selected;
         return <Pressable key={workout.id} accessibilityRole="radio" accessibilityState={{ selected: on }} testID={`story-workout-${workout.id}`} onPress={() => setSelected(workout.id)} style={[styles.workout, on && styles.workoutOn]}>
-          <Ionicons name={on ? "checkmark-circle" : "barbell-outline"} size={18} color={on ? colors.brand : colors.textMuted} />
+          <Ionicons name={on ? "checkmark-circle" : "barbell-outline"} size={18} color={on ? colors.text : colors.textMuted} />
           <View style={{ flex: 1 }}>
             <Text style={styles.workoutTitle}>{workout.title}</Text>
             {workout.duration_sec ? <Text style={styles.meta}>{Math.round(workout.duration_sec / 60)} min</Text> : null}
@@ -119,14 +119,14 @@ export default function NewStory() {
           <Text style={styles.rowTitle}>{t("Save as highlight")}</Text>
           <Text style={styles.meta}>{t("A highlight stays on your profile. A story disappears after 24 hours.")}</Text>
         </View>
-        <Switch testID="story-highlight" accessibilityLabel={t("Save as highlight")} value={highlight} onValueChange={setHighlight} trackColor={{ true: colors.brand }} />
+        <Switch testID="story-highlight" accessibilityLabel={t("Save as highlight")} value={highlight} onValueChange={setHighlight} trackColor={{ true: colors.text }} />
       </View>
       {highlight ? <>
         <Text style={styles.label}>{t("HIGHLIGHT TITLE")}</Text>
         <TextInput value={title} onChangeText={setTitle} maxLength={40} placeholder={t("HIGHLIGHT TITLE")} placeholderTextColor={colors.textDim} style={styles.input} testID="story-highlight-title" />
       </> : null}
       <Pressable accessibilityRole="button" testID="story-photo" disabled={!!busy} onPress={() => void pickPhoto()} style={styles.secondary}>
-        {busy === "upload" ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.secondaryText}>{t("CHANGE PHOTO")}</Text>}
+        {busy === "upload" ? <ActivityIndicator color={colors.text} /> : <Text style={styles.secondaryText}>{t("CHANGE PHOTO")}</Text>}
       </Pressable>
       {media ? <Image source={{ uri: mediaUrl(media.url) }} style={styles.preview} accessibilityIgnoresInvertColors /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textDim, fontSize: 10, fontWeight: "800", letterSpacing: 1.4, marginTop: spacing.sm },
   empty: { gap: spacing.sm, alignItems: "flex-start" },
   workout: { minHeight: 52, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  workoutOn: { borderColor: colors.brand },
+  workoutOn: { borderColor: colors.text },
   workoutTitle: { color: colors.text, fontWeight: "800" },
   meta: { color: colors.textDim, fontSize: 12 },
   input: { minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
@@ -155,9 +155,9 @@ const styles = StyleSheet.create({
   rowTitle: { color: colors.text, fontWeight: "800" },
   audiences: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   chip: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
-  chipOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  chipOn: { borderColor: colors.text, backgroundColor: colors.surface2 },
   chipText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
-  chipTextOn: { color: colors.brand },
+  chipTextOn: { color: colors.text },
   secondary: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", alignSelf: "flex-start" },
   secondaryText: { color: colors.text, fontWeight: "900", fontSize: 12 },
   preview: { width: 160, height: 160, borderRadius: radius.sm, backgroundColor: colors.surface2 },

@@ -38,7 +38,7 @@ function CheckinPanel({ channelId, refreshKey }: { channelId: string; refreshKey
   const { me } = board;
   return <View style={styles.panel} testID="checkin-panel">
     <View style={styles.row}>
-      <Ionicons name="flame" size={22} color={me.current ? colors.brand : colors.textDim} />
+      <Ionicons name="flame" size={22} color={me.current ? colors.text : colors.textDim} />
       <View style={{ flex: 1 }}>
         <Text style={styles.headline} testID="checkin-streak">
           {me.current ? t("{count}-day streak").replace("{count}", String(me.current)) : t("Start your streak today")}
@@ -85,7 +85,7 @@ export function ChallengePanel({ channelId, refreshKey }: { channelId: string; r
   const daysLeft = Math.max(0, Math.ceil((endsAt.getTime() - Date.now()) / 86_400_000));
   return <View style={styles.panel} testID="challenge-panel">
     <View style={styles.row}>
-      <Ionicons name="trophy" size={22} color={colors.brand} />
+      <Ionicons name="trophy" size={22} color={colors.text} />
       <View style={{ flex: 1 }}>
         <Text style={styles.headline}>{t(board.status === "ended" ? "CHALLENGE ENDED" : board.status === "upcoming" ? "STARTS SOON" : "CHALLENGE")}</Text>
         <Text style={styles.meta}>
@@ -147,7 +147,7 @@ function ProgramPanel({ channelId, refreshKey, mask }: { channelId: string; refr
   };
   return <View style={styles.panel} testID="program-panel">
     <View style={styles.row}>
-      <Ionicons name="barbell" size={22} color={colors.brand} />
+      <Ionicons name="barbell" size={22} color={colors.text} />
       <View style={{ flex: 1 }}>
         <Text style={styles.headline}>{t("PROGRAM LIBRARY")}</Text>
         <Text style={styles.meta}>{count === null ? "" : t("{count} shared programs").replace("{count}", String(count))}</Text>
@@ -157,7 +157,7 @@ function ProgramPanel({ channelId, refreshKey, mask }: { channelId: string; refr
     <Text style={styles.rule}>{t("Tap USE THIS PROGRAM on any shared plan to make it your active program.")}</Text>
     {picking ? <View style={{ gap: spacing.xs }} testID="program-picker">
       <TextInput value={note} onChangeText={setNote} maxLength={1000} placeholder={t("Add a note for members (optional)")} placeholderTextColor={colors.textDim} style={styles.field} testID="program-note" />
-      {mine === null ? <ActivityIndicator color={colors.brand} /> : mine.length === 0 ? <Text style={styles.meta}>{t("You have no programs yet. Generate one on the Program screen first.")}</Text>
+      {mine === null ? <ActivityIndicator color={colors.text} /> : mine.length === 0 ? <Text style={styles.meta}>{t("You have no programs yet. Generate one on the Program screen first.")}</Text>
         : mine.map(program => <Pressable key={program.id} accessibilityRole="button" disabled={busy} onPress={() => void share(program)} style={styles.leader} testID={`pick-program-${program.id}`}>
           <Text style={styles.leaderName}>{[program.params?.goal, program.params?.level].filter(Boolean).join(" · ") || t("Program")}</Text>
           <Text style={styles.leaderScore}>{t("{count} wk").replace("{count}", String(program.program?.weeks?.length ?? 0))}</Text>
@@ -186,7 +186,7 @@ export function ProgramCard({ message }: { message: CommunityMessage & { program
   };
   return <View style={styles.programCard} testID={`program-card-${message.id}`}>
     <View style={styles.row}>
-      <Ionicons name="barbell" size={16} color={colors.brand} />
+      <Ionicons name="barbell" size={16} color={colors.text} />
       <Text style={styles.headline}>{[program.goal, program.level].filter(Boolean).join(" · ").toUpperCase() || t("PROGRAM")}</Text>
     </View>
     <Text style={styles.meta}>{t("{weeks} weeks · {days} days/week").replace("{weeks}", String(program.weeks_count)).replace("{days}", String(program.days_per_week ?? "?"))}{program.equipment.length ? ` · ${program.equipment.join(", ")}` : ""}</Text>
@@ -270,7 +270,7 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
 
   return <View style={styles.panel} testID="live-panel">
     <View style={styles.row}>
-      <Ionicons name="radio" size={22} color={colors.brand} />
+      <Ionicons name="radio" size={22} color={colors.text} />
       <View style={{ flex: 1 }}>
         <Text style={styles.headline}>{t("LIVE SESSIONS")}</Text>
         <Text style={styles.meta}>{sessions === null ? "" : sessions.length ? t("{count} coming up").replace("{count}", String(sessions.length)) : t("Nothing scheduled yet")}</Text>
@@ -280,7 +280,7 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
     {scheduling ? <View style={{ gap: spacing.xs }} testID="live-form">
       <TextInput value={form.title} onChangeText={title => setForm({ ...form, title })} maxLength={120} placeholder={t("Session title")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-title" />
       <SchedulePicker value={form.starts} onChange={starts => setForm(current => ({ ...current, starts }))} testID="live-when" />
-      <View style={{ flexDirection: "row", gap: spacing.xs }}>{DURATIONS.map(minutes => <Pressable key={minutes} accessibilityRole="button" onPress={() => setForm({ ...form, duration: minutes })} style={[styles.secondary, form.duration === minutes && { borderColor: colors.brand }]} testID={`live-duration-${minutes}`}><Text style={styles.secondaryText}>{minutes} min</Text></Pressable>)}</View>
+      <View style={{ flexDirection: "row", gap: spacing.xs }}>{DURATIONS.map(minutes => <Pressable key={minutes} accessibilityRole="button" onPress={() => setForm({ ...form, duration: minutes })} style={[styles.secondary, form.duration === minutes && { borderColor: colors.text }]} testID={`live-duration-${minutes}`}><Text style={styles.secondaryText}>{minutes} min</Text></Pressable>)}</View>
       <TextInput value={form.url} onChangeText={url => setForm({ ...form, url })} maxLength={500} autoCapitalize="none" placeholder={t("Join link (https://…) — Zoom, Meet, YouTube")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-url" />
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void schedule()} style={styles.primary} testID="live-submit"><Text style={styles.primaryText}>{t("SCHEDULE SESSION")}</Text></Pressable>
     </View> : null}
@@ -290,7 +290,7 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
       const live = session.status === "live";
       return <View key={session.id} style={styles.liveRow} testID={`live-${session.id}`}>
         <View style={styles.row}>
-          {live ? <View style={styles.liveBadge} testID={`live-badge-${session.id}`}><Text style={styles.liveBadgeText}>{t("LIVE")}</Text></View> : null}
+          {live ? <View style={styles.liveBadge} testID={`live-badge-${session.id}`}><View style={styles.liveDot} /><Text style={styles.liveBadgeText}>{t("LIVE")}</Text></View> : null}
           <Text style={[styles.leaderName, { fontWeight: "900" }]} numberOfLines={1}>{session.title}</Text>
         </View>
         <Text style={styles.meta}>{formatDate(session.starts_at, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {session.duration_min} min · {session.host?.full_name || t("Coach")} · {t("{count} going").replace("{count}", String(session.rsvp_count))}</Text>
@@ -321,28 +321,29 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
 }
 
 const styles = StyleSheet.create({
-  panel: { margin: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface2, gap: spacing.sm },
+  panel: { margin: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.text, backgroundColor: colors.surface2, gap: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   headline: { color: colors.text, fontWeight: "900", fontSize: 14 },
   meta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   rule: { color: colors.textDim, fontSize: 11 },
-  mine: { color: colors.brand, fontWeight: "800", fontSize: 12 },
+  mine: { color: colors.text, fontWeight: "800", fontSize: 12 },
   leaders: { gap: 4 },
   leader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   place: { width: 18, color: colors.textDim, fontSize: 11, fontWeight: "900" },
   leaderName: { flex: 1, color: colors.text, fontSize: 12 },
   leaderScore: { color: colors.text, fontSize: 12, fontWeight: "900", fontVariant: ["tabular-nums"] },
   track: { height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: "hidden" },
-  fill: { height: 6, backgroundColor: colors.brand },
+  fill: { height: 6, backgroundColor: colors.text },
   primary: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   primaryText: { color: colors.brandOn, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   secondary: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   secondaryText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   error: { color: colors.error, fontSize: 12 },
   field: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text },
-  link: { color: colors.brand, fontWeight: "800", fontSize: 12 },
-  programCard: { marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.bg, gap: spacing.xs },
+  link: { color: colors.text, fontWeight: "800", fontSize: 12 },
+  programCard: { marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.text, backgroundColor: colors.bg, gap: spacing.xs },
   liveRow: { gap: 4, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  liveBadge: { backgroundColor: colors.error, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1 },
-  liveBadgeText: { color: colors.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  liveBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live },
+  liveBadgeText: { color: colors.live, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
 });

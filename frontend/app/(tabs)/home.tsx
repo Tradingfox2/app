@@ -54,7 +54,7 @@ function Ring({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={colors.surface3}
+          stroke={colors.border}
           strokeWidth={stroke}
           fill="none"
         />
@@ -82,7 +82,7 @@ function Ring({
           justifyContent: "center",
         }}
       >
-        <Text style={type.metric}>{Math.round(value)}</Text>
+        <Text style={type.hero}>{Math.round(value)}</Text>
         {unit && (
           <Text style={{ color: colors.textMuted, fontSize: 10 }}>{unit}</Text>
         )}
@@ -208,7 +208,7 @@ export default function Home() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            tintColor={colors.brand}
+            tintColor={colors.textMuted}
             onRefresh={async () => {
               setRefreshing(true);
               await load();
@@ -255,8 +255,9 @@ export default function Home() {
         <LiveNowStrip />
 
         {dashError ? (
-          <View style={styles.errorBanner} accessibilityRole="alert" testID="home-error">
-            <Text style={styles.errorTxt}>{dashError}</Text>
+          <View style={styles.errorBanner} accessibilityRole="alert">
+            <Ionicons name="alert-circle" color={colors.live} size={16} />
+            <Text style={styles.errorTxt} testID="home-error">{dashError}</Text>
             <Pressable accessibilityRole="button" onPress={() => void load()} testID="home-retry" style={styles.retryBtn}>
               <Text style={styles.retryTxt}>{t("Retry")}</Text>
             </Pressable>
@@ -271,17 +272,21 @@ export default function Home() {
             ) : null}
           </View>
           {showSkeleton ? (
-            <View style={styles.rings} testID="home-skeleton" accessibilityLabel={t("Loading home")}>
-              <View style={styles.skeletonRing} />
-              <View style={styles.skeletonRing} />
-              <View style={styles.skeletonRing} />
+            <View style={styles.ringPlate}>
+              <View style={styles.rings} testID="home-skeleton" accessibilityLabel={t("Loading home")}>
+                <View style={styles.skeletonRing} />
+                <View style={styles.skeletonRing} />
+                <View style={styles.skeletonRing} />
+              </View>
             </View>
           ) : data ? (
             <>
-              <View style={styles.rings}>
-                <Ring value={strain} max={21} color={colors.brand} label={t("STRAIN")} />
-                <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
-                <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
+              <View style={styles.ringPlate}>
+                <View style={styles.rings}>
+                  <Ring value={strain} max={21} color={colors.blaze} label={t("STRAIN")} />
+                  <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
+                  <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
+                </View>
               </View>
               {!wearableConnected && (
                 <Pressable
@@ -291,11 +296,11 @@ export default function Home() {
                   style={styles.connectRow}
                   testID="connect-source-cta"
                 >
-                  <Ionicons name="watch-outline" size={16} color={colors.brand} />
+                  <Ionicons name="watch-outline" size={16} color={colors.text} />
                   <Text style={styles.connectTxt}>
                     {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
                   </Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.brand} />
+                  <Ionicons name="chevron-forward" size={16} color={colors.text} />
                 </Pressable>
               )}
             </>
@@ -379,7 +384,10 @@ export default function Home() {
             </Pressable>
           ) : null}
           {startError ? (
-            <Text style={styles.errorTxt} accessibilityRole="alert" testID="start-error">{startError}</Text>
+            <View style={styles.errorBanner} accessibilityRole="alert">
+              <Ionicons name="alert-circle" color={colors.live} size={16} />
+              <Text style={styles.errorTxt} testID="start-error">{startError}</Text>
+            </View>
           ) : null}
         </View>
 
@@ -422,7 +430,7 @@ export default function Home() {
           style={styles.coachRow}
           onPress={() => router.push((user?.role === "coach" ? "/partner" : "/coach/onboarding") as Href)}
         >
-          <Ionicons name="ribbon-outline" size={18} color={colors.brand} />
+          <Ionicons name="ribbon-outline" size={18} color={colors.text} />
           <Text style={styles.coachRowTxt}>{t("TRAIN WITH A COACH")}</Text>
         </Pressable>
 
@@ -446,7 +454,7 @@ export default function Home() {
             <Text style={styles.tipTitle}>{t("COACH TIP")}</Text>
             {coach && !coach.connected ? (
               <View style={styles.coachBadge}>
-                <View style={[styles.coachDot, { backgroundColor: colors.warning }]} />
+                <Ionicons name="alert-circle" size={14} color={colors.warning} />
                 <Text style={styles.coachBadgeTxt}>{t("AI OFFLINE")}</Text>
               </View>
             ) : null}
@@ -460,8 +468,9 @@ export default function Home() {
         <View style={styles.heatCard} testID="home-heatmap-card">
           <Text style={styles.cardTitle}>{t("MUSCLE LOAD · 7 DAYS")}</Text>
           {heatError ? (
-            <View accessibilityRole="alert" testID="heatmap-error">
-              <Text style={styles.errorTxt}>{heatError}</Text>
+            <View accessibilityRole="alert" style={styles.errorBanner}>
+              <Ionicons name="alert-circle" color={colors.live} size={16} />
+              <Text style={styles.errorTxt} testID="heatmap-error">{heatError}</Text>
               <Pressable accessibilityRole="button" onPress={() => void load()} testID="heatmap-retry">
                 <Text style={styles.retryTxt}>{t("Retry")}</Text>
               </Pressable>
@@ -542,7 +551,7 @@ function QuickAction({
 }) {
   return (
     <Pressable testID={testID} onPress={onPress} style={styles.quickBtn}>
-      <Ionicons name={icon} size={20} color={colors.brand} />
+      <Ionicons name={icon} size={20} color={colors.text} />
       <Text style={styles.quickLabel}>{label}</Text>
     </Pressable>
   );
@@ -594,26 +603,28 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 4,
     borderRadius: 9,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.text,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerBadgeText: { color: colors.brandOn, fontSize: 10, fontWeight: "900" },
+  headerBadgeText: { color: colors.bg, fontSize: 10, fontWeight: "700" },
   name: { ...type.screenTitle, marginTop: 4 },
   skeletonNum: { width: 28, height: 26, borderRadius: 6, backgroundColor: colors.surface3, marginVertical: 2 },
-  skeletonRing: { width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surface3 },
+  skeletonRing: { width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surface2 },
   skeletonBar: { height: 28, borderRadius: radius.sm, backgroundColor: colors.surface3 },
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
+    gap: spacing.sm,
     marginBottom: spacing.md,
     minHeight: 44,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.errorWash,
   },
-  errorTxt: { color: colors.error, fontSize: 13, fontWeight: "700", flex: 1 },
+  errorTxt: { color: colors.text, fontSize: 13, fontWeight: "400", flex: 1 },
   retryBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
-  retryTxt: { color: colors.brand, fontWeight: "800" },
+  retryTxt: { color: colors.text, fontWeight: "800" },
   todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md },
   todayMeta: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: spacing.md },
   secondaryCta: {
@@ -657,7 +668,7 @@ const styles = StyleSheet.create({
   },
   streakLabel: { color: colors.textMuted, fontSize: 9, letterSpacing: 1.5, fontWeight: "700" },
   streakNum: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 26,
     fontWeight: "800",
     lineHeight: 30,
@@ -667,6 +678,12 @@ const styles = StyleSheet.create({
     ...card,
     padding: spacing.lg,
     marginBottom: spacing.md,
+  },
+  ringPlate: {
+    backgroundColor: colors.ringPlate,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   cardTitle: {
     ...type.section,
@@ -686,10 +703,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
   },
   connectTxt: { flex: 1, color: colors.text, fontSize: 12, fontWeight: "600" },
-  resumeCta: { backgroundColor: colors.accent },
+  resumeCta: { backgroundColor: colors.brand },
   statsCard: {
     ...card,
     padding: spacing.lg,
@@ -740,29 +757,31 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     ...card,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
   },
   metricLabel: { ...type.eyebrow },
   metricUnit: { color: colors.textMuted, fontSize: 12 },
   tipCard: {
-    backgroundColor: colors.brandDim,
-    borderRadius: radius.md,
+    ...card,
     padding: spacing.lg,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.brand,
+    marginBottom: spacing.md,
   },
   tipTitle: {
-    color: colors.brand,
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: "700",
+    ...type.section,
     marginBottom: spacing.xs,
   },
   tipTxt: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  coachBadge: { flexDirection: "row", alignItems: "center", gap: 6 },
-  coachDot: { width: 8, height: 8, borderRadius: 4 },
-  coachBadgeTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
+  coachBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.warningWash,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  coachBadgeTxt: { color: colors.text, fontSize: 12, fontWeight: "400" },
   heatCard: {
     marginTop: spacing.md,
     ...card,

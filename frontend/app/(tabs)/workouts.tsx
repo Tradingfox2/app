@@ -194,7 +194,7 @@ export default function Workouts() {
       {createError && !modal ? (
         <Text accessibilityRole="alert" style={[styles.createError, styles.errorPad]} testID="create-error">{createError}</Text>
       ) : null}
-      {!loaded && !loadError ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.lg }} testID="workouts-loading" /> : null}
+      {!loaded && !loadError ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.lg }} testID="workouts-loading" /> : null}
 
       {tab === "sessions" ? (
         <FlatList
@@ -204,7 +204,7 @@ export default function Workouts() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              tintColor={colors.brand}
+              tintColor={colors.text}
               onRefresh={async () => {
                 setRefreshing(true);
                 await load();
@@ -364,7 +364,7 @@ export default function Workouts() {
                   <View style={styles.exIcon}>
                     <Ionicons
                       name={selectedSlugs.includes(item.slug) ? "checkmark" : "fitness"}
-                      color={colors.brand}
+                      color={colors.text}
                       size={20}
                     />
                   </View>
@@ -493,9 +493,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.pill,
   },
-  segBtnActive: { backgroundColor: colors.brand },
-  segTxt: { color: colors.textMuted, fontWeight: "800", letterSpacing: 1, fontSize: 12 },
-  segTxtActive: { color: colors.brandOn },
+  segBtnActive: { backgroundColor: colors.surface2 },
+  segTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0, fontSize: 13 },
+  segTxtActive: { color: colors.text, fontWeight: "600" },
   chipsRow: { maxHeight: 56 },
   chipsContent: {
     paddingHorizontal: spacing.lg,
@@ -513,9 +513,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  chipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  chipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },
   chipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 11, letterSpacing: 1 },
-  chipTxtActive: { color: colors.brand },
+  chipTxtActive: { color: colors.text },
   searchWrap: {
     minHeight: 44,
     marginHorizontal: spacing.lg,
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     ...card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     overflow: "hidden",
   },
-  exCardSelected: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  exCardSelected: { borderColor: colors.text, backgroundColor: colors.surface2 },
   exSelect: {
     flex: 1,
     minWidth: 0,
@@ -562,14 +562,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.md,
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     alignItems: "center",
     justifyContent: "center",
   },
   exName: { color: colors.text, fontSize: 15, fontWeight: "700" },
   exMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2, textTransform: "capitalize" },
   exBadge: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1,
@@ -598,19 +598,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     borderLeftWidth: 3,
-    borderLeftColor: colors.brand,
+    borderLeftColor: colors.text,
   },
   selectionCopy: { flex: 1, minWidth: 0 },
-  selectionCount: { color: colors.brand, fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
+  selectionCount: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
   selectionNames: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   clearSelection: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.sm },
   clearSelectionText: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   empty: { alignItems: "center", padding: spacing.xxxl, gap: spacing.md },
   emptyTxt: { color: colors.textMuted },
   resetFilters: { minHeight: 40, justifyContent: "center", paddingHorizontal: spacing.md },
-  resetFiltersText: { color: colors.brand, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  resetFiltersText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   fab: {
     position: "absolute",
     bottom: 82,
@@ -647,13 +647,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   planSummary: {
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     borderLeftWidth: 3,
-    borderLeftColor: colors.brand,
+    borderLeftColor: colors.text,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  planSummaryCount: { color: colors.brand, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  planSummaryCount: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
   planSummaryNames: { color: colors.text, fontSize: 12, lineHeight: 18, marginTop: spacing.xs },
   sheetInput: {
     backgroundColor: colors.surface,
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
   errorBanner: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   errorPad: { paddingHorizontal: spacing.lg },
   retryBtn: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
-  retryTxt: { color: colors.brand, fontWeight: "800" },
+  retryTxt: { color: colors.text, fontWeight: "800" },
   emptyCta: {
     minHeight: 44,
     paddingHorizontal: spacing.lg,

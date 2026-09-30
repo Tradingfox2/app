@@ -135,18 +135,18 @@ export default function EditProfileScreen() {
       </Pressable>
     </View>
     {error ? <Text accessibilityRole="alert" testID="profile-save-error" style={styles.headerError}>{error}</Text> : null}
-    {!ready && !error ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.lg }} /> : null}
+    {!ready && !error ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.lg }} /> : null}
     {ready ? <ScrollView contentContainerStyle={styles.body}>
       <Pressable accessibilityRole="button" testID="profile-cover" disabled={!!busy} onPress={() => void pickImage("cover")} style={styles.cover}>
         {cover.url && !removeCover ? <Image source={{ uri: mediaUrl(cover.url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : <Text style={styles.secondaryText}>{t("CHANGE COVER")}</Text>}
-        {busy === "cover" ? <ActivityIndicator color={colors.brand} /> : null}
+        {busy === "cover" ? <ActivityIndicator color={colors.text} /> : null}
       </Pressable>
       {cover.url && !removeCover ? <Pressable accessibilityRole="button" testID="profile-cover-remove" onPress={() => { setRemoveCover(true); setCover({ id: null, url: null }); }}><Text style={styles.remove}>{t("Remove cover")}</Text></Pressable> : null}
       <View style={styles.photoRow}>
         <Avatar user={{ full_name: name || user?.email || "?", avatar_url: removeAvatar ? null : avatar.url }} size={96} />
         <View style={{ gap: spacing.sm }}>
           <Pressable accessibilityRole="button" testID="profile-photo" disabled={!!busy} onPress={() => void pickImage("avatar")} style={styles.secondary}>
-            {busy === "upload" ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.secondaryText}>{t("CHANGE PHOTO")}</Text>}
+            {busy === "upload" ? <ActivityIndicator color={colors.text} /> : <Text style={styles.secondaryText}>{t("CHANGE PHOTO")}</Text>}
           </Pressable>
           {(avatar.url && !removeAvatar) ? <Pressable accessibilityRole="button" testID="profile-photo-remove" onPress={() => { setRemoveAvatar(true); setAvatar({ id: null, url: null }); }}><Text style={styles.remove}>{t("Remove photo")}</Text></Pressable> : null}
         </View>
@@ -184,8 +184,8 @@ const styles = StyleSheet.create({
   cover: { height: 140, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.lg, marginBottom: spacing.lg },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  chip: { minHeight: 32, paddingHorizontal: spacing.md, borderRadius: radius.sm, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" },
-  chipText: { color: colors.brand, fontWeight: "800", fontSize: 12 },
+  chip: { minHeight: 32, paddingHorizontal: spacing.md, borderRadius: radius.sm, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+  chipText: { color: colors.text, fontWeight: "800", fontSize: 12 },
   sportRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   secondary: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   secondaryText: { color: colors.text, fontWeight: "900", fontSize: 12, letterSpacing: 1 },

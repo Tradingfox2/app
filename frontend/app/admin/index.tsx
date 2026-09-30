@@ -337,7 +337,7 @@ export default function AdminConsole() {
           <Text style={styles.headerTitle}>{t("STAFF CONSOLE")}</Text>
           <Text style={styles.headerMeta}>{user?.email} · {t((overview?.staff_role || "").toUpperCase() || "STAFF")}</Text>
         </View>
-        {working ? <ActivityIndicator color={colors.brand} /> : null}
+        {working ? <ActivityIndicator color={colors.text} /> : null}
       </View>
 
       <View style={styles.tabs}>
@@ -353,7 +353,7 @@ export default function AdminConsole() {
             : 0;
           return (
             <Pressable key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => { if (tab === "support" && item.id !== "support") setTicketDetail(null); setTab(item.id); }} style={[styles.tab, tab === item.id && styles.tabActive]}>
-              <Ionicons name={item.icon} size={16} color={tab === item.id ? colors.brand : colors.textMuted} />
+              <Ionicons name={item.icon} size={16} color={tab === item.id ? colors.text : colors.textMuted} />
               <Text style={[styles.tabText, tab === item.id && styles.tabTextActive]}>{t(item.label)}</Text>
               {count ? <View style={styles.badge}><Text style={styles.badgeText}>{count}</Text></View> : null}
             </Pressable>
@@ -362,7 +362,7 @@ export default function AdminConsole() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {loading ? <ActivityIndicator color={colors.brand} /> : null}
+        {loading ? <ActivityIndicator color={colors.text} /> : null}
         {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { setTicketReload(value => value + 1); void load(); }}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
 
         {tab === "overview" && overview ? <>
@@ -490,7 +490,7 @@ export default function AdminConsole() {
             ))}
           </View>
           {coachFilter === "suspended" ? <Text style={styles.hint}>{t("A banned coach has a suspended account. Open the account to suspend or reinstate.")}</Text> : null}
-          {coachDirectory === null && !error ? <ActivityIndicator color={colors.brand} /> : null}
+          {coachDirectory === null && !error ? <ActivityIndicator color={colors.text} /> : null}
           {coachDirectory && coachFilter === "pending" && coachDirectory.length > 0 ? <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Review note (sent to the applicant)")} placeholderTextColor={colors.textDim} style={styles.input} /> : null}
           {coachDirectory && coachDirectory.length === 0 ? <Text style={styles.hint}>{t(coachFilter === "pending" ? "No coach applications waiting." : coachFilter === "approved" ? "No approved coaches." : coachFilter === "suspended" ? "No banned coaches." : "No rejected coaches.")}</Text> : null}
           {(coachDirectory || []).map(coach => (
@@ -513,7 +513,7 @@ export default function AdminConsole() {
                   <Text style={styles.actionText}>{t("Reject")}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" testID={`approve-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "approved")} style={[styles.action, working && styles.disabled]}>
-                  <Ionicons name="checkmark" size={15} color={colors.brand} />
+                  <Ionicons name="checkmark" size={15} color={colors.text} />
                   <Text style={styles.actionText}>{t("Approve")}</Text>
                 </Pressable>
               </View> : <Text style={styles.hint}>{t("Read-only: reviewing coaches needs the admin role.")}</Text>) : null}
@@ -600,7 +600,7 @@ export default function AdminConsole() {
                   <Text style={styles.actionText}>{t("Reject")}</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "active")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
-                  <Ionicons name="checkmark" size={15} color={colors.brand} />
+                  <Ionicons name="checkmark" size={15} color={colors.text} />
                   <Text style={styles.actionText}>{t("Approve")}</Text>
                 </Pressable>
               </View> : <Text style={styles.hint}>{t("Read-only: reviewing requests needs the moderator role.")}</Text>) : null}
@@ -699,7 +699,7 @@ export default function AdminConsole() {
               <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => setTicketSearch(ticketQuery.trim())} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Pressable>
             </View>
             {!can("tickets.read") ? <Text style={styles.hint}>{t("Reading tickets needs the support role.")}</Text> : null}
-            {tickets === null && !error ? <ActivityIndicator color={colors.brand} /> : null}
+            {tickets === null && !error ? <ActivityIndicator color={colors.text} /> : null}
             {can("tickets.read") && tickets && visibleTickets.length === 0 && !error ? <Text style={styles.hint}>{t(unassignedOnly && tickets.length > 0 ? "No unassigned tickets." : "The support queue is empty.")}</Text> : null}
             {visibleTickets.map(ticket => (
               <Pressable key={ticket.id} accessibilityRole="button" testID={`admin-ticket-${ticket.id}`} onPress={() => void openTicket(ticket.id)} style={styles.row}>
@@ -745,7 +745,7 @@ const styles = StyleSheet.create({
   headerTitle: { ...type.section, color: colors.text }, headerMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   tabs: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
   tab: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface },
-  tabActive: { borderColor: colors.brand, backgroundColor: colors.brandDim }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 0.4 }, tabTextActive: { color: colors.text },
+  tabActive: { borderColor: colors.text, backgroundColor: colors.surface2 }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 0.4 }, tabTextActive: { color: colors.text },
   badge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   badgeText: { color: colors.text, fontSize: 10, fontWeight: "900" },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.sm },
@@ -761,24 +761,24 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
   action: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm },
   actionText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, disabled: { opacity: 0.4 },
-  link: { color: colors.brand, fontSize: 12, fontWeight: "800", marginTop: spacing.sm },
+  link: { color: colors.text, fontSize: 12, fontWeight: "800", marginTop: spacing.sm },
   input: { minHeight: 44, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, color: colors.text, marginBottom: spacing.sm },
   replyInput: { minHeight: 88, paddingVertical: spacing.sm, textAlignVertical: "top" },
   searchRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   searchBtn: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginVertical: spacing.sm },
   chip: { minHeight: 32, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" },
-  chipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim }, chipText: { color: colors.textMuted, fontSize: 10, fontWeight: "900" }, chipTextActive: { color: colors.brand },
+  chipActive: { borderColor: colors.text, backgroundColor: colors.surface2 }, chipText: { color: colors.textMuted, fontSize: 10, fontWeight: "900" }, chipTextActive: { color: colors.text },
   row: { minHeight: 60, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   name: { color: colors.text, fontWeight: "800" },
-  staffTag: { backgroundColor: colors.brandDim, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm, flexShrink: 1 }, staffTagText: { color: colors.brand, fontSize: 9, fontWeight: "900" },
+  staffTag: { backgroundColor: colors.surface2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm, flexShrink: 1 }, staffTagText: { color: colors.text, fontSize: 9, fontWeight: "900" },
   suspendedTag: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }, suspendedTagText: { color: colors.text, fontSize: 9, fontWeight: "900" },
   suspendedNote: { color: colors.error, fontSize: 12, marginTop: 4 },
   note: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }, noteText: { color: colors.text, lineHeight: 19 },
   auditRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 2 },
-  auditAction: { color: colors.brand, fontSize: 12, fontWeight: "900" },
+  auditAction: { color: colors.text, fontSize: 12, fontWeight: "900" },
   errorBox: { padding: spacing.md, borderWidth: 1, borderColor: colors.error, borderRadius: radius.sm, gap: 6 },
-  error: { color: colors.error }, retry: { color: colors.brand, fontWeight: "900" },
+  error: { color: colors.error }, retry: { color: colors.text, fontWeight: "900" },
   locked: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: spacing.md },
   lockedText: { color: colors.textMuted, textAlign: "center" },
   primary: { minHeight: 44, paddingHorizontal: spacing.xl, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },

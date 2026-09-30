@@ -71,7 +71,7 @@ export default function StoryViewer() {
       <Text style={styles.title}>{highlights ? t("HIGHLIGHTS") : t("STORY")}</Text>
       {own && story ? <Pressable accessibilityRole="button" testID="story-delete" onPress={() => void remove()} style={styles.icon}><Ionicons name="trash-outline" size={18} color={colors.error} /></Pressable> : <View style={styles.icon} />}
     </View>
-    {loading ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} /> : null}
+    {loading ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xl }} /> : null}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {!loading && !story && !error ? <Text style={styles.empty} testID="story-empty">{t("This story is no longer available.")}</Text> : null}
     {story ? <View style={styles.card} testID={`story-${story.id}`}>
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   empty: { color: colors.textMuted, padding: spacing.lg, textAlign: "center" },
   card: { padding: spacing.lg, gap: spacing.md },
   author: { color: colors.text, fontWeight: "900", fontSize: 18 },
-  kicker: { color: colors.brand, fontWeight: "800", letterSpacing: 0.4 },
+  kicker: { color: colors.text, fontWeight: "800", letterSpacing: 0.4 },
   meta: { color: colors.textDim, fontSize: 12 },
   image: { width: "100%", height: 280, borderRadius: radius.md, backgroundColor: colors.surface2 },
   summary: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface2, gap: 4 },

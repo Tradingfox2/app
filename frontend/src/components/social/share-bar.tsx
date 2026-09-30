@@ -43,11 +43,11 @@ export function ShareBar({ postId, title, message }: { postId: string; title?: s
     <View style={styles.wrap} testID={`post-share-bar-${postId}`}>
       <View style={styles.row}>
         <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} testID={`post-share-sheet-${postId}`} onPress={() => void systemShare()} style={styles.chip}>
-          <Ionicons name="share-outline" size={16} color={colors.brand} />
+          <Ionicons name="share-outline" size={16} color={colors.text} />
           <Text style={styles.chipText}>{t("Share")}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("Copied") : t("Copy link")} testID={`post-copy-link-${postId}`} onPress={() => void copy()} style={styles.chip}>
-          <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color={colors.brand} />
+          <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color={colors.text} />
           <Text style={styles.chipText}>{copied ? t("Copied") : t("Copy link")}</Text>
         </Pressable>
         {TARGETS.map(target => (

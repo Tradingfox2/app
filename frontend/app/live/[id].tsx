@@ -180,12 +180,12 @@ export default function LiveRoomScreen() {
           <Text style={styles.title} numberOfLines={1} testID="live-room-title">{session?.title || t("LIVE ROOM")}</Text>
           <Text style={styles.meta}>{t("{count} here").replace("{count}", String(participants.length))}</Text>
         </View>
-        {live ? <View style={styles.badge} testID="live-room-badge"><Text style={styles.badgeText}>{t("LIVE")}</Text></View> : null}
+        {live ? <View style={styles.badge} testID="live-room-badge"><View style={styles.liveDot} /><Text style={styles.badgeText}>{t("LIVE")}</Text></View> : null}
         {canEnd && live ? <Pressable accessibilityRole="button" onPress={() => void end()} style={styles.end} testID="live-room-end"><Text style={styles.endText}>{t("END")}</Text></Pressable> : null}
       </View>
 
       <View style={styles.room} testID="live-room">
-        {loading && !session ? <ActivityIndicator color={colors.brand} /> : null}
+        {loading && !session ? <ActivityIndicator color={colors.text} /> : null}
         {session && !live && !ended ? <Text style={styles.notice} testID="live-room-waiting">{t("Waiting for the coach to go live.")}</Text> : null}
         {ended ? <Text style={styles.notice} testID="live-room-ended">{t("This session has ended.")} {t("You can still read the chat.")}</Text> : null}
         {error ? <Text style={styles.error} testID="live-room-error">{error}</Text> : null}
@@ -194,7 +194,7 @@ export default function LiveRoomScreen() {
         <View style={styles.presence} testID="live-presence">
           {participants.length === 0 ? <Text style={styles.meta}>{t("No one else is here yet.")}</Text> : participants.map(person => (
             <View key={person.user_id} style={styles.person} testID={`live-presence-${person.user_id}`}>
-              <Ionicons name="person" size={14} color={colors.brand} />
+              <Ionicons name="person" size={14} color={colors.text} />
               <Text style={styles.personName}>{person.user?.full_name || t("Someone")}</Text>
             </View>
           ))}
@@ -243,8 +243,9 @@ const styles = StyleSheet.create({
   icon: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   title: { color: colors.text, fontWeight: "900", fontSize: 16 },
   meta: { color: colors.textMuted, fontSize: 12 },
-  badge: { backgroundColor: colors.error, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 4 },
-  badgeText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  badge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "transparent" },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.live },
+  badgeText: { color: colors.live, fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   end: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   endText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   room: { flex: 1, paddingHorizontal: spacing.md, gap: spacing.sm },

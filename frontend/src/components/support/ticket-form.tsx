@@ -94,11 +94,11 @@ export function SupportTicketForm({
                   paddingVertical: 8,
                   borderRadius: radius.sm,
                   borderWidth: 1,
-                  borderColor: selected ? colors.brand : colors.border,
-                  backgroundColor: selected ? colors.brand : colors.surface2,
+                  borderColor: selected ? colors.text : colors.border,
+                  backgroundColor: colors.surface2,
                 }}
               >
-                <Text style={{ color: selected ? colors.brandOn : colors.textMuted, fontSize: 12, fontWeight: "800" }}>
+                <Text style={{ color: selected ? colors.text : colors.textMuted, fontSize: 12, fontWeight: "800" }}>
                   {ticketCategoryLabel(item, t)}
                 </Text>
               </Pressable>

@@ -11,7 +11,7 @@ export default function Index() {
         style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}
         testID="auth-loading"
       >
-        <ActivityIndicator color={colors.brand} size="large" />
+        <ActivityIndicator color={colors.text} size="large" />
       </View>
     );
   }
