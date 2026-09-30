@@ -242,10 +242,12 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
                 <Pressable accessibilityRole="button" testID="follow-toggle" disabled={busy} onPress={() => void toggleFollow()} style={[styles.primary, profile.follow_state !== "none" && styles.secondary, busy && styles.disabled]}>
                   <Text style={[styles.primaryText, profile.follow_state !== "none" && styles.secondaryText]}>{t(followLabel)}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" testID="message-user" disabled={!profile.can_message} onPress={() => router.push({ pathname: "/dm/[id]", params: { id: profile.id, name: profile.full_name || "" } })} style={[styles.secondary, !profile.can_message && styles.disabled]}>
-                  <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
-                  <Text style={styles.secondaryText}>{t("MESSAGE")}</Text>
-                </Pressable>
+                {profile.can_message ? (
+                  <Pressable accessibilityRole="button" testID="message-user" onPress={() => router.push({ pathname: "/dm/[id]", params: { id: profile.id, name: profile.full_name || "" } })} style={styles.secondary}>
+                    <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
+                    <Text style={styles.secondaryText}>{t("MESSAGE")}</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable accessibilityRole="button" accessibilityLabel={t("More")} testID="profile-menu" onPress={() => setMenuOpen(open => !open)} style={styles.secondary}>
                   <Ionicons name="ellipsis-horizontal" size={16} color={colors.text} />
                 </Pressable>
@@ -275,7 +277,7 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
               </View>
             ) : null}
             {!profileOwn && !profile.can_message ? (
-              <Text style={styles.hint}>{t("Messaging unlocks when you follow each other, share a community, or have a coaching relationship.")}</Text>
+              <Text testID="message-locked" style={styles.hint}>{t(profile.is_blocked ? "This account is unavailable" : "Messaging unlocks when you follow each other, share a community, or have a coaching relationship.")}</Text>
             ) : null}
             {canSeePosts ? (
               <View style={styles.wall}>

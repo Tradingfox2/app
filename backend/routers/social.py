@@ -285,6 +285,7 @@ async def _decorate(posts: list[dict], viewer_id: str) -> list[dict]:
     every = posts + originals
     ids = list({post["id"] for post in every})
     liked = {row["post_id"] async for row in db.post_likes.find({"post_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "post_id": 1})}
+    kudos = {row["post_id"] async for row in db.post_kudos.find({"post_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "post_id": 1})}
     saved = {row["post_id"] async for row in db.post_saves.find({"post_id": {"$in": ids}, "user_id": viewer_id}, {"_id": 0, "post_id": 1})}
     reposted = {row["repost_of"] async for row in db.posts.find({"repost_of": {"$in": ids}, "author_id": viewer_id, "status": {"$ne": "deleted"}, "content": ""}, {"_id": 0, "repost_of": 1})}
     polled = [post["id"] for post in every if post.get("poll")]
@@ -296,11 +297,13 @@ async def _decorate(posts: list[dict], viewer_id: str) -> list[dict]:
     def fill(post: dict) -> dict:
         post["author"] = people.get(post["author_id"])
         post["liked_by_me"] = post["id"] in liked
+        post["kudos_by_me"] = post["id"] in kudos
         post["saved_by_me"] = post["id"] in saved
         post["reposted_by_me"] = post["id"] in reposted
         post["mentions"] = [people[uid] for uid in notifications.parse_mentions(post.get("content", "")) if uid in people]
         post["can_edit"] = post["author_id"] == viewer_id and moment - _aware(post["created_at"]) <= POST_EDIT_WINDOW if post.get("created_at") else False
         post.setdefault("like_count", 0)
+        post.setdefault("kudos_count", 0)
         post.setdefault("comment_count", 0)
         post.setdefault("repost_count", 0)
         post.setdefault("media", [])
@@ -387,12 +390,12 @@ async def feed(
     tag: Annotated[str | None, Query(max_length=50)] = None,
     community_id: Annotated[str | None, Query(max_length=64)] = None,
 ):
-    # A profile wall and the friends feed may include friends-audience posts.
-    # The public scopes must not, or the community feed would change.
-    # only_me stays on the author's wall and scope=mine, not on either feed.
+    # Friends-audience posts belong on the friends feed, on FOLLOWING (people
+    # you follow), on My posts, and on a profile wall. The public scope drops
+    # them. only_me stays on the author's wall and scope=mine.
     query = await _visible_post_query(
         user["id"],
-        friends=scope == "friends" or bool(author_id),
+        friends=scope in ("friends", "following", "mine") or bool(author_id),
         include_only_me=scope == "mine" or author_id == user["id"],
     )
     if tag:
@@ -517,7 +520,7 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         "link_preview": None if media else await _preview_for(content),
         "edited_at": None,
         "audience": body.audience,
-        "like_count": 0, "comment_count": 0, "repost_count": 0, "created_at": timestamp,
+        "like_count": 0, "kudos_count": 0, "comment_count": 0, "repost_count": 0, "created_at": timestamp,
     }
     await db.posts.insert_one(post)
     await _notify_mentions(post, user, notifications.parse_mentions(content))
@@ -633,6 +636,37 @@ async def unlike_post(post_id: str, user: dict = Depends(current_user)):
         await db.posts.update_one({"id": post_id, "like_count": {"$gt": 0}}, {"$inc": {"like_count": -1}})
     post = await db.posts.find_one({"id": post_id}, {"_id": 0, "like_count": 1}) or {}
     return {"post_id": post_id, "liked": False, "like_count": post.get("like_count", 0)}
+
+
+@router.post("/posts/{post_id}/kudos")
+async def give_kudos(post_id: str, user: dict = Depends(current_user)):
+    """A kudos is a workout-post reaction. A post with no workout cannot take one."""
+    await ratelimit.hit("like", user["id"])
+    post = await _post_or_404(post_id, user["id"])
+    if not post.get("workout_id"):
+        raise HTTPException(422, "Kudos are for a shared workout")
+    try:
+        await db.post_kudos.insert_one({"post_id": post_id, "user_id": user["id"], "created_at": now()})
+    except DuplicateKeyError:
+        return {"post_id": post_id, "kudos": True, "kudos_count": post.get("kudos_count", 0)}
+    updated = await db.posts.find_one_and_update(
+        {"id": post_id}, {"$inc": {"kudos_count": 1}},
+        projection={"_id": 0, "kudos_count": 1}, return_document=True)
+    name = user.get("full_name") or "Someone"
+    await _notify_post_author(post, user, notifications.POST_KUDOS, f"{name} gave kudos on your workout")
+    return {"post_id": post_id, "kudos": True, "kudos_count": updated["kudos_count"]}
+
+
+@router.delete("/posts/{post_id}/kudos")
+async def remove_kudos(post_id: str, user: dict = Depends(current_user)):
+    post = await _post_or_404(post_id, user["id"])
+    if not post.get("workout_id"):
+        raise HTTPException(422, "Kudos are for a shared workout")
+    result = await db.post_kudos.delete_one({"post_id": post_id, "user_id": user["id"]})
+    if result.deleted_count:
+        await db.posts.update_one({"id": post_id, "kudos_count": {"$gt": 0}}, {"$inc": {"kudos_count": -1}})
+    current = await db.posts.find_one({"id": post_id}, {"_id": 0, "kudos_count": 1}) or {}
+    return {"post_id": post_id, "kudos": False, "kudos_count": current.get("kudos_count", 0)}
 
 
 @router.post("/posts/{post_id}/repost", status_code=201)
