@@ -78,7 +78,7 @@ function MuscleLabelColumn({
         const isSelected = selected === slug;
         const level = activation[slug];
         const accent = isSelected
-          ? colors.brand
+          ? colors.text
           : level === "secondary"
             ? colors.volt
             : level === "stabilizer"
@@ -531,19 +531,19 @@ export function MuscleExplorer({
           <View style={styles.legend}>
             <View style={styles.legendItem}>
               <View
-                style={[styles.legendDot, styles.legendDotGlow, { backgroundColor: colors.brand, shadowColor: colors.brand }]}
+                style={[styles.legendDot, { backgroundColor: colors.text }]}
               />
               <Text style={styles.legendLabel}>{t("Selected")}</Text>
             </View>
             <View style={styles.legendItem}>
               <View
-                style={[styles.legendDot, styles.legendDotGlow, { backgroundColor: colors.volt, shadowColor: colors.volt }]}
+                style={[styles.legendDot, { backgroundColor: colors.volt }]}
               />
               <Text style={styles.legendLabel}>{t("Combinations")}</Text>
             </View>
             <View style={styles.legendItem}>
               <View
-                style={[styles.legendDot, styles.legendDotGlow, { backgroundColor: colors.blaze, shadowColor: colors.blaze }]}
+                style={[styles.legendDot, { backgroundColor: colors.blaze }]}
               />
               <Text style={styles.legendLabel}>{t("Antagonist")}</Text>
             </View>
@@ -719,16 +719,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     backgroundColor: colors.surface2,
-    borderColor: colors.brand,
+    borderColor: colors.text,
     borderWidth: 1,
     borderRadius: 12,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     minHeight: 52,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
   },
   toastError: { borderColor: colors.error },
   toastText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: "600" },
@@ -788,12 +784,6 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
-  legendDotGlow: {
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.95,
-    shadowRadius: 8,
-    elevation: 6,
-  },
   legendLabel: {
     fontSize: 12,
     color: colors.text,
@@ -838,7 +828,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   labelBtnRight: { borderLeftWidth: 1, borderRightWidth: 3 },
-  labelBtnOn: { backgroundColor: colors.brandDim },
+  labelBtnOn: { backgroundColor: colors.surface2 },
   labelName: { color: colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.4 },
   labelRole: { color: colors.textMuted, fontSize: 10, lineHeight: 13, marginTop: 1 },
   labelFreq: {
@@ -876,8 +866,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   muscleChipOn: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandDim,
+    borderColor: colors.text,
+    backgroundColor: colors.surface2,
   },
   muscleChipText: {
     color: colors.textMuted,
@@ -893,6 +883,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
     borderTopWidth: 1,
-    borderTopColor: colors.brand,
+    borderTopColor: colors.text,
   },
 });

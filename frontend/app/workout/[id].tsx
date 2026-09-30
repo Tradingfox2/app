@@ -72,6 +72,7 @@ export default function WorkoutLogger() {
   const [muscles, setMuscles] = useState<any[]>([]);
   const [selectedEx, setSelectedEx] = useState<any | null>(null);
   const [reps, setReps] = useState("8");
+  const [lastTime, setLastTime] = useState<{ weight_kg: number; reps: number } | null>(null);
   const [weight, setWeight] = useState("60");
   const [rpe, setRpe] = useState("7");
   const [queued, setQueued] = useState(0);
@@ -202,12 +203,20 @@ export default function WorkoutLogger() {
   // the timer uses; when it is absent the program day, then 90s, is the fallback.
   useEffect(() => {
     const exerciseId = selectedEx?.id;
-    if (!exerciseId) return;
+    if (!exerciseId) {
+      setLastTime(null);
+      return;
+    }
     let cancelled = false;
+    setLastTime(null);
     api.previousSets(exerciseId, 1).then((payload) => {
       if (cancelled) return;
       const prior = (payload.sessions?.[0]?.sets ?? []) as any[];
       priorSetsRef.current = prior;
+      const summary = prior.find((row) => row.set_index === 1) ?? prior[0];
+      if (summary?.reps != null && summary?.weight_kg != null) {
+        setLastTime({ weight_kg: Number(summary.weight_kg), reps: Number(summary.reps) });
+      }
       const match = prior.find((row) => row.set_index === nextSetIndex) ?? prior[0];
       if (!match) return;
       if (match.reps != null) setReps(String(match.reps));
@@ -390,8 +399,8 @@ export default function WorkoutLogger() {
       </View>
 
       {(loggerError || finishError) ? (
-        <View style={styles.offlineBanner} accessibilityRole="alert" testID={finishError ? "finish-error" : "logger-error"}>
-          <Ionicons name="alert-circle" color={colors.error} size={14} />
+        <View style={styles.errorBanner} accessibilityRole="alert" testID={finishError ? "finish-error" : "logger-error"}>
+          <Ionicons name="alert-circle" color={colors.live} size={16} />
           <Text style={styles.errorTxt}>{finishError || loggerError}</Text>
         </View>
       ) : null}
@@ -439,26 +448,26 @@ export default function WorkoutLogger() {
               accessibilityLabel={t("Add exercises from the muscle explorer")}
               testID="add-from-muscles"
             >
-              <Ionicons name="add" size={16} color={colors.brand} />
-              <Text style={[styles.planName, { color: colors.brand }]}>{t("Add from muscles")}</Text>
+              <Ionicons name="add" size={16} color={colors.text} />
+              <Text style={[styles.planName, { color: colors.text }]}>{t("Add from muscles")}</Text>
             </Pressable>
           </ScrollView>
         </View>
 
-      {queued > 0 && (
-        <View style={styles.offlineBanner} testID="offline-banner">
-          <Ionicons name="cloud-offline" color={colors.warning} size={14} />
-          <Text style={styles.offlineTxt}>{t(queued === 1 ? "{count} set pending sync" : "{count} sets pending sync", { count: formatNumber(queued) })}</Text>
+      {restRemaining > 0 && (
+        <View style={styles.timer} testID="rest-timer">
+          <Text style={styles.timerLabel}>{t("Rest")}</Text>
+          <Text style={styles.timerVal}>{restRemaining}s</Text>
+          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Rest")}>
+            <Ionicons name="close" color={colors.textDim} size={18} />
+          </Pressable>
         </View>
       )}
 
-      {restRemaining > 0 && (
-        <View style={styles.timer} testID="rest-timer">
-          <Text style={styles.timerLabel}>{t("REST")}</Text>
-          <Text style={styles.timerVal}>{restRemaining}s</Text>
-          <Pressable onPress={stopRest} testID="skip-timer-btn">
-            <Ionicons name="close" color={colors.brandOn} size={18} />
-          </Pressable>
+      {queued > 0 && (
+        <View style={styles.warningBanner} testID="offline-banner">
+          <Ionicons name="cloud-offline" color={colors.warning} size={16} />
+          <Text style={styles.warningTxt}>{t(queued === 1 ? "{count} set pending sync" : "{count} sets pending sync", { count: formatNumber(queued) })}</Text>
         </View>
       )}
 
@@ -477,8 +486,13 @@ export default function WorkoutLogger() {
               <Text style={styles.exSelectorName}>
                 {selectedEx?.name ?? t("Pick an exercise")}
               </Text>
+              {lastTime ? (
+                <Text style={styles.lastTime}>
+                  {t("Last time: {kg} × {reps}", { kg: formatNumber(lastTime.weight_kg), reps: formatNumber(lastTime.reps) })}
+                </Text>
+              ) : null}
             </View>
-            <Ionicons name="chevron-down" color={colors.brand} size={22} />
+            <Ionicons name="chevron-down" color={colors.text} size={22} />
           </Pressable>
 
           {selectedEx && (
@@ -506,7 +520,7 @@ export default function WorkoutLogger() {
               style={styles.progLink}
               onPress={() => router.push(`/progression/${selectedEx.id}`)}
             >
-              <Ionicons name="trending-up" color={colors.brand} size={16} />
+              <Ionicons name="trending-up" color={colors.text} size={16} />
               <Text style={styles.progLinkTxt}>{t("See progression & PR")}</Text>
             </Pressable>
           )}
@@ -604,7 +618,7 @@ export default function WorkoutLogger() {
         </Text>
         <Text style={styles.shareCopy}>{t("Share it with the people you train with?")}</Text>
         <Text style={styles.shareAudienceLabel}>{t("Choose audience")}</Text>
-        {!audienceReady ? <ActivityIndicator color={colors.brand} /> : <View style={styles.shareChips} testID="share-audience">
+        {!audienceReady ? <ActivityIndicator color={colors.text} /> : <View style={styles.shareChips} testID="share-audience">
           {(clubs ?? []).map(club => {
             const selected = audience.kind === "club" && audience.id === club.id;
             return <Pressable key={club.id} accessibilityRole="button" accessibilityState={{ selected }} testID={`share-audience-club-${club.id}`} onPress={() => pickAudience({ kind: "club", id: club.id })} style={[styles.shareChip, selected && styles.shareChipOn]}>
@@ -670,8 +684,8 @@ function PickerChip({ label, active, onPress }: { label: string; active: boolean
 }
 
 const styles = StyleSheet.create({
-  sharePanel: { position: "absolute", left: 16, right: 16, bottom: 32, padding: 20, borderRadius: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.brand, gap: 8 },
-  shareTitle: { color: colors.brand, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
+  sharePanel: { position: "absolute", left: 16, right: 16, bottom: 32, padding: 20, borderRadius: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.text, gap: 8 },
+  shareTitle: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   shareCopy: { color: colors.text, fontSize: 15 },
   shareError: { color: colors.error, fontSize: 12 },
   shareRow: { flexDirection: "row", gap: 8, marginTop: 8 },
@@ -682,10 +696,10 @@ const styles = StyleSheet.create({
   shareAudienceLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
   shareChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   shareChip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
-  shareChipOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  shareChipOn: { borderColor: colors.text, backgroundColor: colors.surface2 },
   shareChipText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
-  shareChipTextOn: { color: colors.brand },
-  shareRetry: { color: colors.brand, fontWeight: "800", fontSize: 12 },
+  shareChipTextOn: { color: colors.text },
+  shareRetry: { color: colors.text, fontWeight: "800", fontSize: 12 },
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: "row",
@@ -718,70 +732,84 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2,
     maxWidth: 220,
   },
-  planChipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  planChipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },
   planChipDone: { borderColor: colors.success },
-  planChipAdd: { borderStyle: "dashed", borderColor: colors.brand, backgroundColor: "transparent" },
+  planChipAdd: { borderStyle: "dashed", borderColor: colors.text, backgroundColor: "transparent" },
   planIdx: { color: colors.textDim, fontSize: 11, fontWeight: "800", fontVariant: ["tabular-nums"] },
   planName: { color: colors.text, fontSize: 12, fontWeight: "700", flexShrink: 1 },
-  planTxtActive: { color: colors.brand },
+  planTxtActive: { color: colors.text },
   finishTxt: {
-    color: colors.brand,
+    color: colors.text,
     fontWeight: "800",
     letterSpacing: 1.2,
     minHeight: 44,
     textAlignVertical: "center",
     paddingHorizontal: spacing.sm,
   },
-  offlineBanner: {
+  errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: "#3a2a10",
+    gap: spacing.sm,
+    backgroundColor: colors.errorWash,
     marginHorizontal: spacing.lg,
-    padding: spacing.sm,
+    padding: spacing.md,
     borderRadius: radius.md,
     marginBottom: spacing.sm,
   },
-  offlineTxt: { color: colors.warning, fontSize: 12, fontWeight: "700", flex: 1 },
-  errorTxt: { color: colors.error, fontSize: 12, fontWeight: "700", flex: 1 },
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.warningWash,
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
+  warningTxt: { color: colors.text, fontSize: 13, fontWeight: "400", flex: 1 },
+  errorTxt: { color: colors.text, fontSize: 13, fontWeight: "400", flex: 1 },
   timer: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: colors.brand,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.border,
     marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     minHeight: 44,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     marginBottom: spacing.sm,
   },
-  timerLabel: { color: colors.brandOn, fontWeight: "800", letterSpacing: 2 },
+  timerLabel: { color: colors.textDim, fontWeight: "400", fontSize: 13 },
   timerVal: {
-    color: colors.brandOn,
-    fontWeight: "800",
+    color: colors.text,
+    fontWeight: "700",
     flex: 1,
     fontSize: 20,
     fontVariant: ["tabular-nums"],
   },
   exSelector: {
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.lg,
     flexDirection: "row",
     alignItems: "center",
     marginBottom: spacing.md,
   },
   exSelectorLabel: { color: colors.textMuted, fontSize: 10, letterSpacing: 2, fontWeight: "800" },
-  exSelectorName: { color: colors.text, fontSize: 17, fontWeight: "800", marginTop: 4 },
+  exSelectorName: { color: colors.text, fontSize: 17, fontWeight: "600", marginTop: 4 },
+  lastTime: { color: colors.textDim, fontSize: 13, fontWeight: "400", marginTop: 4 },
   setsCard: {
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     marginBottom: spacing.md,
   },
   setsHeader: {
@@ -819,7 +847,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     padding: spacing.md,
   },
-  progLinkTxt: { color: colors.brand, fontWeight: "700" },
+  progLinkTxt: { color: colors.text, fontWeight: "700" },
   entryBar: {
     position: "absolute",
     left: 0,
@@ -896,9 +924,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  pchipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  pchipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },
   pchipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 11 },
-  pchipTxtActive: { color: colors.brand },
+  pchipTxtActive: { color: colors.text },
   pickerItem: {
     padding: spacing.md,
     borderBottomColor: colors.border,

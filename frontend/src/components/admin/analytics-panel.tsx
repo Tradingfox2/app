@@ -79,7 +79,7 @@ export function AnalyticsPanel() {
       <Pressable accessibilityRole="button" testID="analytics-refresh" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
         <Text style={styles.actionText}>{t("Refresh counts")}</Text>
       </Pressable>
-      {loading ? <ActivityIndicator color={colors.brand} /> : null}
+      {loading ? <ActivityIndicator color={colors.text} /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       {data ? (
         <>

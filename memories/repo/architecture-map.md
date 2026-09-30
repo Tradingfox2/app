@@ -301,10 +301,12 @@ through the shared module.
   `GET /posts/{id}`. Friends stays an accepted follow. Story lists use
   `_friends_only_clause`: the author sees `only_me` stories; visitors do not.
 - **You tab:** `app/(tabs)/profile.tsx` renders `ProfileWall` (`variant="tab"`),
-  the same component as `app/user/[id].tsx`. Stories and highlights are the
-  first block in the scroll (`profile-activity`). Edit profile, saved posts,
-  and the Friends feed sit under the header. The gear opens `app/settings.tsx`,
-  which still holds language, privacy, plans, support, and sign-out.
+  the same component as `app/user/[id].tsx`. The cover is the first scroll
+  block; the avatar overlaps it and opens the story viewer when stories
+  exist. `profile-activity` (your story, highlights) stays above Posts |
+  Photos | About. Edit profile, saved posts, and the Friends feed sit under
+  the header. The gear opens `app/settings.tsx`, which still holds language,
+  privacy, plans, support, and sign-out.
 - **Copy:** Friends (feed and audience) is not the Followers or Following list.
   Strings live in `frontend/src/personal-space-locales.ts`. The personal
   composer and `app/story-new.tsx` send `only_me` through the existing
@@ -328,3 +330,24 @@ through the shared module.
 - **Tickets:** `ticket-form.tsx` emits `ticket_created`. Member
   `ticket-detail.tsx` and staff `admin/index.tsx` emit `ticket_replied`.
   The opening note is not a reply.
+
+## Frontend visual system (verified 2026-09-30, branch `cursor/visual-system-1295`)
+
+- **Owner:** `frontend/src/theme.ts`. Screens use these tokens. There is no
+  second palette and no light canvas. Page is `colors.bg` `#101418`.
+- **Chartreuse** `colors.brand` `#D6E35A` with `colors.brandOn` `#16180C` is
+  only a primary button fill and `tabBarActiveTintColor` in
+  `app/(tabs)/_layout.tsx`. In-screen chips and the muscle-sheet tabs use
+  `surface2` plus `colors.text`.
+- **Rings:** Home Strain / Recovery / Sleep stay those labels. They sit on
+  `colors.ringPlate` `#000000` inside the inset rings card. Strain is
+  `colors.blaze`, recovery `colors.success`, sleep `colors.info`. Not Apple
+  Move / Exercise / Stand, and not chartreuse.
+- **Cards:** `card` is inset (radius 16, 1pt border, pad 16) for rings,
+  Today, stats, session history. Feed posts and club rows are full bleed
+  (`bleedRow` / post `card`: pad 16, bottom hairline, no radius).
+- **Labels:** LIVE is `colors.live` dot plus the word. PR is the word in
+  `colors.pr`. Rest is an outline bar, tertiary word, only while
+  `restRemaining > 0`. Rest timer math in `src/rest-timer.ts` is unchanged.
+- **Plan vs coach:** `/program` header is `t("Plan")`. The human coach stays
+  Home `quick-coach` and `/coach/onboarding`. Screens are not merged.

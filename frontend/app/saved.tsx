@@ -44,7 +44,7 @@ export default function SavedScreen() {
     </View>
     <ScrollView>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-      {posts === null && !error ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} /> : null}
+      {posts === null && !error ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xl }} /> : null}
       {posts?.length === 0 ? <Text style={styles.empty} testID="saved-empty">{t("Nothing saved yet. Tap the bookmark on any post to keep it here.")}</Text> : null}
       {/* An unsaved post stays until the next visit, so a mis-tap can be undone in place. */}
       {(posts || []).map(post => <PostCard key={post.id} post={post} onChange={next => patch(post.id, next)}
@@ -62,5 +62,5 @@ const styles = StyleSheet.create({
   error: { color: colors.error, padding: spacing.lg },
   empty: { color: colors.textMuted, textAlign: "center", padding: spacing.xl },
   more: { padding: spacing.lg, alignItems: "center" },
-  moreText: { color: colors.brand, fontWeight: "900", letterSpacing: 1 },
+  moreText: { color: colors.text, fontWeight: "900", letterSpacing: 1 },
 });

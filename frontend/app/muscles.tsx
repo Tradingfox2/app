@@ -30,7 +30,7 @@ function BackToHome() {
       style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
       testID="muscles-back-btn"
     >
-      <Ionicons name="chevron-back" size={26} color={colors.brand} />
+      <Ionicons name="chevron-back" size={26} color={colors.text} />
     </Pressable>
   );
 }
@@ -41,7 +41,7 @@ export default function MusclesScreen() {
     headerShown: true,
     title: t("Muscle Explorer"),
     headerBackTitle: t("Home"),
-    headerTintColor: colors.brand,
+    headerTintColor: colors.text,
     headerShadowVisible: false,
     headerStyle: { backgroundColor: colors.bg },
     headerTitleStyle: { color: colors.text, fontWeight: "800" as const },
@@ -83,7 +83,7 @@ export default function MusclesScreen() {
     return (
       <View style={styles.centered}>
         <Stack.Screen options={header} />
-        <ActivityIndicator size="large" color={colors.accent} />
+        <ActivityIndicator size="large" color={colors.text} />
         <Text style={styles.loadingText}>{t("Loading muscle data...")}</Text>
       </View>
     );
@@ -97,7 +97,7 @@ export default function MusclesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor={colors.accent}
+            tintColor={colors.text}
           />
         }
       >

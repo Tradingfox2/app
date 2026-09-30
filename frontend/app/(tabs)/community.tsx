@@ -93,7 +93,7 @@ export default function CommunityScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="community-screen">
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); void feed.load(); }} tintColor={colors.brand} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); void feed.load(); }} tintColor={colors.text} />}
         contentContainerStyle={styles.scroll}
       >
         <View style={styles.header}>
@@ -153,13 +153,6 @@ export default function CommunityScreen() {
         {tab === "feed" ? (
           <View testID="feed">
             <StoriesTray />
-            <Composer onPublished={feed.prepend} />
-            {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
-              <Ionicons name="trending-up" size={16} color={colors.brand} style={{ alignSelf: "center" }} />
-              {trending.map(row => <Pressable key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>
-                <Text style={styles.scopeText}>#{row.tag} · {formatNumber(row.posts)}</Text>
-              </Pressable>)}
-            </ScrollView> : null}
             <View style={styles.scopeRow}>
               {(["all", "friends", "mine"] as const).map(scope => (
                 <Pressable key={scope} accessibilityRole="button" {...selectedControl(feed.scope === scope)} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
@@ -167,17 +160,24 @@ export default function CommunityScreen() {
                 </Pressable>
               ))}
             </View>
-            {feed.loading ? <ActivityIndicator color={colors.brand} style={styles.loader} /> : null}
+            <Composer onPublished={feed.prepend} />
+            {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
+              <Ionicons name="trending-up" size={16} color={colors.text} style={{ alignSelf: "center" }} />
+              {trending.map(row => <Pressable key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>
+                <Text style={styles.scopeText}>#{row.tag} · {formatNumber(row.posts)}</Text>
+              </Pressable>)}
+            </ScrollView> : null}
+            {feed.loading ? <ActivityIndicator color={colors.text} style={styles.loader} /> : null}
             {feed.error ? <View accessibilityRole="alert" style={styles.list}><Text style={styles.emptyText}>{feed.error}</Text><Pressable accessibilityRole="button" onPress={() => void feed.load()} style={styles.primaryAction}><Text style={styles.primaryActionText}>{t("Retry")}</Text></Pressable></View> : null}
             {!feed.loading && !feed.error && feed.posts.length === 0 ? <Empty icon="newspaper-outline" text={t(feed.scope === "friends" ? "Follow athletes and coaches to build your feed" : "No posts yet. Share your first session.")} /> : null}
             {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={feed.prepend} />)}
             {feed.hasMore ? <Pressable accessibilityRole="button" testID="feed-load-more" disabled={feed.loadingMore} onPress={() => void feed.loadMore()} style={[styles.loadMore, feed.loadingMore && { opacity: 0.5 }]}>
-              {feed.loadingMore ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text>}
+              {feed.loadingMore ? <ActivityIndicator color={colors.text} /> : <Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text>}
             </Pressable> : null}
           </View>
         ) : null}
 
-        {loading ? <ActivityIndicator color={colors.brand} style={styles.loader} /> : null}
+        {loading ? <ActivityIndicator color={colors.text} style={styles.loader} /> : null}
         {error ? <View accessibilityRole="alert" style={styles.list}>
           <Text style={styles.emptyText}>{error}</Text>
           <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.primaryAction}>
@@ -192,7 +192,7 @@ export default function CommunityScreen() {
               <Text style={styles.count}>{formatNumber((tab === "discover" ? communities : mine).length)}</Text>
             </View>
             {tab === "discover" ? <Text style={styles.rankingNote}>{t("New members in the last 14 days.")}</Text> : null}
-            {tab === "discover" ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.sm }} testID="category-filter">
+            {tab === "discover" ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg }} testID="category-filter">
               {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Pressable key={item ?? "all"} accessibilityRole="button" {...selectedControl(category === item)} testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
                 <Text style={[styles.scopeText, category === item && styles.scopeTextActive]}>{t(item ? item.replace("_", " ").toUpperCase() : "ALL")}</Text>
               </Pressable>)}
@@ -239,7 +239,7 @@ export default function CommunityScreen() {
                   <Text style={styles.communityName}>{coach.full_name || t("Coach")}</Text>
                   <Text style={styles.meta}>{formatNumber(coach.member_count)} {t("members")} · {formatNumber(coach.community_count)} {t("communities")}</Text>
                 </View>
-                <Ionicons name="checkmark-circle" size={19} color={colors.brand} />
+                <Ionicons name="checkmark-circle" size={19} color={colors.text} />
               </Pressable>
             ))}
             {coaches.length === 0 ? <Empty icon="ribbon-outline" text={t("No approved coaches yet")} /> : null}
@@ -297,7 +297,7 @@ export default function CommunityScreen() {
 }
 
 function HeaderMark({ name }: { name: "messages" | "saved" | "search" | "coach" | "dashboard" }) {
-  const color = colors.brand;
+  const color = colors.text;
   const frame = { width: 26, height: 26, viewBox: "0 0 24 24" };
   if (name === "messages") {
     return (
@@ -355,13 +355,13 @@ function Empty({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: str
 const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" }, loadMoreText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   safe: { flex: 1, backgroundColor: colors.bg }, scroll: { paddingBottom: 120 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: "row", alignItems: "center" },
-  headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.brand }, title: { ...type.screenTitle, marginTop: 2 },
+  headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.text }, title: { ...type.screenTitle, marginTop: 2 },
   headerAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", marginLeft: spacing.xs },
-  headerBadge: { position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
-  headerBadgeText: { color: colors.brandOn, fontSize: 10, fontWeight: "900" },
+  headerBadge: { position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.text, alignItems: "center", justifyContent: "center" },
+  headerBadgeText: { color: colors.bg, fontSize: 10, fontWeight: "700" },
   scopeRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  scopeChip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" }, scopeChipActive: { borderColor: colors.brand, backgroundColor: colors.brandDim },
-  scopeText: { color: colors.textMuted, fontSize: 10, fontWeight: "900", letterSpacing: 1 }, scopeTextActive: { color: colors.brand },
+  scopeChip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" }, scopeChipActive: { borderColor: colors.border, backgroundColor: colors.surface2 },
+  scopeText: { color: colors.textMuted, fontSize: 13, fontWeight: "400" }, scopeTextActive: { color: colors.text, fontWeight: "600" },
   signalBand: { padding: spacing.lg, backgroundColor: colors.surface2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, gap: spacing.lg },
   signalActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" },
   secondaryAction: { minHeight: 44, paddingHorizontal: spacing.md, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong },
@@ -371,18 +371,18 @@ const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: sp
   primaryAction: { minHeight: 44, alignSelf: "flex-start", paddingHorizontal: spacing.md, flexDirection: "row", gap: spacing.sm, alignItems: "center", backgroundColor: colors.brand, borderRadius: radius.sm },
   primaryActionText: { ...type.button, fontSize: 12 }, tabs: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
   tab: { minHeight: 38, justifyContent: "center", paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabActive: { borderBottomColor: colors.brand }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 1 }, tabTextActive: { color: colors.text },
-  loader: { marginTop: spacing.xxl }, list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  sectionHead: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm }, sectionTitle: { ...type.section, flex: 1 },
+  tabActive: { borderBottomColor: colors.text }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 1 }, tabTextActive: { color: colors.text },
+  loader: { marginTop: spacing.xxl }, list: { paddingTop: spacing.sm },
+  sectionHead: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm, paddingHorizontal: spacing.lg }, sectionTitle: { ...type.section, flex: 1 },
   count: { color: colors.textDim, fontSize: 12, fontVariant: ["tabular-nums"] },
-  communityRow: { minHeight: 112, flexDirection: "row", alignItems: "center", paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
+  communityRow: { minHeight: 112, flexDirection: "row", alignItems: "center", padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
   communityCopy: { flex: 1, minWidth: 0 },
   nameLine: { flexDirection: "row", alignItems: "center", gap: 6 }, communityName: { color: colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 },
   communityDescription: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 4 }, metaLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: spacing.sm },
-  meta: { color: colors.textMuted, fontSize: 11, fontWeight: "700" }, dot: { color: colors.textDim }, memberBadge: { backgroundColor: colors.brandDim, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
-  memberBadgeText: { color: colors.brand, fontSize: 9, fontWeight: "900" }, coachRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" }, avatarText: { color: colors.brand, fontWeight: "900" },
-  rankingNote: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: spacing.xl }, rankingRow: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, rankingDisabled: { opacity: 0.4 },
-  rankingNumber: { color: colors.brand, width: 24, fontSize: 18, fontWeight: "900", fontVariant: ["tabular-nums"] }, rankingName: { color: colors.text, fontWeight: "700", flex: 1 }, rankingValue: { color: colors.textMuted, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  meta: { color: colors.textMuted, fontSize: 11, fontWeight: "700" }, dot: { color: colors.textDim },   memberBadge: { backgroundColor: colors.surface2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
+  memberBadgeText: { color: colors.text, fontSize: 11, fontWeight: "600" }, coachRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" }, avatarText: { color: colors.text, fontWeight: "900" },
+  rankingNote: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: spacing.xl, paddingHorizontal: spacing.lg }, rankingRow: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }, rankingDisabled: { opacity: 0.4 },
+  rankingNumber: { color: colors.text, width: 24, fontSize: 18, fontWeight: "700", fontVariant: ["tabular-nums"] }, rankingName: { color: colors.text, fontWeight: "600", flex: 1 }, rankingValue: { color: colors.textMuted, fontWeight: "700", fontVariant: ["tabular-nums"] },
   coachRankingTitle: { marginTop: spacing.xxl }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted, textAlign: "center" },
 });

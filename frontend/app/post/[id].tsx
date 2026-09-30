@@ -31,7 +31,7 @@ export default function PostScreen() {
     </View>
     <ScrollView>
       {error ? <Text accessibilityRole="alert" style={styles.error} testID="post-error">{error}</Text> : null}
-      {!post && !error ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} /> : null}
+      {!post && !error ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xl }} /> : null}
       {post ? <PostCard post={post} initiallyOpen shareTargets onChange={setPost} onRemoved={() => router.back()} onReposted={() => undefined} /> : null}
     </ScrollView>
   </SafeAreaView>;

@@ -113,7 +113,7 @@ export default function NotificationSettingsScreen() {
     </View>
     <ScrollView contentContainerStyle={styles.body}>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-      {!prefs && !error ? <ActivityIndicator color={colors.brand} /> : null}
+      {!prefs && !error ? <ActivityIndicator color={colors.text} /> : null}
       {prefs ? <>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
@@ -122,12 +122,12 @@ export default function NotificationSettingsScreen() {
             {pushHint ? <Text style={styles.hint} testID="pref-push-hint">{pushHint}</Text> : null}
             {pushBlocked ? <Pressable accessibilityRole="button" accessibilityLabel={t("OPEN SETTINGS")} onPress={() => void Linking.openSettings()} style={styles.settings} testID="pref-push-settings"><Text style={styles.settingsText}>{t("OPEN SETTINGS")}</Text></Pressable> : null}
           </View>
-          <Switch testID="pref-push" accessibilityLabel={t("Push notifications")} disabled={pushBusy} value={prefs.push} onValueChange={value => void onPush(value)} trackColor={{ true: colors.brand }} />
+          <Switch testID="pref-push" accessibilityLabel={t("Push notifications")} disabled={pushBusy} value={prefs.push} onValueChange={value => void onPush(value)} trackColor={{ true: colors.text }} />
         </View>
         <Text style={styles.section}>{t("TELL ME ABOUT")}</Text>
         {TYPES.map(([key, label]) => <View key={key} style={styles.row}>
           <Text style={[styles.label, { flex: 1 }]}>{t(label)}</Text>
-          <Switch testID={`pref-${key}`} accessibilityLabel={t(label)} value={prefs.types[key] ?? true} onValueChange={value => void update({ types: { [key]: value } })} trackColor={{ true: colors.brand }} />
+          <Switch testID={`pref-${key}`} accessibilityLabel={t(label)} value={prefs.types[key] ?? true} onValueChange={value => void update({ types: { [key]: value } })} trackColor={{ true: colors.text }} />
         </View>)}
         <Text style={styles.hint}>{t("Moderation decisions and membership outcomes always reach you.")}</Text>
       </> : null}
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   label: { color: colors.text, fontSize: 14 },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 2 },
   settings: { alignSelf: "flex-start", marginTop: spacing.xs },
-  settingsText: { color: colors.brand, fontSize: 12, fontWeight: "800" },
+  settingsText: { color: colors.text, fontSize: 12, fontWeight: "800" },
   section: { color: colors.textDim, fontSize: 10, fontWeight: "800", letterSpacing: 1.4, marginTop: spacing.lg },
   error: { color: colors.error },
 });

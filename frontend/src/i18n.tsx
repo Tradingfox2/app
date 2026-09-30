@@ -138,6 +138,39 @@ const localeTags: Record<SupportedLocale, string> = {
   fr: "fr-FR", en: "en-US", de: "de-DE", es: "es-ES", it: "it-IT",
 };
 
+const visualLabels: Record<SupportedLocale, Messages> = {
+  en: {
+    Rest: "Rest",
+    Plan: "Plan",
+    PR: "PR",
+    "Last time: {kg} × {reps}": "Last time: {kg} × {reps}",
+  },
+  fr: {
+    Rest: "Repos",
+    Plan: "Plan",
+    PR: "PR",
+    "Last time: {kg} × {reps}": "La dernière fois : {kg} × {reps}",
+  },
+  de: {
+    Rest: "Pause",
+    Plan: "Plan",
+    PR: "PR",
+    "Last time: {kg} × {reps}": "Letztes Mal: {kg} × {reps}",
+  },
+  es: {
+    Rest: "Descanso",
+    Plan: "Plan",
+    PR: "PR",
+    "Last time: {kg} × {reps}": "La última vez: {kg} × {reps}",
+  },
+  it: {
+    Rest: "Recupero",
+    Plan: "Piano",
+    PR: "PR",
+    "Last time: {kg} × {reps}": "L'ultima volta: {kg} × {reps}",
+  },
+};
+
 const supportedLocales = new Set<SupportedLocale>(["fr", "en", "de", "es", "it"]);
 const deviceLocale = getLocales()[0]?.languageCode;
 const initialLocale: SupportedLocale = supportedLocales.has(deviceLocale as SupportedLocale)
@@ -150,7 +183,7 @@ void i18n.use(initReactI18next).init({
   resources: Object.fromEntries(
     Object.entries(messages).map(([locale, translation]) => [
       locale,
-      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale] } },
+      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale] } },
     ]),
   ),
   lng: initialLocale,

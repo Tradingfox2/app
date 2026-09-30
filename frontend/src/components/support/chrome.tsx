@@ -77,7 +77,7 @@ export const supportStyles = StyleSheet.create({
   empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md, paddingHorizontal: spacing.lg },
   emptyTitle: { color: colors.text, fontWeight: "800", fontSize: 16, textAlign: "center" },
   emptyText: { color: colors.textMuted, textAlign: "center" },
-  retry: { color: colors.brand, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  retry: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
 });
 
@@ -98,5 +98,5 @@ const styles = StyleSheet.create({
   kicker: { ...type.eyebrow, marginBottom: 2 },
   headerTitle: { ...type.section, color: colors.text },
   subjectHeader: { color: colors.text, fontSize: 16, fontWeight: "800" },
-  subtitle: { color: colors.brand, fontSize: 11, fontWeight: "800", marginTop: 2 },
+  subtitle: { color: colors.text, fontSize: 11, fontWeight: "800", marginTop: 2 },
 });

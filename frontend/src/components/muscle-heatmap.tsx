@@ -158,7 +158,7 @@ export function MuscleHeatmap({
           style={styles.explorePrompt}
         >
           <Text style={styles.exploreText}>{t("Explore muscles")}</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+          <Ionicons name="chevron-forward" size={14} color={colors.text} />
         </Pressable>
       ) : null}
     </View>
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   },
   bodyFrameOn: {
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.text,
   },
   bodyLbl: {
     color: colors.textMuted,
@@ -215,9 +215,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: spacing.xs,
   },
-  bodyLblOn: { color: colors.brand },
+  bodyLblOn: { color: colors.text },
   selectedName: {
-    color: colors.brand,
+    color: colors.text,
     fontSize: 13,
     fontWeight: "700",
     marginTop: spacing.sm,
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   exploreText: {
-    color: colors.accent,
+    color: colors.text,
     fontSize: 13,
     fontWeight: "600",
   },

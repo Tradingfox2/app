@@ -71,7 +71,7 @@ export default function InviteScreen() {
       <Text style={styles.headerTitle}>{t("INVITATION")}</Text>
     </View>
     <ScrollView contentContainerStyle={styles.scroll}>
-      {!preview && !error ? <ActivityIndicator color={colors.brand} /> : null}
+      {!preview && !error ? <ActivityIndicator color={colors.text} /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error} testID="invite-error">{error}</Text> : null}
       {preview && !community ? <View style={styles.card} testID="invite-dead">
         <Ionicons name="lock-closed-outline" size={34} color={colors.textDim} />
@@ -79,7 +79,7 @@ export default function InviteScreen() {
         <Text style={styles.meta}>{t("Ask a member for a fresh link.")}</Text>
       </View> : null}
       {community ? <View style={styles.card} testID="invite-card">
-        <Ionicons name="people" size={34} color={colors.brand} />
+        <Ionicons name="people" size={34} color={colors.text} />
         <Text style={styles.name}>{community.name}</Text>
         {community.description ? <Text style={styles.description}>{community.description}</Text> : null}
         <Text style={styles.meta}>{t("{count} members").replace("{count}", String(community.member_count))}{!community.is_public ? ` · ${t("Private")}` : ""}</Text>

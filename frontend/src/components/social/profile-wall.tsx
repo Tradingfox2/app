@@ -139,15 +139,15 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
       {own ? (
         <View style={styles.shortcuts}>
           <Pressable accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.shortcut}>
-            <Ionicons name="create-outline" size={16} color={colors.brand} />
+            <Ionicons name="create-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("EDIT PROFILE")}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" testID="open-saved" onPress={() => router.push("/saved")} style={styles.shortcut}>
-            <Ionicons name="bookmark-outline" size={16} color={colors.brand} />
+            <Ionicons name="bookmark-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("SAVED POSTS")}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={t("Friends feed")} testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.shortcut}>
-            <Ionicons name="people-outline" size={16} color={colors.brand} />
+            <Ionicons name="people-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("FRIENDS")}</Text>
           </Pressable>
         </View>
@@ -161,56 +161,19 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
             </Pressable>
           </View>
         ) : null}
-        {!profile && !error ? <ActivityIndicator color={colors.brand} /> : null}
+        {!profile && !error ? <ActivityIndicator color={colors.text} /> : null}
         {profile ? (
           <>
-            {canSeePosts ? (
-              <View testID="profile-activity" style={styles.activity}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={wall.storyRow}>
-                  {profileOwn ? (
-                    <Pressable accessibilityRole="button" testID="profile-new-story" onPress={() => router.push("/story-new" as Href)} style={wall.storyAdd}>
-                      <Ionicons name="add" size={18} color={colors.brandOn} />
-                      <Text style={wall.storyAddText}>{t("YOUR STORY")}</Text>
-                    </Pressable>
-                  ) : null}
-                  {stories.map(story => {
-                    const mark = limitedAudienceLabel(story.audience);
-                    return (
-                      <Pressable key={story.id} accessibilityRole="button" testID={`profile-story-${story.id}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "stories" } })} style={wall.storyChip}>
-                        <Text style={wall.chipText} numberOfLines={1}>{story.workout_summary?.title || t("STORY")}{mark ? ` · ${t(mark)}` : ""}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-                {(highlights.length > 0 || profileOwn) ? (
-                  <View testID="profile-highlights">
-                    <Text style={wall.section}>{t("HIGHLIGHTS")}</Text>
-                    {highlights.length === 0 ? <Text style={styles.hint}>{t("No highlights yet.")}</Text> : (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={wall.storyRow}>
-                        {highlights.map(story => {
-                          const mark = limitedAudienceLabel(story.audience);
-                          return (
-                            <Pressable key={story.id} accessibilityRole="button" testID={`profile-highlight-${story.id}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "highlights" } })} style={wall.highlight}>
-                              <Text style={wall.chipText} numberOfLines={2}>{story.highlight_title || story.workout_summary?.title || t("HIGHLIGHTS")}{mark ? ` · ${t(mark)}` : ""}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </ScrollView>
-                    )}
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
             <View style={wall.cover} testID="profile-cover">
               {profile.cover_url ? <Image source={{ uri: mediaUrl(profile.cover_url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : null}
             </View>
-            <Pressable accessibilityRole="button" disabled={stories.length === 0} onPress={() => stories.length > 0 && router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "stories" } })} style={styles.avatar}>
+            <Pressable accessibilityRole="button" accessibilityLabel={stories.length > 0 ? t("STORY") : undefined} disabled={stories.length === 0} onPress={() => stories.length > 0 && router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "stories" } })} style={[styles.avatar, stories.length > 0 && styles.avatarStory]}>
               <Avatar user={profile} size={84} />
             </Pressable>
             <Text style={styles.name}>{profile.full_name || t("Member")}</Text>
             {profile.is_coach ? (
               <View style={styles.coachTag} testID="coach-badge">
-                <Ionicons name="ribbon" size={11} color={colors.brandOn} />
+                <Ionicons name="ribbon" size={11} color={colors.text} />
                 <Text style={styles.coachText}>{t("COACH")}</Text>
               </View>
             ) : null}
@@ -280,6 +243,33 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
               <Text testID="message-locked" style={styles.hint}>{t(profile.is_blocked ? "This account is unavailable" : "Messaging unlocks when you follow each other, share a community, or have a coaching relationship.")}</Text>
             ) : null}
             {canSeePosts ? (
+              <View testID="profile-activity" style={styles.activity}>
+                {profileOwn ? (
+                  <Pressable accessibilityRole="button" testID="profile-new-story" onPress={() => router.push("/story-new" as Href)} style={wall.storyAdd}>
+                    <Ionicons name="add" size={18} color={colors.text} />
+                    <Text style={wall.storyAddText}>{t("YOUR STORY")}</Text>
+                  </Pressable>
+                ) : null}
+                {(highlights.length > 0 || profileOwn) ? (
+                  <View testID="profile-highlights">
+                    <Text style={wall.section}>{t("HIGHLIGHTS")}</Text>
+                    {highlights.length === 0 ? <Text style={styles.hint}>{t("No highlights yet.")}</Text> : (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={wall.storyRow}>
+                        {highlights.map(story => {
+                          const mark = limitedAudienceLabel(story.audience);
+                          return (
+                            <Pressable key={story.id} accessibilityRole="button" testID={`profile-highlight-${story.id}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "highlights" } })} style={wall.highlight}>
+                              <Text style={wall.chipText} numberOfLines={2}>{story.highlight_title || story.workout_summary?.title || t("HIGHLIGHTS")}{mark ? ` · ${t(mark)}` : ""}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            {canSeePosts ? (
               <View style={styles.wall}>
                 <View style={wall.tabs}>
                   {(["posts", "photos", "about"] as WallTab[]).map(item => (
@@ -333,15 +323,16 @@ const styles = StyleSheet.create({
   headerTitle: { ...type.section, color: colors.text, flex: 1 },
   shortcuts: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   shortcut: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 6 },
-  shortcutText: { color: colors.brand, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
-  scroll: { padding: spacing.lg, alignItems: "center", gap: spacing.md, paddingBottom: spacing.xxxl },
-  activity: { alignSelf: "stretch", gap: spacing.md },
-  avatar: { width: 88, height: 88, borderRadius: 44, borderWidth: 2, borderColor: colors.brand, alignItems: "center", justifyContent: "center", marginTop: -36 },
-  coachTag: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brand, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill },
-  coachText: { color: colors.brandOn, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  bio: { color: colors.text, textAlign: "center", maxWidth: 420, lineHeight: 20 },
+  shortcutText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
+  scroll: { alignItems: "center", gap: spacing.md, paddingBottom: spacing.xxxl },
+  activity: { alignSelf: "stretch", gap: spacing.md, paddingHorizontal: spacing.lg },
+  avatar: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: colors.bg, alignItems: "center", justifyContent: "center", marginTop: -42, backgroundColor: colors.bg },
+  avatarStory: { borderColor: colors.text },
+  coachTag: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill },
+  coachText: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  bio: { color: colors.text, textAlign: "center", maxWidth: 420, lineHeight: 20, paddingHorizontal: spacing.lg, fontWeight: "400" },
   wall: { alignSelf: "stretch", borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.lg, gap: spacing.md },
-  name: { ...type.screenTitle, fontSize: 24 },
+  name: { ...type.screenTitle, fontSize: 24, paddingHorizontal: spacing.lg },
   stats: { flexDirection: "row", gap: spacing.xl, marginTop: spacing.sm },
   stat: { alignItems: "center" },
   statValue: { color: colors.text, fontSize: 18, fontWeight: "900", fontVariant: ["tabular-nums"] },
@@ -353,8 +344,8 @@ const styles = StyleSheet.create({
   secondaryText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   disabled: { opacity: 0.4 },
   hint: { color: colors.textMuted, fontSize: 12, textAlign: "center", maxWidth: 360, lineHeight: 18 },
-  error: { color: colors.error },
-  retry: { color: colors.brand, fontWeight: "900" },
+  error: { color: colors.text, backgroundColor: colors.errorWash, padding: spacing.md, borderRadius: radius.sm },
+  retry: { color: colors.text, fontWeight: "900" },
   privateTag: { flexDirection: "row", alignItems: "center", gap: 4 },
   privateText: { color: colors.textDim, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
   menu: { alignSelf: "stretch", borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, padding: spacing.sm, gap: 2 },
@@ -365,14 +356,14 @@ const styles = StyleSheet.create({
 });
 
 const wall = StyleSheet.create({
-  cover: { alignSelf: "stretch", height: 140, borderRadius: radius.md, backgroundColor: colors.surface2, overflow: "hidden" },
+  cover: { alignSelf: "stretch", height: 168, backgroundColor: colors.surface, overflow: "hidden" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, justifyContent: "center" },
-  chip: { minHeight: 28, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" },
-  chipText: { color: colors.brand, fontSize: 12, fontWeight: "800" },
+  chip: { minHeight: 28, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+  chipText: { color: colors.text, fontSize: 13, fontWeight: "400" },
   storyRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
-  storyAdd: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: colors.brand, flexDirection: "row", alignItems: "center", gap: 4 },
-  storyAddText: { color: colors.brandOn, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
-  storyChip: { maxWidth: 140, minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  storyAdd: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: "transparent", flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" },
+  storyAddText: { color: colors.text, fontSize: 13, fontWeight: "600" },
+  storyChip: { maxWidth: 140, minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.text, alignItems: "center", justifyContent: "center" },
   section: { color: colors.textDim, fontSize: 10, fontWeight: "800", letterSpacing: 1.4, marginBottom: spacing.sm },
   highlight: { width: 88, minHeight: 64, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   tabs: { flexDirection: "row", gap: spacing.sm },

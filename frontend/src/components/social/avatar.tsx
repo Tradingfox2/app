@@ -15,6 +15,6 @@ export function Avatar({ user, size = 40 }: { user: Pick<MentionedUser, "full_na
 
 const styles = StyleSheet.create({
   image: { backgroundColor: colors.surface2 },
-  fallback: { backgroundColor: colors.brandDim, alignItems: "center", justifyContent: "center" },
-  initial: { color: colors.brand, fontWeight: "900" },
+  fallback: { backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+  initial: { color: colors.text, fontWeight: "900" },
 });

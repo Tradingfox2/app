@@ -51,7 +51,7 @@ function Sparkline({ points }: { points: { value: number }[] }) {
     .join(" ");
   return (
     <Svg width={w} height={h}>
-      <Polyline points={coords} stroke={colors.brand} strokeWidth={2} fill="none" />
+      <Polyline points={coords} stroke={colors.text} strokeWidth={2} fill="none" />
     </Svg>
   );
 }
@@ -121,9 +121,9 @@ function ReportCard({ report }: { report: LabReport }) {
             styles.statusBadge,
             {
               backgroundColor: failed
-                ? colors.error
+                ? colors.errorWash
                 : done
-                  ? colors.brand
+                  ? colors.surface2
                   : colors.surface3,
             },
           ]}
@@ -134,7 +134,7 @@ function ReportCard({ report }: { report: LabReport }) {
           <Text
             style={[
               styles.statusTxt,
-              { color: done ? colors.brandOn : colors.text },
+              { color: colors.text },
             ]}
           >
             {failed ? t("FAILED") : done ? t("{count} MARKERS", { count: report.markers_count }) : t(STEP_LABELS[report.step] ?? report.step).toUpperCase()}
@@ -194,7 +194,7 @@ function ReportCard({ report }: { report: LabReport }) {
                           : "remove"
                     }
                     size={14}
-                    color={colors.brand}
+                    color={colors.text}
                   />
                   <Text style={styles.trendTxt}>
                     {t.marker_slug} — {t.comment}
@@ -337,7 +337,7 @@ export default function LabsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            tintColor={colors.brand}
+            tintColor={colors.text}
             onRefresh={async () => {
               setRefreshing(true);
               await load();
@@ -362,13 +362,13 @@ export default function LabsScreen() {
             disabled={uploading}
             style={[styles.uploadBtnAlt, uploading && { opacity: 0.5 }]}
           >
-            <Ionicons name="image" size={18} color={colors.brand} />
+            <Ionicons name="image" size={18} color={colors.text} />
             <Text style={styles.uploadTxtAlt}>{t("PHOTO")}</Text>
           </Pressable>
         </View>
         {uploading && (
           <View style={styles.uploadingRow}>
-            <ActivityIndicator size="small" color={colors.brand} />
+            <ActivityIndicator size="small" color={colors.text} />
             <Text style={styles.uploadingTxt}>{t("Uploading…")}</Text>
           </View>
         )}
@@ -422,13 +422,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.text,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
   },
-  uploadTxtAlt: { color: colors.brand, fontWeight: "900", letterSpacing: 1, fontSize: 12 },
+  uploadTxtAlt: { color: colors.text, fontWeight: "900", letterSpacing: 1, fontSize: 12 },
   uploadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   resultValue: { color: colors.text, fontSize: 13, fontWeight: "800", textAlign: "right" },
   interpretationUnavailable: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
   bulletRow: { flexDirection: "row", gap: 6, marginBottom: 4 },
-  bulletDot: { color: colors.brand, fontSize: 13 },
+  bulletDot: { color: colors.text, fontSize: 13 },
   bulletTxt: { color: colors.text, fontSize: 13, lineHeight: 19, flex: 1 },
   trendRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginBottom: 4 },
   trendTxt: { color: colors.textMuted, fontSize: 12, lineHeight: 17, flex: 1 },
@@ -495,13 +495,13 @@ const styles = StyleSheet.create({
   disclaimer: {
     flexDirection: "row",
     gap: spacing.sm,
-    backgroundColor: "#2A2000",
+    backgroundColor: colors.warningWash,
     borderRadius: radius.sm,
     padding: spacing.sm,
     marginTop: spacing.md,
     alignItems: "flex-start",
   },
-  disclaimerTxt: { color: colors.warning, fontSize: 11, lineHeight: 16, flex: 1 },
+  disclaimerTxt: { color: colors.text, fontSize: 13, lineHeight: 18, flex: 1 },
   markerCard: {
     flexDirection: "row",
     alignItems: "center",

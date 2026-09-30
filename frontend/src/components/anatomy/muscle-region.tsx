@@ -28,7 +28,7 @@ const LOAD_COLORS: Record<LoadState, string> = {
 };
 
 const ACTIVATION_COLORS: Record<ActivationLevel, string> = {
-  primary: colors.brand,
+  primary: colors.text,
   secondary: colors.volt,
   stabilizer: colors.blaze,
 };
@@ -114,7 +114,7 @@ export function MuscleRegion({
   const fill = activation
     ? ACTIVATION_COLORS[activation]
     : selected
-      ? colors.brand
+      ? colors.text
       : LOAD_COLORS[state];
   const clipId = `clip-${definition.id}`;
   const muscleName = MUSCLE_NAMES[definition.slug];

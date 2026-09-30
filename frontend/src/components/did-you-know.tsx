@@ -28,7 +28,7 @@ const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 const CATEGORY_COLOR: Record<string, string> = {
-  training: colors.brand,
+  training: colors.text,
   recovery: colors.success,
   sleep: colors.info,
   nutrition: colors.blaze,
@@ -96,7 +96,7 @@ export function DidYouKnow({ count = 7 }: { count?: number }) {
   if (!tips.length) return null;
 
   const current = tips[index] ?? tips[0];
-  const tint = CATEGORY_COLOR[current.category] ?? colors.brand;
+  const tint = CATEGORY_COLOR[current.category] ?? colors.text;
 
   return (
     <View style={styles.card} testID="did-you-know" accessibilityRole="summary">
@@ -123,7 +123,7 @@ export function DidYouKnow({ count = 7 }: { count?: number }) {
         scrollEventThrottle={16}
       >
         {tips.map((tip) => {
-          const c = CATEGORY_COLOR[tip.category] ?? colors.brand;
+          const c = CATEGORY_COLOR[tip.category] ?? colors.text;
           return (
             <View key={tip.id} style={[styles.slide, { width: width || "100%" }]}>
               <View style={[styles.iconWrap, { backgroundColor: `${c}22` }]}>

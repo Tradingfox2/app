@@ -148,11 +148,11 @@ export default function SourcesScreen() {
                 <View
                   style={[
                     styles.modeBadge,
-                    s.mode === "cloud" && { backgroundColor: colors.brandDim },
+                    s.mode === "cloud" && { backgroundColor: colors.surface2 },
                   ]}
                 >
                   <Text
-                    style={[styles.modeBadgeTxt, s.mode === "cloud" && { color: colors.brand }]}
+                    style={[styles.modeBadgeTxt, s.mode === "cloud" && { color: colors.text }]}
                   >
                     {t(badge)}
                   </Text>
@@ -277,18 +277,18 @@ export default function SourcesScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xxl }} />
+        <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xxl }} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.infoBanner}>
-            <Ionicons name="flash" size={14} color={colors.brand} />
+            <Ionicons name="flash" size={14} color={colors.text} />
             <Text style={styles.infoTxt}>
               {t("Connect your watch, health app or gym equipment. Data flows into one place: wearables feed the Home recovery rings; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.")}
             </Text>
           </View>
           {notice ? (
-            <View accessibilityRole="alert" style={[styles.infoBanner, { borderColor: colors.brand }]}>
-              <Ionicons name="information-circle" size={14} color={colors.brand} />
+            <View accessibilityRole="alert" style={[styles.infoBanner, { borderColor: colors.text }]}>
+              <Ionicons name="information-circle" size={14} color={colors.text} />
               <Text style={styles.infoTxt}>{notice}</Text>
             </View>
           ) : null}
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   infoBanner: {
     flexDirection: "row",
     gap: spacing.sm,
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.surface2,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   chipTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
   noteTxt: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
   agreementNote: { color: colors.warning, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
-  docsLink: { color: colors.brand, fontWeight: "700" },
+  docsLink: { color: colors.text, fontWeight: "700" },
   card: {
     backgroundColor: colors.surface2,
     borderWidth: 1,

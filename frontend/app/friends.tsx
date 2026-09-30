@@ -40,7 +40,7 @@ export default function FriendsFeed() {
       <Text style={styles.hint}>{t("Posts from people you follow. Not your Following list. A friends-only post stays off the public feed.")}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tray} testID="friends-stories">
         <Pressable accessibilityRole="button" testID="friends-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
-          <Ionicons name="add" size={18} color={colors.brandOn} />
+          <Ionicons name="add" size={18} color={colors.text} />
           <Text style={styles.addText}>{t("YOUR STORY")}</Text>
         </Pressable>
         {groups.map(group => {
@@ -58,7 +58,7 @@ export default function FriendsFeed() {
       {!storyError && groups.length === 0 ? <Text style={styles.hint}>{t("No stories from people you follow.")}</Text> : null}
       <View testID="friends-feed">
         <Composer personal onPublished={created => { if (created.audience !== "only_me") feed.prepend(created); }} />
-        {feed.loading ? <ActivityIndicator color={colors.brand} /> : null}
+        {feed.loading ? <ActivityIndicator color={colors.text} /> : null}
         {feed.error ? <Text accessibilityRole="alert" style={styles.error}>{feed.error}</Text> : null}
         {!feed.loading && !feed.error && feed.posts.length === 0 ? <Text style={styles.hint}>{t("Follow athletes and coaches to build your feed")}</Text> : null}
         {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={created => feed.prepend(created)} />)}
@@ -76,12 +76,12 @@ const styles = StyleSheet.create({
   body: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
   hint: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
   tray: { gap: spacing.md, paddingVertical: spacing.sm, alignItems: "flex-start" },
-  add: { width: 76, minHeight: 88, borderRadius: radius.md, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", gap: 4, padding: spacing.sm },
-  addText: { color: colors.brandOn, fontSize: 9, fontWeight: "900", letterSpacing: 0.4, textAlign: "center" },
+  add: { width: 76, minHeight: 88, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: "transparent", alignItems: "center", justifyContent: "center", gap: 4, padding: spacing.sm },
+  addText: { color: colors.text, fontSize: 11, fontWeight: "600", textAlign: "center" },
   bubble: { width: 84, alignItems: "center", gap: 4 },
   bubbleName: { color: colors.text, fontSize: 11, fontWeight: "700", maxWidth: 84 },
   bubbleMeta: { color: colors.textDim, fontSize: 10, maxWidth: 84 },
   error: { color: colors.error },
   more: { minHeight: 44, alignItems: "center", justifyContent: "center" },
-  moreText: { color: colors.brand, fontWeight: "900" },
+  moreText: { color: colors.text, fontWeight: "900" },
 });
