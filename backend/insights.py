@@ -1,34 +1,33 @@
-"""Product-event hook for insightpipe.
+"""Retired sink for live-session product events.
 
-insightpipe is not in this repository: there is no client, queue, or schema
-for it. Other features record staff actions on `audit_log` and derive community
-stats from the documents they already store. Neither of those is a product
-event stream, so live-session transitions write here instead.
+Live start, join, and end are stored on Mongo `analytics_events` by
+`routers.community._emit_live`, which calls `analytics.record`. Staff
+Analytics reads that collection. This module used to insert the same
+occurrences into `insight_events`. That write is stopped so one live
+action cannot land in two event logs.
 
-`emit` appends one document to `insight_events`. A later insightpipe consumer
-can tail that collection, or replace this function, without touching the
-call sites. A failure is logged and swallowed: losing an analytics row must
-not fail start, join, or end.
+`insight_events` is not a read model. Rows already stored there are
+history only. Community Insights (`GET /communities/{id}/insights`) counts
+memberships and messages. The partner dashboard counts members, pending
+requests, and owned communities. The home training week card counts
+workouts. None of those screens read `insight_events` or `analytics_events`.
 """
 from __future__ import annotations
 
 import logging
 
-import server
-
 logger = logging.getLogger(__name__)
 
 
 async def emit(name: str, *, actor_id: str, session_id: str, metadata: dict | None = None) -> None:
-    entry = {
-        "id": server.new_id(),
-        "name": name,
-        "actor_id": actor_id,
-        "session_id": session_id,
-        "metadata": metadata or {},
-        "created_at": server.now(),
-    }
-    try:
-        await server.db.insight_events.insert_one(dict(entry))
-    except Exception as exc:  # noqa: BLE001 - analytics must not fail the session
-        logger.warning("insight event %s for %s was not stored: %s", name, session_id, exc)
+    """Do not store a product event.
+
+    Kept so an old caller cannot recreate the dual write by accident.
+    """
+    logger.info(
+        "insights.emit ignored name=%s actor=%s session=%s metadata_keys=%s; use analytics.record",
+        name,
+        actor_id,
+        session_id,
+        sorted((metadata or {}).keys()),
+    )

@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
+import insights  # noqa: E402
 import moderation  # noqa: E402
 import notifications  # noqa: E402
 import permissions as p  # noqa: E402
@@ -353,8 +354,15 @@ def test_live_sessions_schedule_gather_and_notify(monkeypatch):
         assert listed["upcoming"] == [] and listed["past"][0]["status"] == "ended"
         with pytest.raises(ValueError):
             community.LiveSessionIn(title="bad link", starts_at=when, join_url="http://insecure.example")
-        assert await db.insight_events.find_one({"name": "live_session_started", "session_id": session["id"]})
-        assert await db.insight_events.find_one({"name": "live_session_ended", "session_id": session["id"]})
+        started = await db.analytics_events.find_one({"name": "live_session_started", "props.session_id": session["id"]})
+        ended = await db.analytics_events.find_one({"name": "live_session_ended", "props.session_id": session["id"]})
+        assert started["source"] == "server" and started["actor_id"] == "owner"
+        assert started["props"] == {"session_id": session["id"], "channel_id": cid}
+        assert "title" not in started["props"]
+        assert ended["props"]["channel_id"] == cid and ended["actor_id"] == "owner"
+        assert await db.insight_events.count_documents({}) == 0
+        await insights.emit("live_session_started", actor_id="owner", session_id=session["id"], metadata={"title": "nope"})
+        assert await db.insight_events.count_documents({}) == 0
     run_isolated(scenario)
 
 
@@ -383,7 +391,9 @@ def test_joining_a_live_session_persists_presence_and_refuses_when_it_ends(monke
         await expect(409, community.join_live_session(sid, account("mem")))
         started = await community.start_live_session(sid, account("owner"))
         assert started["status"] == "live" and started["started_at"]
-        assert await db.insight_events.find_one({"name": "live_session_started", "actor_id": "owner", "session_id": sid})
+        started_event = await db.analytics_events.find_one({"name": "live_session_started", "actor_id": "owner", "props.session_id": sid})
+        assert started_event["source"] == "server"
+        assert started_event["props"] == {"session_id": sid, "channel_id": cid}
 
         token = await community.realtime_subscription_token(f"live:{sid}", account("mem"))
         claims = jwt.decode(token["token"], "unit-test-secret", algorithms=["HS256"])
@@ -398,7 +408,10 @@ def test_joining_a_live_session_persists_presence_and_refuses_when_it_ends(monke
         assert await db.live_participants.count_documents({"session_id": sid}) == 1
         again = await community.join_live_session(sid, account("mem"))
         assert [row["user_id"] for row in again["participants"]] == ["mem"]
-        assert await db.insight_events.count_documents({"name": "live_session_joined", "session_id": sid}) == 1
+        assert await db.analytics_events.count_documents({"name": "live_session_joined", "props.session_id": sid}) == 1
+        joined_event = await db.analytics_events.find_one({"name": "live_session_joined", "props.session_id": sid})
+        assert joined_event["props"] == {"session_id": sid}
+        assert joined_event["actor_id"] == "mem"
         await expect(403, community.join_live_session(sid, account("out")))
 
         await expect(409, community.post_live_message(sid, community.LiveChatIn(content="not in yet"), account("owner")))
@@ -407,7 +420,8 @@ def test_joining_a_live_session_persists_presence_and_refuses_when_it_ends(monke
 
         ended = await community.end_live_session(sid, account("owner"))
         assert ended["status"] == "ended" and ended["ended_at"]
-        assert await db.insight_events.find_one({"name": "live_session_ended", "actor_id": "owner", "session_id": sid})
+        assert await db.analytics_events.find_one({"name": "live_session_ended", "actor_id": "owner", "props.session_id": sid})
+        assert await db.insight_events.count_documents({}) == 0
         await expect(409, community.join_live_session(sid, account("mod")))
         await expect(409, community.post_live_message(sid, community.LiveChatIn(content="late"), account("mem")))
         listed = await community.list_live_sessions(cid, account("mem"))

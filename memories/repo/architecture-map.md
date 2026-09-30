@@ -309,3 +309,22 @@ through the shared module.
   Strings live in `frontend/src/personal-space-locales.ts`. The personal
   composer and `app/story-new.tsx` send `only_me` through the existing
   `api.publish` / `api.createStory` types.
+
+## Added 2026-09-30 (Wave D analytics)
+
+- **Single live log:** `routers/community.py` `_emit_live` writes
+  `live_session_started`, `live_session_joined`, and `live_session_ended`
+  with `analytics.record(..., source="server")`. Props are ids only
+  (`session_id`, and `channel_id` except on join). `insights.emit` does not
+  insert. `insight_events` is historical and unread.
+- **Not this log:** community Insights, the partner dashboard, and the home
+  training week card stay domain counts. Glossary copy is in
+  `frontend/src/analytics-locales.ts` (`METRIC_GLOSSARY`) and
+  `frontend/src/components/metric-glossary.tsx`.
+- **Workout:** `POST /workouts/{id}/finish` emits `workout_completed`
+  (`workout_id`) once, when `ended_at` was empty. Workout share calls
+  `track("post_created")` after `POST /posts`, same as the feed composer.
+  `create_post` does not emit.
+- **Tickets:** `ticket-form.tsx` emits `ticket_created`. Member
+  `ticket-detail.tsx` and staff `admin/index.tsx` emit `ticket_replied`.
+  The opening note is not a reply.

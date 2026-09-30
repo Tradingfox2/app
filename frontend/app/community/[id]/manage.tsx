@@ -10,8 +10,19 @@ import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { KICK_MEMBER, MANAGE_MESSAGES, MANAGE_ROLES, PERMISSION_LIST, can, toggle as togglePermission } from "@/src/permissions";
 import { Avatar } from "@/src/components/social/avatar";
+import { METRIC_GLOSSARY } from "@/src/analytics-locales";
+import { MetricGlossary } from "@/src/components/metric-glossary";
 import { LISTED_PUBLICLY_LABEL, SAVE_LABEL, SAVED_LABEL, iconButtonA11y, joinPolicyPhrase, selectedControl } from "@/src/community-copy";
 import * as Linking from "expo-linking";
+
+const INSIGHT_CHIPS = [
+  ["members", "MEMBERS"],
+  ["joined_7d", "JOINED 7D"],
+  ["joined_30d", "JOINED 30D"],
+  ["messages_7d", "MESSAGES 7D"],
+  ["messages_30d", "MESSAGES 30D"],
+  ["active_members_7d", "ACTIVE 7D"],
+] as const satisfies ReadonlyArray<readonly [keyof CommunityInsights, string]>;
 
 /** Calendar date from a `YYYY-MM-DD` insights bucket, without a UTC day shift. */
 function insightDay(isoDay: string, formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string) {
@@ -378,12 +389,25 @@ export default function ManageCommunity() {
     {insights ? <>
       <Text style={styles.section}>{t("INSIGHTS")}</Text>
       <View style={styles.stats} testID="insights">
-        {([["members", insights.members], ["joined_7d", insights.joined_7d], ["joined_30d", insights.joined_30d], ["messages_7d", insights.messages_7d], ["messages_30d", insights.messages_30d], ["active_members_7d", insights.active_members_7d]] as [string, number][]).map(([key, value]) => <View key={key} style={styles.stat}>
-          <Text style={styles.statValue}>{formatNumber(value)}</Text>
-          <Text style={styles.meta}>{t({ members: "MEMBERS", joined_7d: "JOINED 7D", joined_30d: "JOINED 30D", messages_7d: "MESSAGES 7D", messages_30d: "MESSAGES 30D", active_members_7d: "ACTIVE 7D" }[key] ?? key)}</Text>
-        </View>)}
+        {INSIGHT_CHIPS.map(([key, label]) => {
+          const value = insights[key];
+          return (
+            <MetricGlossary
+              key={key}
+              testID={`insights-metric-${key}`}
+              value={formatNumber(value)}
+              label={t(label)}
+              glossary={t(METRIC_GLOSSARY[key])}
+              style={styles.stat}
+              valueStyle={styles.statValue}
+              labelStyle={styles.meta}
+            />
+          );
+        })}
       </View>
-      <Text style={styles.meta}>{t("{pct}% of members posted this week · {left} left in 30 days · {pending} pending").replace("{pct}", String(Math.round(insights.engagement_rate_7d * 100))).replace("{left}", String(insights.left_30d)).replace("{pending}", String(insights.pending))}</Text>
+      <MetricGlossary testID="insights-engagement" glossary={t(METRIC_GLOSSARY.engagement_rate_7d)}>
+        <Text style={styles.meta}>{t("{pct}% of members posted this week · {left} left in 30 days · {pending} pending").replace("{pct}", String(Math.round(insights.engagement_rate_7d * 100))).replace("{left}", String(insights.left_30d)).replace("{pending}", String(insights.pending))}</Text>
+      </MetricGlossary>
       {sparkDays.length ? <>
         <Text style={styles.meta} testID="insights-chart-label">{t("{count} messages · {start} – {end}", { count: formatNumber(sparkTotal), start: insightDay(sparkDays[0].day, formatDate), end: insightDay(sparkDays[sparkDays.length - 1].day, formatDate) })}</Text>
         <View style={styles.sparkline} testID="insights-chart" accessibilityLabel={t("{count} messages · {start} – {end}", { count: formatNumber(sparkTotal), start: insightDay(sparkDays[0].day, formatDate), end: insightDay(sparkDays[sparkDays.length - 1].day, formatDate) })}>{sparkDays.map(day => {

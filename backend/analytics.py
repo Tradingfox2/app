@@ -21,8 +21,6 @@ from typing import Any, Literal
 
 from pymongo.errors import DuplicateKeyError
 
-import server
-
 EventName = Literal[
     "screen_view",
     "ticket_created",
@@ -31,11 +29,13 @@ EventName = Literal[
     "post_shared",
     "live_session_started",
     "live_session_joined",
+    "live_session_ended",
     "story_created",
+    "workout_completed",
 ]
 Source = Literal["client", "server"]
 
-#: Stable order is the order the staff page and the SQL check constraint use.
+#: Stable order is the order the staff Analytics page follows.
 EVENT_NAMES: tuple[EventName, ...] = (
     "screen_view",
     "ticket_created",
@@ -44,7 +44,9 @@ EVENT_NAMES: tuple[EventName, ...] = (
     "post_shared",
     "live_session_started",
     "live_session_joined",
+    "live_session_ended",
     "story_created",
+    "workout_completed",
 )
 
 #: Keys a caller may attach. Anything else is dropped so a post body, an
@@ -57,7 +59,9 @@ ALLOWED_PROPS: dict[str, frozenset[str]] = {
     "post_shared": frozenset({"post_id", "channel"}),
     "live_session_started": frozenset({"session_id", "channel_id"}),
     "live_session_joined": frozenset({"session_id"}),
+    "live_session_ended": frozenset({"session_id", "channel_id"}),
     "story_created": frozenset({"story_id", "has_media", "highlight"}),
+    "workout_completed": frozenset({"workout_id"}),
 }
 BOOL_PROPS = frozenset({"has_media", "has_poll", "highlight"})
 PRODUCT_ROLES = frozenset({"athlete", "coach", "admin"})
@@ -157,3 +161,8 @@ async def counts() -> dict:
         "generated_at": moment,
         "windows": {"24h": last_day, "7d": last_week},
     }
+
+
+# After the event names. `server` imports the routers, and the analytics
+# router reads `EventName` while this module is still loading.
+import server  # noqa: E402

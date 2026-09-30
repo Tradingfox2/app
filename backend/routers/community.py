@@ -22,7 +22,7 @@ import permissions
 import ratelimit
 import realtime
 import social_graph
-import insights
+import analytics
 import staff
 
 router = APIRouter()
@@ -2557,16 +2557,31 @@ async def _live_room(session: dict, viewer_id: str) -> dict:
     }
 
 
-async def _emit_live(name: str, session: dict, actor_id: str) -> None:
-    await insights.emit(
-        name, actor_id=actor_id, session_id=session["id"],
-        metadata={
-            "channel_id": session["channel_id"],
-            "community_id": session.get("community_id"),
-            "title": session.get("title"),
-            "host_id": session.get("host_id"),
-        },
-    )
+async def _emit_live(
+    name: Literal["live_session_started", "live_session_joined", "live_session_ended"],
+    session: dict,
+    user: dict,
+) -> None:
+    """One live lifecycle row on analytics_events. Nothing is written to insight_events.
+
+    `props.session_id` is the live room. The analytics envelope `session_id`
+    stays empty here: that field is the client analytics session, not the room.
+    Titles are omitted. A failure is logged and swallowed so start, join, and
+    end still succeed.
+    """
+    props = {"session_id": session["id"]}
+    if name != "live_session_joined":
+        props["channel_id"] = session["channel_id"]
+    try:
+        await analytics.record(
+            name=name,
+            actor_id=user["id"],
+            source="server",
+            role=analytics.product_role(user),
+            props=props,
+        )
+    except Exception as exc:  # noqa: BLE001 - analytics must not fail the session
+        logger.warning("analytics event %s for live session %s was not stored: %s", name, session.get("id"), exc)
 
 
 def _live_notice(session: dict) -> dict:
@@ -2741,7 +2756,7 @@ async def start_live_session(session_id: str, user: dict = Depends(current_user)
     if not updated:
         raise HTTPException(409, "This session already started")
     await _tell_channel(updated, channel, user, f"{updated['title']} is live now")
-    await _emit_live("live_session_started", updated, user["id"])
+    await _emit_live("live_session_started", updated, user)
     payload = {"type": "live.started", "session_id": session_id}
     await realtime.publish(realtime.chat_channel(channel["id"]), payload)
     await realtime.publish(_live_channel_name(updated), payload)
@@ -2757,7 +2772,7 @@ async def end_live_session(session_id: str, user: dict = Depends(current_user)):
         {"$set": {"status": "ended", "ended_at": now()}}, projection={"_id": 0}, return_document=True)
     if not updated:
         raise HTTPException(409, "Only a live session can end")
-    await _emit_live("live_session_ended", updated, user["id"])
+    await _emit_live("live_session_ended", updated, user)
     payload = {"type": "live.ended", "session_id": session_id}
     await realtime.publish(realtime.chat_channel(channel["id"]), payload)
     await realtime.publish(_live_channel_name(updated), payload)
@@ -2796,7 +2811,7 @@ async def join_live_session(session_id: str, user: dict = Depends(current_user))
     except DuplicateKeyError:
         pass
     if fresh:
-        await _emit_live("live_session_joined", session, user["id"])
+        await _emit_live("live_session_joined", session, user)
         person = (await _people([user["id"]])).get(user["id"]) or {
             "id": user["id"], "full_name": user.get("full_name"), "avatar_url": None,
         }

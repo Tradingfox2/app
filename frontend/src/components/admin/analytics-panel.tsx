@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { api, type AnalyticsSummary } from "@/src/api";
+import { METRIC_GLOSSARY } from "@/src/analytics-locales";
+import { MetricGlossary } from "@/src/components/metric-glossary";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -12,7 +14,9 @@ const LABELS: Record<string, string> = {
   post_shared: "Posts shared",
   live_session_started: "Live sessions started",
   live_session_joined: "Live sessions joined",
+  live_session_ended: "Live sessions ended",
   story_created: "Stories created",
+  workout_completed: "Workouts completed",
 };
 
 /**
@@ -40,6 +44,33 @@ export function AnalyticsPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const names = data ? Object.keys(data.windows["24h"]) : [];
+  const chip = (window: "24h" | "7d", name: string) => {
+    if (!data) return null;
+    const value = data.windows[window][name];
+    if (typeof value !== "number") return null;
+    const label = t(LABELS[name] ?? name);
+    const shown = formatNumber(value);
+    const glossaryKey = METRIC_GLOSSARY[name as keyof typeof METRIC_GLOSSARY];
+    const body = (
+      <>
+        <Text style={styles.metricValue} testID={`analytics-count-${name}-${window}`}>{shown}</Text>
+        <Text style={styles.metricLabel}>{label}</Text>
+      </>
+    );
+    if (!glossaryKey) return <View key={`${window}-${name}`} style={styles.metric}>{body}</View>;
+    return (
+      <MetricGlossary
+        key={`${window}-${name}`}
+        testID={`analytics-metric-${name}-${window}`}
+        value={shown}
+        label={label}
+        glossary={t(glossaryKey)}
+        style={styles.metric}
+      >
+        {body}
+      </MetricGlossary>
+    );
+  };
 
   return (
     <View testID="analytics-panel">
@@ -54,29 +85,11 @@ export function AnalyticsPanel() {
         <>
           <Text style={styles.section}>{t("LAST 24 HOURS")}</Text>
           <View style={styles.grid}>
-            {names.map(name => {
-              const value = data.windows["24h"][name];
-              if (typeof value !== "number") return null;
-              return (
-                <View key={`24h-${name}`} style={styles.metric}>
-                  <Text style={styles.metricValue} testID={`analytics-count-${name}-24h`}>{formatNumber(value)}</Text>
-                  <Text style={styles.metricLabel}>{t(LABELS[name] ?? name)}</Text>
-                </View>
-              );
-            })}
+            {names.map(name => chip("24h", name))}
           </View>
           <Text style={styles.section}>{t("LAST 7 DAYS")}</Text>
           <View style={styles.grid}>
-            {names.map(name => {
-              const value = data.windows["7d"][name];
-              if (typeof value !== "number") return null;
-              return (
-                <View key={`7d-${name}`} style={styles.metric}>
-                  <Text style={styles.metricValue} testID={`analytics-count-${name}-7d`}>{formatNumber(value)}</Text>
-                  <Text style={styles.metricLabel}>{t(LABELS[name] ?? name)}</Text>
-                </View>
-              );
-            })}
+            {names.map(name => chip("7d", name))}
           </View>
         </>
       ) : null}
