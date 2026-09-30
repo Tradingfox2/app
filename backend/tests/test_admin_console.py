@@ -180,9 +180,16 @@ def test_overview_and_user_search(monkeypatch):
             {**support, "created_at": datetime.now(timezone.utc), "suspended_at": None},
         ])
         await db.reports.insert_one({"id": "r1", "status": "open", "created_at": datetime.now(timezone.utc)})
+        await db.tickets.insert_many([
+            {"id": "t-open", "status": "open"},
+            {"id": "t-pending", "status": "pending"},
+            {"id": "t-closed", "status": "closed"},
+        ])
         summary = await admin.overview(support)
         assert summary["users"]["total"] == 3 and summary["users"]["suspended"] == 1
         assert summary["queues"]["open_reports"] == 1
+        assert summary["queues"]["open_tickets"] == 1
+        assert summary["queues"]["pending_tickets"] == 1
         assert "users.suspend" not in summary["permissions"]
         assert [row["id"] for row in (await admin.list_users("alice", "all", 25, support))["users"]] == ["alice"]
         assert [row["id"] for row in (await admin.list_users(None, "suspended", 25, support))["users"]] == ["bob"]

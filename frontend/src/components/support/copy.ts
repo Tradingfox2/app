@@ -58,6 +58,22 @@ export function ticketStatusText(status: string, t: Translate): string {
   return isTicketStatus(status) ? ticketStatusLabel(status, t) : status.replaceAll("_", " ");
 }
 
+/** Staff queue chips. Member-facing labels stay in ticketStatusLabel. */
+export function staffTicketStatusLabel(status: TicketStatus, t: Translate): string {
+  switch (status) {
+    case "open":
+      return t("Needs reply");
+    case "pending":
+      return t("Waiting on member");
+    case "closed":
+      return t("Closed");
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
 export type StatusTone = "brand" | "warning" | "muted";
 
 export function statusTone(status: string): StatusTone {

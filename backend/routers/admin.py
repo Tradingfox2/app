@@ -183,6 +183,9 @@ async def overview(user: dict = Depends(staff.require("users.read"))):
             "open_reports": await db.reports.count_documents({"status": "open"}),
             "pending_coach_applications": await db.coach_applications.count_documents({"status": "pending"}),
             "pending_memberships": await db.community_members.count_documents({"status": "pending"}),
+            # Ticket list is paged (max 100). These are the real open/pending totals for Overview.
+            "open_tickets": await db.tickets.count_documents({"status": "open"}),
+            "pending_tickets": await db.tickets.count_documents({"status": "pending"}),
         },
         "activity": {
             "workouts_24h": await db.workouts.count_documents({"started_at": {"$gte": day_ago}}),

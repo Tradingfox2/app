@@ -103,7 +103,17 @@ export type AnalyticsSummary = {
 
 export type AdminOverview = {
   users: { total: number; new_7d: number; suspended: number; coaches: number };
-  queues: { open_reports: number; pending_coach_applications: number; pending_memberships: number };
+  queues: {
+    open_reports: number;
+    pending_coach_applications: number;
+    pending_memberships: number;
+    /**
+     * Platform ticket totals. `GET /admin/tickets` returns a page (`count` is that page),
+     * so Overview reads these fields instead of summing a list.
+     */
+    open_tickets?: number;
+    pending_tickets?: number;
+  };
   activity: { workouts_24h: number; posts_24h: number; messages_24h: number; communities: number };
   permissions: string[];
   staff_role: StaffRole | null;
