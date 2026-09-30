@@ -18,6 +18,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo
 import * as Haptics from "expo-haptics";
 import { api, type Community } from "@/src/api";
 import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
+import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -154,12 +155,33 @@ export default function WorkoutLogger() {
     }, [load]),
   );
 
-  // Rest timer countdown
+  // Rest timer countdown. The OS alert is scheduled separately so locking the phone still cues the next set.
   useEffect(() => {
     if (restRemaining <= 0) return;
     restRef.current = setTimeout(() => setRestRemaining((v) => v - 1), 1000);
     return () => clearTimeout(restRef.current);
   }, [restRemaining]);
+
+  useEffect(() => {
+    return () => {
+      void cancelRestEndNotification();
+    };
+  }, []);
+
+  const startRest = (seconds: number) => {
+    setRestRemaining(seconds);
+    void scheduleRestEndNotification({
+      seconds,
+      title: t("Rest complete"),
+      body: t("Time for the next set."),
+      channelName: t("Rest timer"),
+    });
+  };
+
+  const stopRest = () => {
+    setRestRemaining(0);
+    void cancelRestEndNotification();
+  };
 
   const filteredEx = useMemo(() => {
     return exercises.filter((e) => {
@@ -240,7 +262,7 @@ export default function WorkoutLogger() {
       rpe: Number.isNaN(rp) ? null : rp,
       rest_sec: restBefore,
     });
-    setRestRemaining(restLengthFor(selectedEx, nextSetIndex));
+    startRest(restLengthFor(selectedEx, nextSetIndex));
   };
 
   const setsByEx = useMemo(() => {
@@ -262,6 +284,7 @@ export default function WorkoutLogger() {
   const clubsRequested = useRef(false);
   const finish = async () => {
     if (!id || finishing || finished) return;
+    stopRest();
     setFinishing(true);
     setFinishError("");
     try {
@@ -426,7 +449,7 @@ export default function WorkoutLogger() {
         <View style={styles.timer} testID="rest-timer">
           <Text style={styles.timerLabel}>{t("REST")}</Text>
           <Text style={styles.timerVal}>{restRemaining}s</Text>
-          <Pressable onPress={() => setRestRemaining(0)} testID="skip-timer-btn">
+          <Pressable onPress={stopRest} testID="skip-timer-btn">
             <Ionicons name="close" color={colors.brandOn} size={18} />
           </Pressable>
         </View>

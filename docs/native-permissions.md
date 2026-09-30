@@ -49,14 +49,17 @@ If the member has permanently denied photo access, these screens stop and explai
 | | |
 | --- | --- |
 | Why | Phone alerts for DMs, live sessions, and the other types in notification settings. The in-app notification centre does not need this permission. |
-| Where | `frontend/src/push.ts`. `expo-notifications` is required only in a native build, not in Expo Go or on web (`pushSupported()`). Importing it in Expo Go logs an error, so it stays lazy. |
+| Where | `frontend/src/push.ts` (remote token) and `frontend/src/rest-timer.ts` (local rest alert). `expo-notifications` is loaded lazily, and not on web. Importing it in Expo Go logs an error, so it stays lazy. Remote push still needs a native build, not Expo Go (`pushSupported()`). |
 | Plugin | `expo-notifications` in `app.json` `plugins`. Prebuild adds Android 13 `POST_NOTIFICATIONS`. iOS notification permission uses the system dialog; there is no extra usage string in Info.plist. |
-| Android channel | `default`, name "IronFlow", created before the prompt. |
+| Android channel | `default`, name "IronFlow", created when registering a token or when the member turns Push on. The rest timer uses a separate channel, `rest-timer`, name "Rest timer". |
 
-Two paths ask:
+Signing in does not show the system dialog.
 
-1. **Sign-in.** `usePushNotifications` in `frontend/src/auth-context.tsx` calls `registerForPush()` once the member is signed in on a native build. That reads the current status and requests if it is not granted.
-2. **Notification settings.** The Push switch in `frontend/app/notification-settings.tsx` calls `enableDevicePush()` only when the member turns Push **on**.
+`usePushNotifications` in `frontend/src/auth-context.tsx` calls `registerForPush()` once the member is signed in on a native build. That only reads the current status. If it is already granted, the Expo push token is registered with no prompt. If it is undetermined or denied, nothing is asked and nothing is registered.
+
+The system dialog is Notification Settings. The Push switch in `frontend/app/notification-settings.tsx` calls `enableDevicePush()` only when the member turns Push **on**. That is the path that calls `requestPermissionsAsync`. When the OS will not ask again (`blocked`), the screen explains that and **OPEN SETTINGS** calls `Linking.openSettings()`.
+
+The workout rest timer (`frontend/src/rest-timer.ts`, started from `frontend/app/workout/[id].tsx`) schedules a local notification for when rest ends. It does not request permission. If permission is already granted, the alert is scheduled on channel `rest-timer`. If it is undetermined or denied, the in-app countdown still runs and no alert is scheduled. Skip, finish, and leaving the screen cancel the pending alert.
 
 Turning Push on:
 

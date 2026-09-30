@@ -16,11 +16,9 @@ import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { router } from "expo-router";
 import { api } from "./api";
-
-type NotificationsModule = typeof import("expo-notifications");
+import { loadNotifications, notificationApi } from "./notification-api";
 
 let registeredToken: string | null = null;
-let module: NotificationsModule | null = null;
 const platform = Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
 
 /** True where remote push can work at all: a native build, not Expo Go. */
@@ -28,18 +26,10 @@ export function pushSupported(): boolean {
   return Platform.OS !== "web" && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 }
 
-function notifications(): NotificationsModule | null {
+function notifications() {
   if (!pushSupported()) return null;
-  if (!module) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- deliberately lazy, see header
-    module = require("expo-notifications") as NotificationsModule;
-    // Show a banner even while the app is open: a DM or a live session
-    // starting is worth interrupting for.
-    module.setNotificationHandler({
-      handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true }),
-    });
-  }
-  return module;
+  if (!loadNotifications()) return null;
+  return notificationApi;
 }
 
 /** The EAS project id, from app config or the build environment. */
@@ -49,7 +39,11 @@ function projectId(): string | undefined {
     ?? process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
 }
 
-/** Ask for permission once signed in and register this device's token. */
+/**
+ * Register this device's Expo token when notification permission is already
+ * granted. Does not prompt. Undetermined and denied both return null; the
+ * system dialog is `enableDevicePush` (Notification Settings).
+ */
 export async function registerForPush(): Promise<string | null> {
   const Notifications = notifications();
   if (!Notifications) return null;
@@ -57,8 +51,7 @@ export async function registerForPush(): Promise<string | null> {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", { name: "IronFlow", importance: Notifications.AndroidImportance.DEFAULT });
     }
-    let { status } = await Notifications.getPermissionsAsync();
-    if (status !== "granted") status = (await Notifications.requestPermissionsAsync()).status;
+    const { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") return null;
     const id = projectId();
     const token = (await Notifications.getExpoPushTokenAsync(id ? { projectId: id } : undefined)).data;
@@ -139,7 +132,7 @@ function open(data: Record<string, unknown>) {
   }
 }
 
-/** Mount once inside the signed-in app: registers the device, routes taps. */
+/** Mount once inside the signed-in app: registers the token only if already allowed, routes taps. */
 export function usePushNotifications(signedIn: boolean) {
   useEffect(() => {
     const Notifications = signedIn ? notifications() : null;
