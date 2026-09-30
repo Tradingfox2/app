@@ -29,6 +29,8 @@ HASHTAG_PATTERN = re.compile(r"(?<![\w&/#])#(\w{1,50})", re.UNICODE)
 MAX_TAGS = 10
 POST_EDIT_WINDOW = timedelta(hours=24)
 STORY_TTL = timedelta(hours=24)
+#: Matches posts_audience_check / stories_audience_check in migration 006.
+Audience = Literal["public", "friends", "only_me"]
 
 
 def _aware(value: datetime) -> datetime:
@@ -64,9 +66,10 @@ class PostIn(BaseModel):
     workout_id: str | None = None
     media_ids: list[str] = Field(default_factory=list, max_length=6)
     poll: PollIn | None = None
-    #: `friends` is accepted followers only. Omitted or `public` keeps the
-    #: existing feed. A community post cannot also be friends-only.
-    audience: Literal["public", "friends"] = "public"
+    #: `friends` is accepted followers only. `only_me` is the author alone.
+    #: Omitted or `public` keeps the existing feed. A community post stays
+    #: public: the community is the audience.
+    audience: Audience = "public"
 
 
 class StoryIn(BaseModel):
@@ -74,13 +77,15 @@ class StoryIn(BaseModel):
     caption: str = Field(default="", max_length=300)
     media_ids: list[str] = Field(default_factory=list, max_length=4)
     workout_id: str
-    audience: Literal["friends", "public"] = "friends"
+    audience: Audience = "friends"
     highlight: bool = False
     highlight_title: str | None = Field(default=None, max_length=40)
 
 
 class PostEditIn(BaseModel):
     content: str = Field(max_length=4000)
+    #: Omit to leave the audience unchanged.
+    audience: Audience | None = None
 
 
 class RepostIn(BaseModel):
@@ -167,10 +172,13 @@ async def _can_view_post(post: dict, user_id: str) -> bool:
     author_id = post.get("author_id")
     if author_id == user_id:
         return True
+    # only_me is the author alone. A follower, a community member, and a
+    # coach all get the same 404 as a stranger. A missing audience is public.
+    if post.get("audience") == "only_me":
+        return False
     if author_id and await social_graph.blocked_between(user_id, author_id):
         return False
     # Friends-only is the accepted-follow edge, on top of account privacy.
-    # A missing audience is public — posts written before the field existed.
     if post.get("audience") == "friends" and not await social_graph.follows_actively(user_id, author_id):
         return False
     if post.get("community_id"):
@@ -188,7 +196,9 @@ async def _followed_ids(viewer_id: str) -> list[str]:
     ]
 
 
-async def _visible_post_query(viewer_id: str, *, friends: bool = False) -> dict:
+async def _visible_post_query(
+    viewer_id: str, *, friends: bool = False, include_only_me: bool = False,
+) -> dict:
     """Every post this viewer may see — the base both the feed and search use.
 
     The Mongo form of `_can_view_post`: community posts for members only,
@@ -200,6 +210,9 @@ async def _visible_post_query(viewer_id: str, *, friends: bool = False) -> dict:
     friends-audience posts entirely, so that surface stays what it was.
     `friends=True` (friends feed, a profile wall) keeps a friends post only
     for the author and their accepted followers.
+
+    `only_me` is dropped everywhere except the author's own wall and
+    scope=mine. Search and trending pass the default and never see it.
     """
     community_ids = await _member_community_ids(viewer_id)
     hidden_private = await _private_hidden_author_ids(viewer_id)
@@ -215,6 +228,13 @@ async def _visible_post_query(viewer_id: str, *, friends: bool = False) -> dict:
         ]})
     else:
         clauses.append({"audience": {"$ne": "friends"}})
+    if include_only_me:
+        clauses.append({"$or": [
+            {"audience": {"$ne": "only_me"}},
+            {"author_id": viewer_id},
+        ]})
+    else:
+        clauses.append({"audience": {"$ne": "only_me"}})
     query: dict = {"status": {"$ne": "deleted"}, "$and": clauses}
     blocked = await social_graph.blocked_ids(viewer_id)
     if blocked:
@@ -369,7 +389,12 @@ async def feed(
 ):
     # A profile wall and the friends feed may include friends-audience posts.
     # The public scopes must not, or the community feed would change.
-    query = await _visible_post_query(user["id"], friends=scope == "friends" or bool(author_id))
+    # only_me stays on the author's wall and scope=mine, not on either feed.
+    query = await _visible_post_query(
+        user["id"],
+        friends=scope == "friends" or bool(author_id),
+        include_only_me=scope == "mine" or author_id == user["id"],
+    )
     if tag:
         query["tags"] = tag.lstrip("#").lower()
     if community_id:
@@ -469,7 +494,7 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         raise HTTPException(422, "A post needs text, media, a workout or a poll")
     if body.poll and not body.content.strip():
         raise HTTPException(422, "A poll needs a question")
-    if body.audience == "friends" and body.community_id:
+    if body.community_id and body.audience != "public":
         raise HTTPException(422, "A community post uses the community's audience")
     workout_summary = await _workout_summary(body.workout_id, user) if body.workout_id else None
     if body.community_id:
@@ -547,10 +572,14 @@ async def edit_post(post_id: str, body: PostEditIn, user: dict = Depends(current
     if post.get("poll") and not content:
         raise HTTPException(422, "A poll needs a question")
     before = set(notifications.parse_mentions(post.get("content", "")))
+    if body.audience is not None and post.get("community_id") and body.audience != "public":
+        raise HTTPException(422, "A community post uses the community's audience")
     updates = {
         "content": content, "tags": extract_tags(content), "edited_at": now(),
         "link_preview": None if post.get("media") else await _preview_for(content),
     }
+    if body.audience is not None:
+        updates["audience"] = body.audience
     await db.posts.update_one({"id": post_id}, {"$set": updates})
     post = {**post, **updates}
     # Only people newly mentioned hear about it; the rest were told already.
@@ -1037,9 +1066,13 @@ async def public_profile(user_id: str, user: dict = Depends(current_user)):
     profile["followers"] = followers
     profile["following"] = following
     post_filter: dict = {"author_id": user_id, "status": {"$ne": "deleted"}, "community_id": None}
-    # A non-follower must not learn how many friends-only posts exist.
-    if user["id"] != user_id and not await social_graph.follows_actively(user["id"], user_id):
-        post_filter["audience"] = {"$ne": "friends"}
+    # A non-author must not learn that only_me posts exist. A non-follower
+    # also must not learn how many friends-only posts exist.
+    if user["id"] != user_id:
+        hidden = ["only_me"]
+        if not await social_graph.follows_actively(user["id"], user_id):
+            hidden.append("friends")
+        post_filter["audience"] = {"$nin": hidden}
     profile["posts"] = await db.posts.count_documents(post_filter)
     can_view = await social_graph.can_view_profile(user["id"], user_id)
     profile["about"] = (extra.get("about") or "") if can_view else ""
@@ -1212,10 +1245,15 @@ async def _wall_visible(viewer_id: str, author_id: str) -> None:
 
 
 def _friends_only_clause(viewer_id: str, author_id: str, follows: bool) -> dict:
-    """Non-followers do not receive friends-audience rows."""
-    if viewer_id == author_id or follows:
+    """Hide rows this viewer must not see on a wall.
+
+    only_me never leaves the author. friends stays the accepted-follow edge.
+    A missing audience still matches, the same as before the field existed.
+    """
+    if viewer_id == author_id:
         return {}
-    return {"audience": {"$ne": "friends"}}
+    hidden = ["only_me"] if follows else ["only_me", "friends"]
+    return {"audience": {"$nin": hidden}}
 
 
 @router.get("/users/{user_id}/photos")
@@ -1298,6 +1336,7 @@ async def story_feed(user: dict = Depends(current_user)):
     followed_set = set(followed)
     visible = [
         row for row in rows
+        if row.get("audience") != "only_me" or row["author_id"] == user["id"]
         if row["author_id"] == user["id"]
         or row.get("audience") != "friends"
         or row["author_id"] in followed_set

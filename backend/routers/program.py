@@ -348,3 +348,143 @@ Rewrite the session JSON now."""
         "day": adjusted.model_dump(),
         "original_day": day,
     }
+
+
+class StartDayIn(BaseModel):
+    week_index: Optional[int] = Field(default=None, ge=1, le=12)
+    day_index: Optional[int] = Field(default=None, ge=1, le=7)
+
+
+def resolve_program_day(
+    prog: dict,
+    week_index: int | None,
+    day_index: int | None,
+    *,
+    strict: bool,
+    apply_adjustment: bool,
+) -> tuple[dict, dict, int, bool]:
+    """Pick a program day the same way /coach/adjust does when indexes are omitted.
+
+    Week is the program's age in weeks, clamped to the plan. The day is the
+    week's first day unless the caller names one. `strict` 404s on an explicit
+    week that is not in the plan; adjust still falls back to week 1.
+    """
+    weeks = (prog.get("program") or {}).get("weeks") or []
+    if not weeks:
+        raise HTTPException(404, "Program has no weeks")
+    created = prog.get("created_at") or now()
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    default_week = min((now() - created).days // 7 + 1, len(weeks))
+    resolved_week = week_index or default_week
+    week = next((item for item in weeks if item.get("week_index") == resolved_week), None)
+    if week is None:
+        if strict:
+            raise HTTPException(404, "Week not found in program")
+        week = weeks[0]
+    days = week.get("days") or []
+    if not days:
+        raise HTTPException(404, "Day not found in program")
+    resolved_day = day_index if day_index is not None else days[0].get("day_index")
+    day = next((item for item in days if item.get("day_index") == resolved_day), None)
+    if day is None:
+        raise HTTPException(404, "Day not found in program")
+    if apply_adjustment:
+        override = None
+        for record in prog.get("adjustments") or []:
+            if record.get("week_index") == week.get("week_index") and record.get("day_index") == day.get("day_index"):
+                override = record.get("adjusted_day") or override
+        if override:
+            return week, override, week.get("week_index"), True
+    return week, day, week.get("week_index"), False
+
+
+async def next_planned_session(uid: str) -> dict | None:
+    """The active program's current day, using the adjust week/day default."""
+    prog = await db.programs.find_one(
+        {"user_id": uid, "status": "active"},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    if not prog or not (prog.get("program") or {}).get("weeks"):
+        return None
+    try:
+        week, day, week_index, adjusted = resolve_program_day(
+            prog, None, None, strict=False, apply_adjustment=True,
+        )
+    except HTTPException:
+        return None
+    return {
+        "program_id": prog["id"],
+        "week_index": week_index,
+        "phase": week.get("phase"),
+        "day_index": day.get("day_index"),
+        "focus": day.get("focus"),
+        "adjusted": adjusted,
+        "exercises": day.get("exercises") or [],
+    }
+
+
+def _session_title(focus: str | None, week_index: int, day_index: int) -> str:
+    label = (focus or "session").replace("_", " ").strip().title() or "Session"
+    return f"{label} · week {week_index} day {day_index}"
+
+
+@router.post("/programs/{program_id}/start-day", status_code=201)
+async def start_program_day(
+    program_id: str,
+    body: StartDayIn | None = None,
+    user: dict = Depends(current_user),
+):
+    """Open a workout from a program day. The plan is copied; sets are not logged.
+
+    Reuses `programs` and `workouts`. There is no workout_templates collection.
+    ended_at stays empty until /finish, so previous-sets ignores this session.
+    """
+    body = body or StartDayIn()
+    prog = await db.programs.find_one({"id": program_id}, {"_id": 0})
+    if not prog:
+        raise HTTPException(404, "Program not found")
+    if not await can_access_user_data(user["id"], prog["user_id"]):
+        raise HTTPException(403, "Not allowed")
+    explicit = body.week_index is not None or body.day_index is not None
+    week, day, week_index, adjusted = resolve_program_day(
+        prog, body.week_index, body.day_index, strict=explicit, apply_adjustment=True,
+    )
+    exercises = day.get("exercises") or []
+    slugs = list(dict.fromkeys(
+        item["exercise_slug"] for item in exercises if item.get("exercise_slug")
+    ))
+    doc = {
+        "id": new_id(),
+        "user_id": prog["user_id"],
+        "title": _session_title(day.get("focus"), week_index, day.get("day_index")),
+        "notes": None,
+        "started_at": now(),
+        "ended_at": None,
+        "duration_sec": None,
+        "perceived_effort": None,
+        "planned_exercise_slugs": slugs,
+        "source": {
+            "kind": "program_day",
+            "program_id": prog["id"],
+            "week_index": week_index,
+            "day_index": day.get("day_index"),
+            "focus": day.get("focus"),
+            "phase": week.get("phase"),
+            "adjusted": adjusted,
+            "exercises": exercises,
+        },
+        "created_at": now(),
+    }
+    await db.workouts.insert_one(dict(doc))
+    workout = clean(doc)
+    planned = []
+    if slugs:
+        by_slug = {
+            row["slug"]: clean(row)
+            async for row in db.exercises.find({"slug": {"$in": slugs}}, {"_id": 0})
+        }
+        planned = [by_slug[slug] for slug in slugs if slug in by_slug]
+    workout["planned_exercises"] = planned
+    return workout
