@@ -81,6 +81,33 @@ def test_a_coach_cannot_publish_a_clients_workout(monkeypatch):
     run_isolated(scenario)
 
 
+def test_a_shared_workout_can_be_friends_or_a_club_and_not_audience_club(monkeypatch):
+    """Club sharing is community_id. friends and public are audience values.
+    A community post keeps the community audience (public), never audience=club."""
+    async def scenario(db):
+        await seed_social(db, monkeypatch)
+        await finished_workout(db, "w-1", "mem")
+        friends = await social.create_post(
+            social.PostIn(workout_id="w-1", audience="friends"), account("mem"))
+        assert friends["audience"] == "friends" and friends["community_id"] is None
+        assert friends["workout_id"] == "w-1"
+
+        public = await social.create_post(
+            social.PostIn(workout_id="w-1", audience="public"), account("mem"))
+        assert public["audience"] == "public" and public["community_id"] is None
+
+        club = await social.create_post(
+            social.PostIn(workout_id="w-1", community_id="c-1"), account("mem"))
+        assert club["community_id"] == "c-1" and club["audience"] == "public"
+        assert club["audience"] != "club"
+
+        with pytest.raises(HTTPException) as mixed:
+            await social.create_post(
+                social.PostIn(workout_id="w-1", community_id="c-1", audience="friends"), account("mem"))
+        assert mixed.value.status_code == 422
+    run_isolated(scenario)
+
+
 def test_an_unfinished_workout_cannot_be_shared(monkeypatch):
     async def scenario(db):
         await seed_social(db, monkeypatch)

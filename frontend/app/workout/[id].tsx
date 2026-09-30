@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -15,10 +16,31 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { api } from "@/src/api";
+import { api, type Community } from "@/src/api";
 import { enqueueSet, flushQueue, onQueueChange } from "@/src/offline-queue";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+
+/** Club is `community_id`. `public` and `friends` are the only audience values sent. */
+type ShareAudience =
+  | { kind: "club"; id: string }
+  | { kind: "friends" }
+  | { kind: "public" };
+
+function shareBody(workoutId: string, audience: ShareAudience) {
+  switch (audience.kind) {
+    case "club":
+      return { content: "", workout_id: workoutId, community_id: audience.id };
+    case "friends":
+      return { content: "", workout_id: workoutId, audience: "friends" as const };
+    case "public":
+      return { content: "", workout_id: workoutId, audience: "public" as const };
+    default: {
+      const unreachable: never = audience;
+      return unreachable;
+    }
+  }
+}
 
 export default function WorkoutLogger() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -140,6 +162,12 @@ export default function WorkoutLogger() {
   const [finished, setFinished] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState("");
+  const [clubs, setClubs] = useState<Pick<Community, "id" | "name">[] | null>(null);
+  const [clubsError, setClubsError] = useState("");
+  const [audience, setAudience] = useState<ShareAudience>({ kind: "friends" });
+  const [audienceReady, setAudienceReady] = useState(false);
+  const audienceChosen = useRef(false);
+  const clubsRequested = useRef(false);
   const finish = async () => {
     if (!id) return;
     // Flush first: the share card snapshots the sets the server holds, so an
@@ -148,12 +176,49 @@ export default function WorkoutLogger() {
     await api.finishWorkout(id).catch(() => {});
     setFinished(true);
   };
+  const loadClubs = useCallback(async () => {
+    setClubsError("");
+    try {
+      const rows = await api.communities("mine");
+      const active = rows.filter(row => row.membership?.status === "active");
+      setClubs(active.map(row => ({ id: row.id, name: row.name })));
+      // Default is the athlete's club when they have one. Otherwise friends.
+      // Public is an explicit choice and is never the fallback.
+      if (!audienceChosen.current) {
+        setAudience(active[0] ? { kind: "club", id: active[0].id } : { kind: "friends" });
+      }
+    } catch (cause) {
+      setClubs([]);
+      if (!audienceChosen.current) setAudience({ kind: "friends" });
+      setClubsError(cause instanceof Error ? cause.message : t("Could not load your clubs."));
+    } finally {
+      setAudienceReady(true);
+    }
+  }, [t]);
+  useEffect(() => {
+    if (!finished || clubsRequested.current) return;
+    clubsRequested.current = true;
+    void loadClubs();
+  }, [finished, loadClubs]);
+  const pickAudience = (next: ShareAudience) => {
+    audienceChosen.current = true;
+    setAudience(next);
+  };
   const share = async () => {
-    if (!id || sharing) return;
+    if (!id || sharing || !audienceReady) return;
     setSharing(true); setShareError("");
-    try { await api.publish({ content: "", workout_id: id }); router.replace("/community"); }
-    catch (cause) { setShareError(cause instanceof Error ? cause.message : t("Something went wrong")); }
-    finally { setSharing(false); }
+    try {
+      const workout = await api.workout(id);
+      // A finish that did not stick must not publish or leave the logger.
+      if (!workout?.ended_at) {
+        setShareError(t("Finish the workout before sharing it"));
+        return;
+      }
+      await api.publish(shareBody(id, audience));
+      router.replace("/community");
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : t("Something went wrong"));
+    } finally { setSharing(false); }
   };
 
   return (
@@ -368,10 +433,29 @@ export default function WorkoutLogger() {
       {finished ? <View style={styles.sharePanel} testID="share-panel">
         <Text style={styles.shareTitle}>{t("SESSION COMPLETE")}</Text>
         <Text style={styles.shareCopy}>{t("Share it with the people you train with?")}</Text>
-        {shareError ? <Text style={styles.shareError}>{shareError}</Text> : null}
+        <Text style={styles.shareAudienceLabel}>{t("Choose audience")}</Text>
+        {!audienceReady ? <ActivityIndicator color={colors.brand} /> : <View style={styles.shareChips} testID="share-audience">
+          {(clubs ?? []).map(club => {
+            const selected = audience.kind === "club" && audience.id === club.id;
+            return <Pressable key={club.id} accessibilityRole="button" accessibilityState={{ selected }} testID={`share-audience-club-${club.id}`} onPress={() => pickAudience({ kind: "club", id: club.id })} style={[styles.shareChip, selected && styles.shareChipOn]}>
+              <Text style={[styles.shareChipText, selected && styles.shareChipTextOn]}>{club.name}</Text>
+            </Pressable>;
+          })}
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: audience.kind === "friends" }} testID="share-audience-friends" onPress={() => pickAudience({ kind: "friends" })} style={[styles.shareChip, audience.kind === "friends" && styles.shareChipOn]}>
+            <Text style={[styles.shareChipText, audience.kind === "friends" && styles.shareChipTextOn]}>{t("Friends")}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: audience.kind === "public" }} testID="share-audience-public" onPress={() => pickAudience({ kind: "public" })} style={[styles.shareChip, audience.kind === "public" && styles.shareChipOn]}>
+            <Text style={[styles.shareChipText, audience.kind === "public" && styles.shareChipTextOn]}>{t("Public")}</Text>
+          </Pressable>
+        </View>}
+        {clubsError ? <View accessibilityRole="alert" testID="share-clubs-error">
+          <Text style={styles.shareError}>{clubsError}</Text>
+          <Pressable accessibilityRole="button" testID="share-clubs-retry" onPress={() => void loadClubs()}><Text style={styles.shareRetry}>{t("Retry")}</Text></Pressable>
+        </View> : null}
+        {shareError ? <Text accessibilityRole="alert" testID="share-error" style={styles.shareError}>{shareError}</Text> : null}
         <View style={styles.shareRow}>
           <Pressable accessibilityRole="button" testID="share-done" onPress={() => router.back()} style={styles.shareSecondary}><Text style={styles.shareSecondaryText}>{t("DONE")}</Text></Pressable>
-          <Pressable accessibilityRole="button" testID="share-workout" disabled={sharing} onPress={() => void share()} style={[styles.sharePrimary, sharing && { opacity: 0.5 }]}><Text style={styles.sharePrimaryText}>{t("SHARE TO FEED")}</Text></Pressable>
+          <Pressable accessibilityRole="button" testID="share-workout" disabled={sharing || !audienceReady} onPress={() => void share()} style={[styles.sharePrimary, (sharing || !audienceReady) && { opacity: 0.5 }]}><Text style={styles.sharePrimaryText}>{t("SHARE TO FEED")}</Text></Pressable>
         </View>
       </View> : null}
     </SafeAreaView>
@@ -425,6 +509,13 @@ const styles = StyleSheet.create({
   shareSecondaryText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   sharePrimary: { flex: 1.4, minHeight: 48, borderRadius: 8, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   sharePrimaryText: { color: colors.brandOn, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+  shareAudienceLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+  shareChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  shareChip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  shareChipOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  shareChipText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
+  shareChipTextOn: { color: colors.brand },
+  shareRetry: { color: colors.brand, fontWeight: "800", fontSize: 12 },
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: "row",

@@ -1168,6 +1168,15 @@ async def thread_messages(
     user: dict = Depends(current_user),
     before: str | None = None,
 ):
+    # History and the read receipt are the same request. A block, or no
+    # permission to message, must fail before either one — opening the URL
+    # must not reveal the thread or stamp "Seen".
+    if not await db.users.find_one({"id": peer_id}, {"_id": 1}):
+        raise HTTPException(404, "User not found")
+    if await social_graph.blocked_between(user["id"], peer_id):
+        raise HTTPException(403, "This account is unavailable")
+    if not await _can_message(user["id"], peer_id):
+        raise HTTPException(403, "You can message people you share a community, coaching relationship or mutual follow with")
     key = _thread_key(user["id"], peer_id)
     query: dict = {"thread_key": key}
     if before:

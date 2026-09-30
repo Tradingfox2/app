@@ -19,16 +19,24 @@ const TYPING_TTL_MS = 4000;
 /** Throttle outgoing typing nudges to one every few seconds. */
 const TYPING_EVERY_MS = 3000;
 
+function httpStatus(cause: unknown): number | null {
+  if (typeof cause === "object" && cause !== null && "status" in cause && typeof (cause as { status: unknown }).status === "number") {
+    return (cause as { status: number }).status;
+  }
+  return null;
+}
+
 export default function DirectMessageScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>(); const router = useRouter(); const { user } = useAuth(); const { t, formatDate } = useI18n();
   const [messages, setMessages] = useState<DirectMessage[]>([]); const [draft, setDraft] = useState(""); const [sending, setSending] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const [closed, setClosed] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
   const [attachments, setAttachments] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [peerTyping, setPeerTyping] = useState(false);
   const [menuFor, setMenuFor] = useState<DirectMessage | null>(null);
   const [reporting, setReporting] = useState<ReportTarget | null>(null);
-  const revision = useRef(0); const sendingRef = useRef(false);
+  const revision = useRef(0); const sendingRef = useRef(false); const closedRef = useRef(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSent = useRef(0);
 
@@ -47,11 +55,23 @@ export default function DirectMessageScreen() {
       setHasOlder(previous => previous || rows.length === PAGE);
       setError("");
     }
-    catch (cause) { if (current === revision.current) setError(cause instanceof Error ? cause.message : t("Could not load messages")); }
+    catch (cause) {
+      if (current !== revision.current) return;
+      if (httpStatus(cause) === 403) {
+        // A block or a closed can_message must not leave history on screen,
+        // and must not keep polling as if the thread were open.
+        closedRef.current = true;
+        setClosed(true);
+        setMessages([]);
+        setHasOlder(false);
+      }
+      setError(cause instanceof Error ? cause.message : t("Could not load messages"));
+    }
     finally { if (current === revision.current) setLoading(false); }
   }, [id, t]);
 
   const { connected } = useRealtimeUser(!!user, event => {
+    if (closedRef.current) return;
     if (event.type === "dm.created") {
       const message = event.message as DirectMessage;
       if (message.sender_id !== id) return;
@@ -70,9 +90,10 @@ export default function DirectMessageScreen() {
   });
 
   useFocusEffect(useCallback(() => {
+    closedRef.current = false; setClosed(false);
     sendingRef.current = false; setSending(false); setMessages([]); setDraft(""); setLoading(true); setError(""); void load();
     // With a live socket, a slow reconcile is enough; without one, poll.
-    const timer = setInterval(() => void load(), connected ? 45000 : 8000);
+    const timer = setInterval(() => { if (!closedRef.current) void load(); }, connected ? 45000 : 8000);
     return () => { clearInterval(timer); revision.current += 1; };
   }, [load, connected]));
 
@@ -82,7 +103,15 @@ export default function DirectMessageScreen() {
       const rows = await api.dmMessages(id, messages[0].id);
       setMessages(current => [...rows.filter(row => !current.some(existing => existing.id === row.id)), ...current]);
       setHasOlder(rows.length === PAGE);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
+    } catch (cause) {
+      if (httpStatus(cause) === 403) {
+        closedRef.current = true;
+        setClosed(true);
+        setMessages([]);
+        setHasOlder(false);
+      }
+      setError(cause instanceof Error ? cause.message : t("Something went wrong"));
+    }
   };
 
   const typed = (value: string) => {
@@ -142,7 +171,7 @@ export default function DirectMessageScreen() {
     {loading ? <ActivityIndicator color={colors.brand} /> : null}
     <FlatList data={messages} keyExtractor={item => item.id} contentContainerStyle={styles.list}
       ListHeaderComponent={hasOlder ? <Pressable accessibilityRole="button" testID="dm-older" onPress={() => void older()} style={styles.older}><Text style={styles.olderText}>{t("Load earlier messages")}</Text></Pressable> : null}
-      ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="lock-closed-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{t("Say hello. Only the two of you can read this.")}</Text></View> : null}
+      ListEmptyComponent={!loading && !error && !closed ? <View style={styles.empty}><Ionicons name="lock-closed-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{t("Say hello. Only the two of you can read this.")}</Text></View> : null}
       renderItem={({ item }) => {
         const own = item.sender_id === user?.id;
         const deleted = item.status === "deleted";
@@ -160,17 +189,17 @@ export default function DirectMessageScreen() {
           {item.id === lastSeenId ? <Text style={styles.seen} testID="dm-seen">{t("Seen")}</Text> : null}
         </View>;
       }} />
-    {attachments.length ? <View style={styles.pending}>{attachments.map(item => <View key={item.id}>
+    {!closed && attachments.length ? <View style={styles.pending}>{attachments.map(item => <View key={item.id}>
       {item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={18} color={colors.brand} /></View>}
       <Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setAttachments(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={10} color={colors.brandOn} /></Pressable>
     </View>)}</View> : null}
-    <View style={styles.composer}>
+    {closed ? null : <View style={styles.composer} testID="dm-composer">
       <Pressable accessibilityRole="button" accessibilityLabel={t("Add photo or video")} testID="dm-attach" disabled={uploading || attachments.length >= 4} onPress={() => void attach()} style={[styles.attach, (uploading || attachments.length >= 4) && styles.disabled]}>
         {uploading ? <ActivityIndicator color={colors.brand} /> : <Ionicons name="image-outline" size={20} color={colors.brand} />}
       </Pressable>
       <TextInput value={draft} onChangeText={typed} editable={!sending} maxLength={4000} multiline placeholder={t("Message...")} placeholderTextColor={colors.textDim} style={styles.input} />
       <Pressable accessibilityRole="button" disabled={!canSend} onPress={() => void send()} accessibilityLabel={t("Send message")} style={[styles.send, !canSend && styles.disabled]}><Ionicons name="send" size={17} color={colors.brandOn} /></Pressable>
-    </View>
+    </View>}
     <ActionSheet visible={!!menuFor} onClose={() => setMenuFor(null)} testID="dm-sheet" actions={menuFor ? (menuFor.sender_id === user?.id
       ? [{ key: "unsend", label: t("Unsend"), icon: "trash-outline", destructive: true, onPress: () => void unsend(menuFor) }]
       : [{ key: "report", label: t("Report message"), icon: "flag-outline", onPress: () => setReporting({ target_type: "direct_message", target_id: menuFor.id }) }]) : []} />

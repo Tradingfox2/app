@@ -222,6 +222,40 @@ def test_dms_page_back_unsend_and_disappear_when_blocked(monkeypatch):
     run(scenario, monkeypatch)
 
 
+def test_thread_history_and_read_receipts_stop_when_blocked_or_unmessageable(monkeypatch):
+    """Opening a thread both returns history and stamps Seen. Neither may happen
+    across a block, or when can_message is false."""
+    async def scenario(db):
+        await db.follows.insert_many([
+            {"follower_id": "ann", "followee_id": "bob", "status": "active"},
+            {"follower_id": "bob", "followee_id": "ann", "status": "active"},
+        ])
+        sent = await social.send_direct_message("bob", social.DirectMessageIn(content="secret"), me("ann"))
+        await social_graph.block("ann", "bob")
+        await expect(403, social.thread_messages("bob", 50, me("ann")))
+        await expect(403, social.thread_messages("ann", 50, me("bob")))
+        await expect(403, social.thread_messages("ann", 50, me("bob"), before=sent["id"]))
+        assert (await db.direct_messages.find_one({"id": sent["id"]}))["read_at"] is None
+
+        await social_graph.unblock("ann", "bob")
+        # The block removed the follows, and bob never replied, so ann cannot message.
+        await expect(403, social.thread_messages("bob", 50, me("ann")))
+        assert (await db.direct_messages.find_one({"id": sent["id"]}))["read_at"] is None
+        # Bob can still open it: ann's earlier message is the relationship can_message checks.
+        opened = await social.thread_messages("ann", 50, me("bob"))
+        assert [row["content"] for row in opened] == ["secret"]
+        assert (await db.direct_messages.find_one({"id": sent["id"]}))["read_at"] is not None
+
+        await db.direct_messages.insert_one({
+            "id": "oneway", "thread_key": social._thread_key("ann", "cat"),
+            "sender_id": "cat", "recipient_id": "ann", "content": "from cat",
+            "status": "active", "read_at": None, "created_at": server.now(), "media": [],
+        })
+        await expect(403, social.thread_messages("ann", 50, me("cat")))
+        assert (await db.direct_messages.find_one({"id": "oneway"}))["read_at"] is None
+    run(scenario, monkeypatch)
+
+
 # --- Notification preferences ---
 
 def test_a_switched_off_type_is_silent_but_moderation_always_arrives(monkeypatch):

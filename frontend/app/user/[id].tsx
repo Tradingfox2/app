@@ -150,7 +150,11 @@ export default function PublicProfile() {
           </View>
           {wallTab === "posts" ? <View testID="profile-posts">
             {own ? <Composer personal onPublished={created => { posts.prepend(created); setProfile(current => current ? { ...current, posts: current.posts + 1 } : current); }} /> : null}
-            {!posts.loading && posts.posts.length === 0 ? <Text style={styles.hint}>{t("No posts yet.")}</Text> : null}
+            {posts.error ? <View accessibilityRole="alert" testID="profile-posts-error">
+              <Text style={styles.error}>{posts.error}</Text>
+              <Pressable accessibilityRole="button" testID="profile-posts-retry" onPress={() => void posts.load()}><Text style={styles.retry}>{t("Retry")}</Text></Pressable>
+            </View> : null}
+            {!posts.loading && !posts.error && posts.posts.length === 0 ? <Text style={styles.hint}>{t("No posts yet.")}</Text> : null}
             {posts.posts.map(post => <PostCard key={post.id} post={post} onChange={next => posts.patch(post.id, () => next)} onRemoved={() => posts.remove(post.id)} onReposted={() => undefined} />)}
             {posts.hasMore ? <Pressable accessibilityRole="button" onPress={() => void posts.loadMore()} style={styles.icon}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Pressable> : null}
           </View> : wallTab === "photos" ? <View style={wall.photoGrid} testID="profile-photos">
