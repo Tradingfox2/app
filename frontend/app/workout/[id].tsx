@@ -14,10 +14,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { api, type Community } from "@/src/api";
-import { enqueueSet, flushQueue, onQueueChange } from "@/src/offline-queue";
+import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -42,6 +42,22 @@ function shareBody(workoutId: string, audience: ShareAudience) {
   }
 }
 
+const DEFAULT_REST_SEC = 90;
+
+function isOptimisticSet(row: { id?: string }): boolean {
+  return typeof row.id === "string" && row.id.startsWith("local-");
+}
+
+/** Keep rows the server has not confirmed yet. A failed list must not wipe them. */
+function mergeServerSets(server: any[], local: any[]): any[] {
+  const pending = local.filter(
+    (row) =>
+      isOptimisticSet(row) &&
+      !server.some((saved) => saved.exercise_id === row.exercise_id && saved.set_index === row.set_index),
+  );
+  return [...server, ...pending];
+}
+
 export default function WorkoutLogger() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -57,6 +73,10 @@ export default function WorkoutLogger() {
   const [weight, setWeight] = useState("60");
   const [rpe, setRpe] = useState("7");
   const [queued, setQueued] = useState(0);
+  const [loggerError, setLoggerError] = useState("");
+  const [finishError, setFinishError] = useState("");
+  const [finishing, setFinishing] = useState(false);
+  const [summary, setSummary] = useState<{ sets: number; minutes: number; tonnage: number } | null>(null);
 
   // Rest timer
   const [restRemaining, setRestRemaining] = useState<number>(0);
@@ -70,29 +90,61 @@ export default function WorkoutLogger() {
   // Exercises queued from the Muscle Explorer / circuits (workout.planned_exercises)
   const [planned, setPlanned] = useState<any[]>([]);
   const [workoutTitle, setWorkoutTitle] = useState<string | null>(null);
+  const selectedExRef = useRef<any>(null);
+  const setsRef = useRef<any[]>([]);
+  const plannedRef = useRef<any[]>([]);
+  const exercisesRef = useRef<any[]>([]);
+  const sourceExercisesRef = useRef<any[]>([]);
+  const priorSetsRef = useRef<any[]>([]);
+  setsRef.current = sets;
+  plannedRef.current = planned;
+  exercisesRef.current = exercises;
 
   const load = useCallback(async () => {
     if (!id) return;
-    await flushQueue().catch(() => {});
-    const [s, ex, ms, w] = await Promise.all([
-      api.listSets(id).catch(() => []),
-      api.exercises().catch(() => []),
-      api.muscles().catch(() => []),
-      api.workout(id).catch(() => null),
-    ]);
-    setSets(s);
-    setExercises(ex);
-    setMuscles(ms);
-    const plan: any[] = w?.planned_exercises ?? [];
-    setPlanned(plan);
-    setWorkoutTitle(w?.title ?? null);
-    // Prefer the first planned exercise that has no sets yet, then any planned, then the catalog.
-    if (!selectedEx) {
-      const logged = new Set(s.map((x: any) => x.exercise_id));
-      const next = plan.find((p) => !logged.has(p.id)) ?? plan[0] ?? ex[0];
-      if (next) setSelectedEx(next);
+    const notes: string[] = [];
+    try {
+      await flushQueue();
+      if ((await pendingFor(id)) > 0) notes.push(t("Could not sync your sets. They are still here."));
+    } catch {
+      notes.push(t("Could not sync your sets. They are still here."));
     }
-  }, [id, selectedEx]);
+    const [setsResult, exercisesResult, musclesResult, workoutResult] = await Promise.allSettled([
+      api.listSets(id),
+      api.exercises(),
+      api.muscles(),
+      api.workout(id),
+    ]);
+    let visibleSets = setsRef.current;
+    if (setsResult.status === "fulfilled") {
+      visibleSets = mergeServerSets(setsResult.value ?? [], setsRef.current);
+      setSets(visibleSets);
+    } else {
+      notes.push(t("Could not refresh sets. Showing what you already logged."));
+    }
+    if (exercisesResult.status === "fulfilled") setExercises(exercisesResult.value ?? []);
+    if (musclesResult.status === "fulfilled") setMuscles(musclesResult.value ?? []);
+    let plan = plannedRef.current;
+    if (workoutResult.status === "fulfilled") {
+      plan = workoutResult.value?.planned_exercises ?? [];
+      setPlanned(plan);
+      setWorkoutTitle(workoutResult.value?.title ?? null);
+      sourceExercisesRef.current = workoutResult.value?.source?.exercises ?? [];
+    } else {
+      notes.push(t("Could not refresh this session. Your plan is unchanged."));
+    }
+    setLoggerError(notes[0] ?? "");
+    // Prefer the first planned exercise that has no sets yet, then any planned, then the catalog.
+    if (!selectedExRef.current) {
+      const catalog = exercisesResult.status === "fulfilled" ? exercisesResult.value ?? [] : exercisesRef.current;
+      const logged = new Set(visibleSets.map((row: any) => row.exercise_id));
+      const next = plan.find((item) => !logged.has(item.id)) ?? plan[0] ?? catalog[0];
+      if (next) {
+        selectedExRef.current = next;
+        setSelectedEx(next);
+      }
+    }
+  }, [id, t]);
 
   // Reload on mount and whenever the screen regains focus (e.g. back from the
   // Muscle Explorer after queueing more exercises into this session).
@@ -123,6 +175,38 @@ export default function WorkoutLogger() {
     return same.length + 1;
   }, [sets, selectedEx]);
 
+  // Prefill from the last finished session. rest_sec on that log is the length
+  // the timer uses; when it is absent the program day, then 90s, is the fallback.
+  useEffect(() => {
+    const exerciseId = selectedEx?.id;
+    if (!exerciseId) return;
+    let cancelled = false;
+    api.previousSets(exerciseId, 1).then((payload) => {
+      if (cancelled) return;
+      const prior = (payload.sessions?.[0]?.sets ?? []) as any[];
+      priorSetsRef.current = prior;
+      const match = prior.find((row) => row.set_index === nextSetIndex) ?? prior[0];
+      if (!match) return;
+      if (match.reps != null) setReps(String(match.reps));
+      if (match.weight_kg != null) setWeight(String(match.weight_kg));
+      if (match.rpe != null) setRpe(String(match.rpe));
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [nextSetIndex, selectedEx?.id]);
+
+  const restLengthFor = (exercise: any, setIndexJustLogged: number): number => {
+    const prior = priorSetsRef.current;
+    const upcoming = prior.find((row) => row.set_index === setIndexJustLogged + 1);
+    if (typeof upcoming?.rest_sec === "number") return upcoming.rest_sec;
+    const same = prior.find((row) => row.set_index === setIndexJustLogged);
+    if (typeof same?.rest_sec === "number") return same.rest_sec;
+    const prescribed = sourceExercisesRef.current.find((row) => row.exercise_slug === exercise?.slug);
+    if (typeof prescribed?.rest_sec === "number") return prescribed.rest_sec;
+    return DEFAULT_REST_SEC;
+  };
+
   const quickAddSet = async () => {
     if (!selectedEx || !id) return;
     const r = parseInt(reps, 10);
@@ -130,6 +214,8 @@ export default function WorkoutLogger() {
     const rp = parseFloat(rpe);
     if (!r || Number.isNaN(w)) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const historical = priorSetsRef.current.find((row) => row.set_index === nextSetIndex);
+    const restBefore = typeof historical?.rest_sec === "number" ? historical.rest_sec : null;
     // Optimistic local update — sub-3-second UX guarantee
     const optimistic = {
       id: `local-${Date.now()}`,
@@ -139,16 +225,22 @@ export default function WorkoutLogger() {
       reps: r,
       weight_kg: w,
       rpe: Number.isNaN(rp) ? null : rp,
+      rest_sec: restBefore,
     };
-    setSets((prev) => [...prev, optimistic]);
+    setSets((prev) => {
+      const next = [...prev, optimistic];
+      setsRef.current = next;
+      return next;
+    });
     await enqueueSet(id, {
       exercise_id: selectedEx.id,
       set_index: nextSetIndex,
       reps: r,
       weight_kg: w,
       rpe: Number.isNaN(rp) ? null : rp,
+      rest_sec: restBefore,
     });
-    setRestRemaining(90); // default 90s rest
+    setRestRemaining(restLengthFor(selectedEx, nextSetIndex));
   };
 
   const setsByEx = useMemo(() => {
@@ -169,12 +261,39 @@ export default function WorkoutLogger() {
   const audienceChosen = useRef(false);
   const clubsRequested = useRef(false);
   const finish = async () => {
-    if (!id) return;
-    // Flush first: the share card snapshots the sets the server holds, so an
-    // offline-queued set must land before the session is closed.
-    await flushQueue().catch(() => {});
-    await api.finishWorkout(id).catch(() => {});
-    setFinished(true);
+    if (!id || finishing || finished) return;
+    setFinishing(true);
+    setFinishError("");
+    try {
+      // The share card snapshots the sets the server holds. A queued set that
+      // did not land keeps the athlete in the logger — the complete panel stays shut.
+      await flushQueue();
+      if ((await pendingFor(id)) > 0) {
+        setFinishError(t("Could not sync sets. Finish stays closed until they land."));
+        setLoggerError(t("Could not sync your sets. They are still here."));
+        return;
+      }
+      const result = await api.finishWorkout(id);
+      if (!result?.ended_at) {
+        setFinishError(t("Session did not finish. Try again."));
+        return;
+      }
+      const logged = setsRef.current;
+      const tonnage = logged.reduce(
+        (sum, row) => sum + (Number(row.weight_kg) || 0) * (Number(row.reps) || 0),
+        0,
+      );
+      setSummary({
+        sets: logged.length,
+        minutes: Math.max(0, Math.round(Number(result.duration_sec) || 0) / 60),
+        tonnage,
+      });
+      setFinished(true);
+    } catch (cause) {
+      setFinishError(cause instanceof Error ? cause.message : t("Could not finish session"));
+    } finally {
+      setFinishing(false);
+    }
   };
   const loadClubs = useCallback(async () => {
     setClubsError("");
@@ -235,14 +354,24 @@ export default function WorkoutLogger() {
             </Text>
           ) : null}
         </View>
-        <Pressable onPress={finish} testID="finish-btn" hitSlop={12}>
-          <Text style={styles.finishTxt}>{t("FINISH")}</Text>
+        <Pressable onPress={finish} testID="finish-btn" hitSlop={12} disabled={finishing || finished}>
+          <Text style={styles.finishTxt}>{finishing ? t("FINISHING…") : t("FINISH")}</Text>
         </Pressable>
       </View>
 
-      {planned.length > 0 && (
-        <View style={styles.planWrap} testID="planned-queue">
-          <Text style={styles.planLabel}>{t("PLANNED · {count}", { count: formatNumber(planned.length) })}</Text>
+      {(loggerError || finishError) ? (
+        <View style={styles.offlineBanner} accessibilityRole="alert" testID={finishError ? "finish-error" : "logger-error"}>
+          <Ionicons name="alert-circle" color={colors.error} size={14} />
+          <Text style={styles.errorTxt}>{finishError || loggerError}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.planWrap} testID="planned-queue">
+        <Text style={styles.planLabel}>
+          {planned.length > 0
+            ? t("PLANNED · {count}", { count: formatNumber(planned.length) })
+            : t("NO PLAN YET")}
+        </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -254,7 +383,10 @@ export default function WorkoutLogger() {
               return (
                 <Pressable
                   key={p.id}
-                  onPress={() => setSelectedEx(p)}
+                  onPress={() => {
+                    selectedExRef.current = p;
+                    setSelectedEx(p);
+                  }}
                   style={[styles.planChip, active && styles.planChipActive, done > 0 && styles.planChipDone]}
                   accessibilityRole="button"
                   accessibilityLabel={t("{name}, {count} sets logged", { name: p.name, count: formatNumber(done) })}
@@ -271,17 +403,17 @@ export default function WorkoutLogger() {
               );
             })}
             <Pressable
-              onPress={() => router.push("/muscles")}
+              onPress={() => router.push(`/muscles?workoutId=${id}` as Href)}
               style={[styles.planChip, styles.planChipAdd]}
               accessibilityRole="button"
               accessibilityLabel={t("Add exercises from the muscle explorer")}
+              testID="add-from-muscles"
             >
               <Ionicons name="add" size={16} color={colors.brand} />
-              <Text style={[styles.planName, { color: colors.brand }]}>{t("Add")}</Text>
+              <Text style={[styles.planName, { color: colors.brand }]}>{t("Add from muscles")}</Text>
             </Pressable>
           </ScrollView>
         </View>
-      )}
 
       {queued > 0 && (
         <View style={styles.offlineBanner} testID="offline-banner">
@@ -415,6 +547,7 @@ export default function WorkoutLogger() {
                   testID={`picker-item-${item.slug}`}
                   style={styles.pickerItem}
                   onPress={() => {
+                    selectedExRef.current = item;
                     setSelectedEx(item);
                     setPickerOpen(false);
                     setPickerQuery("");
@@ -430,8 +563,15 @@ export default function WorkoutLogger() {
           </View>
         </View>
       </Modal>
-      {finished ? <View style={styles.sharePanel} testID="share-panel">
+      {finished && summary ? <View style={styles.sharePanel} testID="share-panel">
         <Text style={styles.shareTitle}>{t("SESSION COMPLETE")}</Text>
+        <Text style={styles.shareCopy} testID="session-summary">
+          {t("{count} sets", { count: formatNumber(summary.sets) })}
+          {" · "}
+          {t("{count} min", { count: formatNumber(summary.minutes) })}
+          {" · "}
+          {formatNumber(Math.round(summary.tonnage))} kg
+        </Text>
         <Text style={styles.shareCopy}>{t("Share it with the people you train with?")}</Text>
         <Text style={styles.shareAudienceLabel}>{t("Choose audience")}</Text>
         {!audienceReady ? <ActivityIndicator color={colors.brand} /> : <View style={styles.shareChips} testID="share-audience">
@@ -572,7 +712,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     marginBottom: spacing.sm,
   },
-  offlineTxt: { color: colors.warning, fontSize: 12, fontWeight: "700" },
+  offlineTxt: { color: colors.warning, fontSize: 12, fontWeight: "700", flex: 1 },
+  errorTxt: { color: colors.error, fontSize: 12, fontWeight: "700", flex: 1 },
   timer: {
     flexDirection: "row",
     alignItems: "center",

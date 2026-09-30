@@ -86,6 +86,27 @@ test("mark all read clears every unread badge", async ({ page }) => {
   await expect(page.getByTestId("mark-all-read")).toHaveCount(0);
 });
 
+test("lab results and adopted programs open their screens, and a row with nowhere to go opens a sheet", async ({ page }) => {
+  await fixtures(page, [
+    notification("lab-1", { type: "lab_report_ready", title: "Your lab report is ready", body: "Markers are in", metadata: {} }),
+    notification("prog-1", { type: "program_adopted", title: "Ada adopted your plan", body: "Push week", metadata: { channel_id: "should-not-win" } }),
+    notification("note-1", { type: "system", title: "Gym hours changed", body: "Bastille opens at 6", metadata: {} }),
+  ]);
+  await page.goto("/notifications");
+  await page.getByTestId("notification-lab-1").click();
+  await expect(page).toHaveURL(/\/labs/);
+
+  await page.goto("/notifications");
+  await page.getByTestId("notification-prog-1").click();
+  await expect(page).toHaveURL(/\/program/);
+
+  await page.goto("/notifications");
+  await page.getByTestId("notification-note-1").click();
+  await expect(page.getByTestId("notification-sheet")).toBeVisible();
+  await expect(page.getByTestId("notification-sheet-title")).toContainText("Gym hours changed");
+  await expect(page.getByTestId("notification-sheet-body")).toContainText("Bastille opens at 6");
+});
+
 test("an empty centre says so rather than showing a blank list", async ({ page }) => {
   await fixtures(page, []);
   await page.goto("/notifications");

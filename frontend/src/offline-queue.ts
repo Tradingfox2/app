@@ -32,8 +32,9 @@ type QueueItem = {
 };
 
 const KEY = "ironflow_offline_queue";
-let flushing = false;
 const listeners = new Set<(size: number) => void>();
+/** Serializes flushes so a later enqueue is not wiped by an in-flight save. */
+let flushTail: Promise<number> = Promise.resolve(0);
 
 async function loadQueue(): Promise<QueueItem[]> {
   const raw = (await storage.getItem(KEY, null)) as unknown;
@@ -58,6 +59,12 @@ export async function queueSize(): Promise<number> {
   return (await loadQueue()).length;
 }
 
+/** Sets for one workout that have not reached the server yet. */
+export async function pendingFor(workoutId: string): Promise<number> {
+  const q = await loadQueue();
+  return q.filter((item) => item.workout_id === workoutId).length;
+}
+
 export async function enqueueSet(workoutId: string, payload: SetPayload): Promise<void> {
   const q = await loadQueue();
   q.push({
@@ -72,25 +79,35 @@ export async function enqueueSet(workoutId: string, payload: SetPayload): Promis
   flushQueue().catch(() => {});
 }
 
-export async function flushQueue(): Promise<void> {
-  if (flushing) return;
-  flushing = true;
-  try {
-    let q = await loadQueue();
-    if (q.length === 0) return;
-    const remaining: QueueItem[] = [];
-    for (const item of q) {
+export async function flushQueue(): Promise<number> {
+  const run = flushTail.catch(() => 0).then(async () => {
+    const snapshot = await loadQueue();
+    if (snapshot.length === 0) return 0;
+    const succeeded = new Set<string>();
+    const attempts = new Map<string, number>();
+    for (const item of snapshot) {
       try {
         await api.addSet(item.workout_id, item.payload);
+        succeeded.add(item.local_id);
       } catch {
-        item.attempts += 1;
-        remaining.push(item);
+        attempts.set(item.local_id, item.attempts + 1);
       }
     }
+    // Re-read so a set enqueued mid-flush is kept, and only confirmed posts leave.
+    const latest = await loadQueue();
+    const remaining = latest
+      .filter((item) => !succeeded.has(item.local_id))
+      .map((item) =>
+        attempts.has(item.local_id) ? { ...item, attempts: attempts.get(item.local_id) ?? item.attempts } : item,
+      );
     await saveQueue(remaining);
-  } finally {
-    flushing = false;
-  }
+    return remaining.length;
+  });
+  flushTail = run.then(
+    () => 0,
+    () => 0,
+  );
+  return run;
 }
 
 // Auto-flush on regained connectivity

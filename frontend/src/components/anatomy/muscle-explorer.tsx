@@ -8,6 +8,7 @@ import {
   Dimensions,
   Pressable,
   Platform,
+  Modal,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -145,6 +146,8 @@ export type MuscleExplorerProps = {
   refreshing?: boolean;
   onRefresh?: () => void;
   initialMuscle?: MuscleSlug | null;
+  /** Logger that should receive the plan. Absent means ask before using another open session. */
+  workoutId?: string;
 };
 
 export function MuscleExplorer({
@@ -152,6 +155,7 @@ export function MuscleExplorer({
   refreshing,
   onRefresh,
   initialMuscle,
+  workoutId,
 }: MuscleExplorerProps) {
   const { t } = useI18n();
   // View state
@@ -367,7 +371,25 @@ export function MuscleExplorer({
     error?: boolean;
   } | null>(null);
   const [addingKey, setAddingKey] = useState<string | null>(null);
+  const [mergeAsk, setMergeAsk] = useState<{ slugs: string[]; label: string; openId: string; openTitle: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showAdded = useCallback((targetId: string, label: string, created: boolean) => {
+    setAddToast({
+      workoutId: targetId,
+      label: created
+        ? t("{label} added to a new session", { label })
+        : t("{label} added to this session", { label }),
+    });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setAddToast(null), 6000);
+  }, [t]);
+
+  const createSession = useCallback(async (slugs: string[], label: string) => {
+    const title = selectedMuscle ? `${t(MUSCLE_NAMES[selectedMuscle])} ${t("Session")}` : t("Session");
+    const created = await api.createWorkout(title, undefined, slugs);
+    showAdded(created.id, label, true);
+  }, [selectedMuscle, showAdded, t]);
 
   const handleAddToWorkout = useCallback(
     async (slugs: string[], label: string) => {
@@ -376,37 +398,63 @@ export function MuscleExplorer({
       const key = unique.join("|");
       setAddingKey(key);
       try {
-        const existing = await api.workouts().catch(() => []);
-        const open = existing.find((w: any) => !w.ended_at);
-        let workoutId: string;
-        if (open) {
-          await api.planExercises(open.id, unique);
-          workoutId = open.id;
-        } else {
-          const title = selectedMuscle
-            ? `${MUSCLE_NAMES[selectedMuscle]} session`
-            : "Session";
-          const created = await api.createWorkout(title, undefined, unique);
-          workoutId = created.id;
+        if (workoutId) {
+          await api.planExercises(workoutId, unique);
+          showAdded(workoutId, label, false);
+          return;
         }
-        setAddToast({
-          workoutId,
-          label: `${label} added to ${open ? "your live session" : "a new session"}`,
-        });
+        const existing = await api.workouts().catch(() => []);
+        const open = existing.find((workout: { ended_at?: string | null; id: string; title?: string }) => !workout.ended_at);
+        if (open) {
+          setMergeAsk({ slugs: unique, label, openId: open.id, openTitle: open.title || t("Session") });
+          return;
+        }
+        await createSession(unique, label);
       } catch (err) {
         setAddToast({
           workoutId: "",
-          label: err instanceof Error ? err.message : "Could not add to workout",
+          label: err instanceof Error ? err.message : t("Could not add to workout"),
           error: true,
         });
-      } finally {
-        setAddingKey(null);
         if (toastTimer.current) clearTimeout(toastTimer.current);
         toastTimer.current = setTimeout(() => setAddToast(null), 6000);
+      } finally {
+        setAddingKey(null);
       }
     },
-    [addingKey, selectedMuscle],
+    [addingKey, createSession, showAdded, t, workoutId],
   );
+
+  const confirmExplorerMerge = async () => {
+    if (!mergeAsk) return;
+    const ask = mergeAsk;
+    setMergeAsk(null);
+    try {
+      await api.planExercises(ask.openId, ask.slugs);
+      showAdded(ask.openId, ask.label, false);
+    } catch (err) {
+      setAddToast({
+        workoutId: "",
+        label: err instanceof Error ? err.message : t("Could not add to workout"),
+        error: true,
+      });
+    }
+  };
+
+  const declineExplorerMerge = async () => {
+    if (!mergeAsk) return;
+    const ask = mergeAsk;
+    setMergeAsk(null);
+    try {
+      await createSession(ask.slugs, ask.label);
+    } catch (err) {
+      setAddToast({
+        workoutId: "",
+        label: err instanceof Error ? err.message : t("Could not add to workout"),
+        error: true,
+      });
+    }
+  };
 
   useEffect(
     () => () => {
@@ -615,6 +663,20 @@ export function MuscleExplorer({
         </View>
       )}
 
+      <Modal visible={!!mergeAsk} transparent animationType="fade" onRequestClose={() => setMergeAsk(null)}>
+        <Pressable style={styles.mergeBackdrop} onPress={() => setMergeAsk(null)}>
+          <Pressable style={styles.mergeSheet} testID="explorer-merge-sheet" onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.toastText}>{t("Add these exercises to {title}?", { title: mergeAsk?.openTitle ?? "" })}</Text>
+            <Pressable accessibilityRole="button" testID="explorer-merge-open" onPress={() => void confirmExplorerMerge()} style={styles.toastBtn}>
+              <Text style={styles.toastBtnText}>{t("ADD TO OPEN SESSION")}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" testID="explorer-merge-new" onPress={() => void declineExplorerMerge()} style={styles.toastBtn}>
+              <Text style={styles.toastBtnText}>{t("NEW SESSION")}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {addToast ? (
         <View
           style={[styles.toast, addToast.error && styles.toastError]}
@@ -679,6 +741,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toastBtnText: { color: colors.brandOn, fontWeight: "800", letterSpacing: 1 },
+  mergeBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: spacing.xl },
+  mergeSheet: { backgroundColor: colors.surface2, borderRadius: 12, padding: spacing.lg, gap: spacing.md },
   controlBar: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
