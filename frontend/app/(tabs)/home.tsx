@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect, type Href } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
@@ -20,6 +20,13 @@ import { colors, radius, spacing, type, card } from "@/src/theme";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
 import { useI18n } from "@/src/i18n";
+import { FOCUS_LABELS } from "@/src/program-schema";
+import { datedSessionTitle } from "@/src/session-title";
+
+function unreadLabel(count: number): string | null {
+  if (count <= 0) return null;
+  return count > 99 ? "99+" : String(count);
+}
 
 function Ring({
   value,
@@ -89,24 +96,42 @@ export default function Home() {
   const { user } = useAuth();
   const { t, formatDate, formatNumber } = useI18n();
   const [data, setData] = useState<any>(null);
+  const [dashError, setDashError] = useState<string | null>(null);
+  const [dashSettled, setDashSettled] = useState(false);
   const [heatmap, setHeatmap] = useState<{ volumes: Record<string, number>; max: number }>({
     volumes: {},
     max: 0,
   });
+  const [heatLoaded, setHeatLoaded] = useState(false);
+  const [heatError, setHeatError] = useState<string | null>(null);
   const [previewMuscle, setPreviewMuscle] = useState<MuscleSlug | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [dmUnread, setDmUnread] = useState(0);
+  const [notifUnread, setNotifUnread] = useState(0);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
   const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
 
   const load = useCallback(async () => {
-    try {
-      const [d, h] = await Promise.all([api.dashboard(), api.heatmap()]);
-      setData(d);
-      setHeatmap(h);
-    } catch {
-      setData({});
+    const [todayResult, heatResult] = await Promise.allSettled([api.homeToday(), api.heatmap()]);
+    if (todayResult.status === "fulfilled") {
+      setData(todayResult.value);
+      setDashError(null);
+    } else {
+      const reason = todayResult.reason;
+      setDashError(reason instanceof Error ? reason.message : t("Could not load home"));
     }
+    if (heatResult.status === "fulfilled") {
+      setHeatmap(heatResult.value);
+      setHeatLoaded(true);
+      setHeatError(null);
+    } else {
+      const reason = heatResult.reason;
+      setHeatError(reason instanceof Error ? reason.message : t("Could not load muscle load"));
+    }
+    setDashSettled(true);
     api
       .coachStatus()
       .then((s) => setCoach({ connected: s.connected }))
@@ -115,11 +140,13 @@ export default function Home() {
       .coachTip()
       .then((tip) => setCoachTip({ tip: tip.tip }))
       .catch(() => setCoachTip(null));
-  }, []);
+    api.dmUnreadCount().then((row) => setDmUnread(row.count || 0)).catch(() => undefined);
+    api.unreadNotificationCount().then((row) => setNotifUnread(row.count || 0)).catch(() => undefined);
+  }, [t]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(useCallback(() => {
+    void load();
+  }, [load]));
 
   const strain = data?.strain?.value ?? 0;
   const recovery = data?.recovery?.value ?? 0;
@@ -130,22 +157,45 @@ export default function Home() {
   const training = data?.training ?? {};
   const wearableConnected = Boolean(data?.wearable_connected);
   const activeWorkout = data?.active_workout ?? null;
-  const [starting, setStarting] = useState(false);
+  const nextSession = data?.next_session ?? null;
+  const showSkeleton = !dashSettled;
 
-  const startOrResume = async () => {
-    if (activeWorkout?.id) {
-      router.push(`/workout/${activeWorkout.id}`);
-      return;
+  const failStart = (cause: unknown) => {
+    setStartError(cause instanceof Error ? cause.message : t("Could not start session"));
+  };
+
+  const resume = () => {
+    if (activeWorkout?.id) router.push(`/workout/${activeWorkout.id}` as Href);
+  };
+
+  const startDay = async () => {
+    if (!nextSession?.program_id || starting) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const workout = await api.startProgramDay(nextSession.program_id, {
+        week_index: nextSession.week_index,
+        day_index: nextSession.day_index,
+      });
+      if (!workout?.id) throw new Error(t("Could not start session"));
+      router.push(`/workout/${workout.id}` as Href);
+    } catch (cause) {
+      failStart(cause);
+    } finally {
+      setStarting(false);
     }
+  };
+
+  const startEmpty = async () => {
     if (starting) return;
     setStarting(true);
+    setStartError(null);
     try {
-      const w = await api.createWorkout(
-        `${t("Session")} · ${formatDate(new Date(), { weekday: "short", day: "numeric", month: "short" })}`,
-      );
-      router.push(`/workout/${w.id}`);
-    } catch {
-      router.push("/(tabs)/workouts");
+      const workout = await api.createWorkout(datedSessionTitle(t, formatDate));
+      if (!workout?.id) throw new Error(t("Could not create session"));
+      router.push(`/workout/${workout.id}` as Href);
+    } catch (cause) {
+      failStart(cause);
     } finally {
       setStarting(false);
     }
@@ -168,75 +218,180 @@ export default function Home() {
         }
       >
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerCopy}>
             <Text style={type.eyebrow}>{t("READY TO TRAIN")}</Text>
-            <Text style={styles.name}>{user?.full_name ?? user?.email}</Text>
+            <Text style={styles.name} numberOfLines={1}>{user?.full_name ?? user?.email}</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <HeaderButton testID="home-search" label={t("Search")} icon="search" onPress={() => router.push("/search")} />
+            <HeaderButton
+              testID="home-messages"
+              badgeTestID="home-dm-badge"
+              label={dmUnread ? t("Messages, {count} unread", { count: unreadLabel(dmUnread) ?? dmUnread }) : t("Messages")}
+              icon="chatbubble-ellipses-outline"
+              badge={unreadLabel(dmUnread)}
+              onPress={() => router.push("/messages")}
+            />
+            <HeaderButton
+              testID="home-notifications"
+              badgeTestID="home-notif-badge"
+              label={notifUnread ? t("Notifications, {count} unread", { count: unreadLabel(notifUnread) ?? notifUnread }) : t("Notifications")}
+              icon="notifications-outline"
+              badge={unreadLabel(notifUnread)}
+              onPress={() => router.push("/notifications")}
+            />
           </View>
           <View style={styles.streak} testID="streak-badge">
             <Text style={styles.streakLabel}>{t("THIS WEEK")}</Text>
-            <Text style={styles.streakNum}>{workoutsWeek}</Text>
+            {data ? (
+              <Text style={styles.streakNum}>{workoutsWeek}</Text>
+            ) : (
+              <View style={styles.skeletonNum} />
+            )}
             <Text style={styles.streakLabel}>{t("workouts")}</Text>
           </View>
         </View>
 
         <LiveNowStrip />
 
+        {dashError ? (
+          <View style={styles.errorBanner} accessibilityRole="alert" testID="home-error">
+            <Text style={styles.errorTxt}>{dashError}</Text>
+            <Pressable accessibilityRole="button" onPress={() => void load()} testID="home-retry" style={styles.retryBtn}>
+              <Text style={styles.retryTxt}>{t("Retry")}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={styles.ringsCard} testID="rings-card">
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t("TODAY")}</Text>
-            {!wearableConnected && (
+            {data && !wearableConnected ? (
               <Text style={styles.cardHint}>{t("NO WEARABLE DATA")}</Text>
-            )}
+            ) : null}
           </View>
-          <View style={styles.rings}>
-            <Ring value={strain} max={21} color={colors.brand} label={t("STRAIN")} />
-            <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
-            <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
-          </View>
-          {!wearableConnected && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("Connect a wearable source")}
-              onPress={() => router.push("/sources")}
-              style={styles.connectRow}
-              testID="connect-source-cta"
-            >
-              <Ionicons name="watch-outline" size={16} color={colors.brand} />
-              <Text style={styles.connectTxt}>
-                {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.brand} />
-            </Pressable>
-          )}
+          {showSkeleton ? (
+            <View style={styles.rings} testID="home-skeleton" accessibilityLabel={t("Loading home")}>
+              <View style={styles.skeletonRing} />
+              <View style={styles.skeletonRing} />
+              <View style={styles.skeletonRing} />
+            </View>
+          ) : data ? (
+            <>
+              <View style={styles.rings}>
+                <Ring value={strain} max={21} color={colors.brand} label={t("STRAIN")} />
+                <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
+                <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
+              </View>
+              {!wearableConnected && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Connect a wearable source")}
+                  onPress={() => router.push("/sources")}
+                  style={styles.connectRow}
+                  testID="connect-source-cta"
+                >
+                  <Ionicons name="watch-outline" size={16} color={colors.brand} />
+                  <Text style={styles.connectTxt}>
+                    {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.brand} />
+                </Pressable>
+              )}
+            </>
+          ) : null}
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={activeWorkout ? t("Resume your live session") : t("Start a workout")}
-          onPress={startOrResume}
-          disabled={starting}
-          style={[styles.startCta, activeWorkout && styles.resumeCta]}
-          testID="start-workout-cta"
-        >
-          <Ionicons
-            name={activeWorkout ? "play-circle" : "add-circle"}
-            size={22}
-            color={colors.brandOn}
-          />
-          <Text style={type.button}>
-            {activeWorkout ? t("RESUME SESSION") : starting ? t("STARTING…") : t("START WORKOUT")}
-          </Text>
-        </Pressable>
+        {/* The LIVE NOW strip above owns the band under the header. This card sits under the rings. */}
+        <View style={styles.todayCard} testID="today-card">
+          <Text style={styles.cardTitle}>{t("TODAY'S SESSION")}</Text>
+          {activeWorkout ? (
+            <Text style={styles.todayMeta}>{activeWorkout.title}</Text>
+          ) : nextSession ? (
+            <Text style={styles.todayMeta} testID="today-plan">
+              {t("WEEK {week}", { week: nextSession.week_index })}
+              {" · "}
+              {t("DAY {day}", { day: nextSession.day_index })}
+              {" · "}
+              {t(FOCUS_LABELS[nextSession.focus] ?? nextSession.focus)}
+              {" · "}
+              {t("{count} exercises", { count: formatNumber(nextSession.exercises?.length ?? 0) })}
+            </Text>
+          ) : data ? (
+            <Text style={styles.todayMeta}>{t("No training plan yet")}</Text>
+          ) : null}
+          {activeWorkout ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Resume your live session")}
+              onPress={resume}
+              style={[styles.startCta, styles.resumeCta]}
+              testID="start-workout-cta"
+            >
+              <Ionicons name="play-circle" size={22} color={colors.brandOn} />
+              <Text style={type.button}>{t("RESUME SESSION")}</Text>
+            </Pressable>
+          ) : nextSession ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Start day {day} session", { day: nextSession.day_index })}
+              onPress={() => void startDay()}
+              disabled={starting}
+              style={styles.startCta}
+              testID="today-start-day"
+            >
+              <Ionicons name="play" size={18} color={colors.brandOn} />
+              <Text style={type.button}>{starting ? t("STARTING…") : t("START DAY")}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Open your training plan")}
+              onPress={() => router.push("/program")}
+              style={styles.startCta}
+              testID="today-generate"
+            >
+              <Ionicons name="sparkles" size={18} color={colors.brandOn} />
+              <Text style={type.button}>{t("GENERATE PLAN")}</Text>
+            </Pressable>
+          )}
+          {!activeWorkout ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Start a workout")}
+              onPress={() => void startEmpty()}
+              disabled={starting}
+              style={styles.secondaryCta}
+              testID={nextSession ? "today-start-empty" : "start-workout-cta"}
+            >
+              <Text style={styles.secondaryCtaTxt}>{starting ? t("STARTING…") : t("START EMPTY")}</Text>
+            </Pressable>
+          ) : nextSession ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Start a workout")}
+              onPress={() => void startEmpty()}
+              disabled={starting}
+              style={styles.secondaryCta}
+              testID="today-start-empty"
+            >
+              <Text style={styles.secondaryCtaTxt}>{t("START EMPTY")}</Text>
+            </Pressable>
+          ) : null}
+          {startError ? (
+            <Text style={styles.errorTxt} accessibilityRole="alert" testID="start-error">{startError}</Text>
+          ) : null}
+        </View>
 
         <View style={styles.statsCard} testID="training-week-card">
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t("TRAINING · 7 DAYS")}</Text>
             <View style={styles.streakPill}>
               <Ionicons name="flame" size={12} color={colors.blaze} />
-              <Text style={styles.streakPillTxt}>{t("{count}d streak", { count: training.streak_days ?? 0 })}</Text>
+              <Text style={styles.streakPillTxt}>{data ? t("{count}d streak", { count: training.streak_days ?? 0 }) : "—"}</Text>
             </View>
           </View>
-          <View style={styles.statsRow}>
+          {data ? <View style={styles.statsRow}>
             <Stat label={t("SETS")} value={formatNumber(training.sets_week ?? 0)} />
             <Stat
               label="TONNAGE"
@@ -249,17 +404,27 @@ export default function Home() {
             />
             <Stat label={t("MINUTES")} value={formatNumber(training.minutes_week ?? 0)} />
             <Stat label={t("MUSCLES")} value={formatNumber(training.muscles_week?.length ?? 0)} />
-          </View>
+          </View> : <View style={styles.skeletonBar} testID="home-stats-skeleton" />}
         </View>
 
         <DidYouKnow count={7} />
 
         <View style={styles.quickRow}>
-          <QuickAction icon="sparkles" label={t("AI COACH")} testID="quick-program" onPress={() => router.push("/program")} />
+          <QuickAction icon="calendar" label={t("TRAINING PLAN")} testID="quick-program" onPress={() => router.push("/program")} />
           <QuickAction icon="flask" label={t("LABS")} testID="quick-labs" onPress={() => router.push("/labs")} />
           <QuickAction icon="watch" label={t("SOURCES")} testID="quick-sources" onPress={() => router.push("/sources")} />
           <QuickAction icon="qr-code" label={t("CHECK-IN")} testID="quick-checkin" onPress={() => router.push("/checkin")} />
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("TRAIN WITH A COACH")}
+          testID="quick-coach"
+          style={styles.coachRow}
+          onPress={() => router.push((user?.role === "coach" ? "/partner" : "/coach/onboarding") as Href)}
+        >
+          <Ionicons name="ribbon-outline" size={18} color={colors.brand} />
+          <Text style={styles.coachRowTxt}>{t("TRAIN WITH A COACH")}</Text>
+        </Pressable>
 
         <View style={styles.metricRow}>
           <MetricCard label="HRV" value={hrv ? `${Math.round(hrv)}` : "—"} unit="ms" />
@@ -294,6 +459,15 @@ export default function Home() {
 
         <View style={styles.heatCard} testID="home-heatmap-card">
           <Text style={styles.cardTitle}>{t("MUSCLE LOAD · 7 DAYS")}</Text>
+          {heatError ? (
+            <View accessibilityRole="alert" testID="heatmap-error">
+              <Text style={styles.errorTxt}>{heatError}</Text>
+              <Pressable accessibilityRole="button" onPress={() => void load()} testID="heatmap-retry">
+                <Text style={styles.retryTxt}>{t("Retry")}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {heatLoaded ? (
           <MuscleHeatmap
             volumes={heatmap.volumes}
             max={heatmap.max}
@@ -315,9 +489,43 @@ export default function Home() {
               );
             }}
           />
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function HeaderButton({
+  testID,
+  badgeTestID,
+  label,
+  icon,
+  badge,
+  onPress,
+}: {
+  testID: string;
+  badgeTestID?: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  badge?: string | null;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      onPress={onPress}
+      style={styles.headerIcon}
+    >
+      <Ionicons name={icon} size={22} color={colors.text} />
+      {badge ? (
+        <View style={styles.headerBadge} testID={badgeTestID}>
+          <Text style={styles.headerBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -369,11 +577,65 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   header: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: spacing.sm,
     marginBottom: spacing.lg,
   },
+  headerCopy: { flexGrow: 1, flexShrink: 1, minWidth: 140 },
+  headerActions: { flexDirection: "row", alignItems: "center" },
+  headerIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  headerBadge: {
+    position: "absolute",
+    top: 2,
+    right: 0,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerBadgeText: { color: colors.brandOn, fontSize: 10, fontWeight: "900" },
   name: { ...type.screenTitle, marginTop: 4 },
+  skeletonNum: { width: 28, height: 26, borderRadius: 6, backgroundColor: colors.surface3, marginVertical: 2 },
+  skeletonRing: { width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surface3 },
+  skeletonBar: { height: 28, borderRadius: radius.sm, backgroundColor: colors.surface3 },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+    minHeight: 44,
+  },
+  errorTxt: { color: colors.error, fontSize: 13, fontWeight: "700", flex: 1 },
+  retryBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
+  retryTxt: { color: colors.brand, fontWeight: "800" },
+  todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md },
+  todayMeta: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: spacing.md },
+  secondaryCta: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.sm,
+  },
+  secondaryCtaTxt: { color: colors.text, fontWeight: "800", letterSpacing: 1 },
+  coachRow: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  coachRowTxt: { color: colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.6 },
   startCta: {
     minHeight: 52,
     backgroundColor: colors.brand,

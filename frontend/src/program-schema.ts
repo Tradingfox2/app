@@ -46,3 +46,8 @@ export const FOCUS_LABELS: Record<string, string> = {
   conditioning: "CONDITIONING",
   rest: "REST",
 };
+
+/** Session title for a program day that is not attached to an existing workout id. */
+export function programDayName(focus: string): string {
+  return FOCUS_LABELS[focus] ?? focus;
+}

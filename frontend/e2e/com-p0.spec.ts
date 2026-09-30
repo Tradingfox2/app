@@ -169,10 +169,8 @@ test("a workout that did not finish is not published", async ({ page }) => {
   });
   await page.goto("/workout/w-open");
   await page.getByTestId("finish-btn").click();
-  await expect(page.getByTestId("share-audience-friends")).toBeVisible();
-  await page.getByTestId("share-workout").click();
-  await expect(page.getByTestId("share-error")).toContainText("Finish the workout before sharing it");
-  await expect(page.getByTestId("share-panel")).toBeVisible();
+  await expect(page.getByTestId("finish-error")).toContainText("Could not finish");
+  await expect(page.getByTestId("share-panel")).toHaveCount(0);
   expect(published).toEqual([]);
 });
 

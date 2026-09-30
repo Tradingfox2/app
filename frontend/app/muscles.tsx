@@ -47,7 +47,8 @@ export default function MusclesScreen() {
     headerTitleStyle: { color: colors.text, fontWeight: "800" as const },
     headerLeft: () => <BackToHome />,
   };
-  const params = useLocalSearchParams<{ muscle?: string }>();
+  const params = useLocalSearchParams<{ muscle?: string; workoutId?: string | string[] }>();
+  const workoutId = Array.isArray(params.workoutId) ? params.workoutId[0] : params.workoutId;
   const initialMuscle = MUSCLE_SLUGS.includes(params.muscle as MuscleSlug)
     ? (params.muscle as MuscleSlug)
     : undefined;
@@ -115,6 +116,7 @@ export default function MusclesScreen() {
         refreshing={refreshing}
         onRefresh={handleRefresh}
         initialMuscle={initialMuscle}
+        workoutId={workoutId}
       />
     </View>
   );

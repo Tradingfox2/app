@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,13 +13,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { api } from "@/src/api";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
 import type { MuscleSlug, RecommendationExercise } from "@/src/components/anatomy/muscle-types";
 import { useI18n } from "@/src/i18n";
+import { datedSessionTitle } from "@/src/session-title";
 
 type Tab = "sessions" | "library";
 type LibraryExercise = RecommendationExercise & { id: string };
@@ -38,21 +41,27 @@ export default function Workouts() {
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [w, e, m] = await Promise.all([
-      api.workouts().catch(() => []),
-      api.exercises().catch(() => []),
-      api.muscles().catch(() => []),
-    ]);
-    setWorkouts(w);
-    setExercises(e);
-    setMuscles(m);
-  }, []);
+    try {
+      const [w, e, m] = await Promise.all([api.workouts(), api.exercises(), api.muscles()]);
+      setWorkouts(w);
+      setExercises(e);
+      setMuscles(m);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t("Could not load sessions"));
+    } finally {
+      setLoaded(true);
+    }
+  }, [t]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(useCallback(() => {
+    void load();
+  }, [load]));
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -121,12 +130,36 @@ export default function Workouts() {
     }
   };
 
-  const openNewSession = () => {
+  const createDated = async () => {
+    if (creating) return;
+    setCreating(true);
     setCreateError(null);
-    if (!newTitle.trim()) {
-      setNewTitle(selectedSlugs.length > 0 ? t("Library Session") : "");
+    try {
+      const w = await api.createWorkout(datedSessionTitle(t, formatDate));
+      if (!w?.id) throw new Error(t("Could not create session"));
+      await load();
+      router.push(`/workout/${w.id}`);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : t("Could not create session"));
+    } finally {
+      setCreating(false);
     }
-    setModal(true);
+  };
+
+  const openNewSession = () => {
+    if (tab === "library" && selectedSlugs.length > 0) {
+      setCreateError(null);
+      if (!newTitle.trim()) setNewTitle(t("Library Session"));
+      setModal(true);
+      return;
+    }
+    void createDated();
+  };
+
+  const sessionMeta = (item: { started_at: string; ended_at?: string | null; duration_sec?: number | null }) => {
+    const when = formatDate(item.started_at);
+    if (!item.ended_at) return `${when} ${t("· in progress")}`;
+    return `${when} · ${Math.round((item.duration_sec ?? 0) / 60)} min`;
   };
 
   return (
@@ -150,16 +183,52 @@ export default function Workouts() {
         ))}
       </View>
 
+      {loadError ? (
+        <View accessibilityRole="alert" style={styles.errorBanner} testID="workouts-error">
+          <Text style={styles.createError}>{loadError}</Text>
+          <Pressable accessibilityRole="button" onPress={() => void load()} testID="workouts-retry" style={styles.retryBtn}>
+            <Text style={styles.retryTxt}>{t("Retry")}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {createError && !modal ? (
+        <Text accessibilityRole="alert" style={[styles.createError, styles.errorPad]} testID="create-error">{createError}</Text>
+      ) : null}
+      {!loaded && !loadError ? <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.lg }} testID="workouts-loading" /> : null}
+
       {tab === "sessions" ? (
         <FlatList
           data={workouts}
           keyExtractor={(w) => w.id}
           contentContainerStyle={styles.listPad}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={colors.brand}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await load();
+                setRefreshing(false);
+              }}
+            />
+          }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="barbell-outline" size={48} color={colors.textDim} />
-              <Text style={styles.emptyTxt}>{t("No sessions yet. Start your first!")}</Text>
-            </View>
+            loaded && !loadError ? (
+              <View style={styles.empty} testID="sessions-empty">
+                <Ionicons name="barbell-outline" size={48} color={colors.textDim} />
+                <Text style={styles.emptyTxt}>{t("No sessions yet. Start your first!")}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("NEW SESSION")}
+                  testID="empty-new-session"
+                  onPress={() => void createDated()}
+                  disabled={creating}
+                  style={styles.emptyCta}
+                >
+                  <Text style={styles.emptyCtaTxt}>{creating ? t("CREATING...") : t("NEW SESSION")}</Text>
+                </Pressable>
+              </View>
+            ) : null
           }
           renderItem={({ item }) => (
             <Pressable
@@ -169,12 +238,7 @@ export default function Workouts() {
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.sessionTitle}>{item.title}</Text>
-                <Text style={styles.sessionMeta}>
-                  {formatDate(item.started_at)}{" "}
-                  {item.duration_sec
-                    ? `· ${Math.round(item.duration_sec / 60)} min`
-                    : t("· in progress")}
-                </Text>
+                <Text style={styles.sessionMeta} testID={`workout-meta-${item.id}`}>{sessionMeta(item)}</Text>
               </View>
               <Ionicons name="chevron-forward" color={colors.textMuted} size={20} />
             </Pressable>
@@ -363,7 +427,7 @@ export default function Workouts() {
               onChangeText={setNewTitle}
               autoFocus
             />
-            {createError ? <Text style={styles.createError}>{createError}</Text> : null}
+            {createError ? <Text accessibilityRole="alert" style={styles.createError} testID="create-error">{createError}</Text> : null}
             <Pressable
               style={[styles.sheetCta, (!newTitle.trim() || creating) && styles.sheetCtaDisabled]}
               onPress={startWorkout}
@@ -611,4 +675,17 @@ const styles = StyleSheet.create({
   sheetCtaDisabled: { opacity: 0.45 },
   sheetCtaTxt: { color: colors.brandOn, fontWeight: "900", letterSpacing: 2 },
   createError: { color: colors.error, fontSize: 12, marginBottom: spacing.md },
+  errorBanner: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  errorPad: { paddingHorizontal: spacing.lg },
+  retryBtn: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
+  retryTxt: { color: colors.brand, fontWeight: "800" },
+  emptyCta: {
+    minHeight: 44,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyCtaTxt: { color: colors.brandOn, fontWeight: "900", letterSpacing: 1 },
 });

@@ -1,15 +1,33 @@
-import { Redirect, Tabs } from "expo-router";
+import { useEffect, useState } from "react";
+import { Redirect, Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/src/theme";
 import { ActivityIndicator, Platform, View } from "react-native";
 import { useAuth } from "@/src/auth-context";
+import { api } from "@/src/api";
 import { useI18n } from "@/src/i18n";
 import { useShellScreenView } from "@/src/screen-view";
+
+function badge(count: number): string | undefined {
+  if (count <= 0) return undefined;
+  return count > 99 ? "99+" : String(count);
+}
 
 export default function TabsLayout() {
   const { user, loading } = useAuth();
   const { t } = useI18n();
+  const pathname = usePathname();
+  const [dmUnread, setDmUnread] = useState(0);
+  const [notifUnread, setNotifUnread] = useState(0);
   useShellScreenView(!loading && !!user);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    api.dmUnreadCount().then((row) => { if (!cancelled) setDmUnread(row.count || 0); }).catch(() => undefined);
+    api.unreadNotificationCount().then((row) => { if (!cancelled) setNotifUnread(row.count || 0); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [user, pathname]);
 
   if (loading) {
     return (
@@ -39,7 +57,8 @@ export default function TabsLayout() {
           paddingTop: 8,
           paddingBottom: Platform.OS === "ios" ? 28 : 10,
         },
-        tabBarItemStyle: { minHeight: 44 },
+        tabBarItemStyle: { minHeight: 44, minWidth: 44 },
+        tabBarBadgeStyle: { backgroundColor: colors.brand, color: colors.brandOn, fontSize: 10, fontWeight: "900" },
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "700",
@@ -65,6 +84,11 @@ export default function TabsLayout() {
         name="community"
         options={{
           title: t("Community"),
+          tabBarAccessibilityLabel: dmUnread
+            ? t("Community, {count} unread", { count: badge(dmUnread) ?? dmUnread })
+            : t("Community"),
+          tabBarBadge: badge(dmUnread),
+          tabBarButtonTestID: "tab-community",
           tabBarIcon: ({ color }) => <Ionicons name="people" color={color} size={22} />,
         }}
       />
@@ -72,6 +96,11 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: t("You"),
+          tabBarAccessibilityLabel: notifUnread
+            ? t("You, {count} unread", { count: badge(notifUnread) ?? notifUnread })
+            : t("You"),
+          tabBarBadge: badge(notifUnread),
+          tabBarButtonTestID: "tab-you",
           tabBarIcon: ({ color }) => <Ionicons name="person-circle" color={color} size={22} />,
         }}
       />

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -24,6 +24,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   coach_decision: "ribbon-outline",
   moderation_action: "shield-checkmark-outline",
   lab_report_ready: "flask-outline",
+  lab_report: "flask-outline",
   community: "people-outline",
   comment_reply: "return-down-forward",
   comment_like: "heart-outline",
@@ -52,6 +53,7 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState("");
+  const [sheet, setSheet] = useState<AppNotification | null>(null);
   const busy = useRef(false);
   const revision = useRef(0);
   const load = useCallback(async (only: boolean) => {
@@ -82,6 +84,14 @@ export default function NotificationsScreen() {
       setRows(current => current.map(item => item.id === row.id ? { ...item, read_at: new Date().toISOString() } : item));
       api.markNotificationRead(row.id).catch(() => void load(unreadOnly));
     }
+    if (row.type === "lab_report_ready" || row.type === "lab_report") {
+      router.push("/labs");
+      return;
+    }
+    if (row.type === "program_adopted") {
+      router.push("/program");
+      return;
+    }
     const sessionId = row.metadata?.session_id;
     if (row.type === "live_session" && typeof sessionId === "string") {
       router.push({ pathname: "/live/[id]", params: { id: sessionId } });
@@ -94,14 +104,16 @@ export default function NotificationsScreen() {
     }
     // Every event written through notify() carries target_type + target_id.
     const target = typeof row.metadata?.target_id === "string" ? row.metadata.target_id : null;
-    if (!target) return;
-    switch (row.metadata?.target_type) {
-      case "user": return router.push({ pathname: "/user/[id]", params: { id: target } });
-      case "dm": return router.push({ pathname: "/dm/[id]", params: { id: target } });
-      case "community": return router.push({ pathname: "/community/[id]", params: { id: target } });
-      case "post": return router.push({ pathname: "/post/[id]", params: { id: target } });
-      default: return;
+    if (target) {
+      switch (row.metadata?.target_type) {
+        case "user": return router.push({ pathname: "/user/[id]", params: { id: target } });
+        case "dm": return router.push({ pathname: "/dm/[id]", params: { id: target } });
+        case "community": return router.push({ pathname: "/community/[id]", params: { id: target } });
+        case "post": return router.push({ pathname: "/post/[id]", params: { id: target } });
+        default: break;
+      }
     }
+    setSheet(row);
   };
 
   const more = async () => {
@@ -160,6 +172,17 @@ export default function NotificationsScreen() {
       </Pressable>}
       ListFooterComponent={hasMore ? <Pressable accessibilityRole="button" testID="notifications-more" onPress={() => void more()} style={[styles.icon, { alignSelf: "center", width: "auto" }]}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Pressable> : null}
     />
+    <Modal visible={!!sheet} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
+      <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
+        <Pressable style={styles.sheet} testID="notification-sheet" onPress={(event) => event.stopPropagation()}>
+          <Text style={styles.title} testID="notification-sheet-title">{sheet ? summarise(sheet, t) : ""}</Text>
+          {sheet?.body ? <Text style={styles.body} testID="notification-sheet-body">{sheet.body}</Text> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel={t("CLOSE")} testID="notification-sheet-close" onPress={() => setSheet(null)} style={styles.sheetClose}>
+            <Text style={styles.retry}>{t("CLOSE")}</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   </SafeAreaView>;
 }
-const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.bg }, header: { height: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, headerTitle: { ...type.section, color: colors.text }, live: { color: colors.brand, fontSize: 9, fontWeight: "900", marginTop: 3 }, tabs: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm }, tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong }, tabOn: { borderColor: colors.brand, backgroundColor: colors.surface2 }, tabText: { color: colors.textMuted, fontSize: 11, fontWeight: "900" }, tabTextOn: { color: colors.brand }, list: { padding: spacing.lg, paddingBottom: spacing.xxxl }, row: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, rowUnread: { backgroundColor: colors.surface2, paddingHorizontal: spacing.sm }, title: { color: colors.text, fontWeight: "800", fontSize: 13 }, body: { color: colors.textMuted, fontSize: 12, marginTop: 2 }, time: { color: colors.textDim, fontSize: 10, marginTop: 3 }, dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted }, error: { color: colors.error, paddingHorizontal: spacing.lg }, retry: { color: colors.brand, fontSize: 11, fontWeight: "900" } });
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.bg }, header: { height: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, headerTitle: { ...type.section, color: colors.text }, live: { color: colors.brand, fontSize: 9, fontWeight: "900", marginTop: 3 }, tabs: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm }, tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong }, tabOn: { borderColor: colors.brand, backgroundColor: colors.surface2 }, tabText: { color: colors.textMuted, fontSize: 11, fontWeight: "900" }, tabTextOn: { color: colors.brand }, list: { padding: spacing.lg, paddingBottom: spacing.xxxl }, row: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, rowUnread: { backgroundColor: colors.surface2, paddingHorizontal: spacing.sm }, title: { color: colors.text, fontWeight: "800", fontSize: 13 }, body: { color: colors.textMuted, fontSize: 12, marginTop: 2 }, time: { color: colors.textDim, fontSize: 10, marginTop: 3 }, dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand }, empty: { alignItems: "center", paddingVertical: spacing.xxxl, gap: spacing.md }, emptyText: { color: colors.textMuted }, error: { color: colors.error, paddingHorizontal: spacing.lg }, retry: { color: colors.brand, fontSize: 11, fontWeight: "900" }, sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end", padding: spacing.lg }, sheet: { backgroundColor: colors.surface2, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colors.border }, sheetClose: { minHeight: 44, alignItems: "center", justifyContent: "center" } });

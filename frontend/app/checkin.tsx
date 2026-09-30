@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -11,11 +11,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect, type Href } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { api } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { datedSessionTitle } from "@/src/session-title";
 
 export default function CheckinScreen() {
   const { t, formatDate, formatNumber } = useI18n();
@@ -26,28 +27,36 @@ export default function CheckinScreen() {
   const [busy, setBusy] = useState(false);
   const [gyms, setGyms] = useState<any[]>([]);
   const [visits, setVisits] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeWorkoutId, setActiveWorkoutId] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const scannedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const [g, v] = await Promise.all([api.gyms(), api.gymVisits()]);
+      const [g, v, today] = await Promise.all([api.gyms(), api.gymVisits(), api.homeToday()]);
       setGyms(g);
       setVisits(v);
-    } catch {
-      // ignore
+      setActiveWorkoutId(today?.active_workout?.id ?? null);
+      setLoadError(null);
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : t("Could not load gyms"));
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(useCallback(() => {
+    void load();
+  }, [load]));
 
   const checkin = async (qrPayload: string) => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await api.gymCheckin(qrPayload);
+      const res = await api.gymCheckin(qrPayload, activeWorkoutId ?? undefined);
       setResult(res);
       setScanning(false);
       await load();
@@ -57,6 +66,25 @@ export default function CheckinScreen() {
     } finally {
       setBusy(false);
       scannedRef.current = false;
+    }
+  };
+
+  const goTrain = async () => {
+    if (activeWorkoutId) {
+      router.push(`/workout/${activeWorkoutId}` as Href);
+      return;
+    }
+    if (starting) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const workout = await api.createWorkout(datedSessionTitle(t, formatDate));
+      if (!workout?.id) throw new Error(t("Could not create session"));
+      router.push(`/workout/${workout.id}` as Href);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("Could not start session"));
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -154,8 +182,8 @@ export default function CheckinScreen() {
               </View>
             )}
             {error && error !== "denied" && error !== "settings" && (
-              <View style={styles.errBanner}>
-                <Text style={styles.errTxt}>{error}</Text>
+              <View style={styles.errBanner} accessibilityRole="alert">
+                <Text style={styles.errTxt} testID="checkin-server-detail">{error}</Text>
               </View>
             )}
 
@@ -178,8 +206,36 @@ export default function CheckinScreen() {
                     ? t(" — claim your partner reward at the desk")
                     : t(" · {count} more for a reward", { count: formatNumber(result.visits_until_reward) })}
                 </Text>
+                <Text style={styles.resultMeta} testID="visits-until-reward">
+                  {t("{count} visits until reward", { count: formatNumber(result.visits_until_reward ?? 0) })}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={activeWorkoutId ? t("Resume your live session") : t("Start a workout")}
+                  testID="checkin-next"
+                  onPress={() => void goTrain()}
+                  disabled={starting}
+                  style={styles.cta}
+                >
+                  <Text style={styles.ctaTxt}>
+                    {activeWorkoutId ? t("RESUME SESSION") : starting ? t("STARTING…") : t("START WORKOUT")}
+                  </Text>
+                </Pressable>
               </View>
             )}
+
+            {loading ? <ActivityIndicator color={colors.brand} style={{ marginVertical: spacing.lg }} testID="checkin-loading" accessibilityLabel={t("Loading...")} /> : null}
+            {loadError ? (
+              <View accessibilityRole="alert" testID="checkin-load-error" style={styles.errBanner}>
+                <Text style={styles.errTxt}>{loadError}</Text>
+                <Pressable accessibilityRole="button" onPress={() => { setLoading(true); void load(); }} testID="checkin-retry" style={styles.settingsBtn}>
+                  <Text style={styles.settingsTxt}>{t("Retry")}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {!loading && !loadError && gyms.length === 0 ? (
+              <Text style={styles.explainTxt} testID="checkin-empty">{t("No partner gyms yet.")}</Text>
+            ) : null}
 
             <Text style={styles.sectionTitle}>{t("PARTNER GYMS")}</Text>
             {gyms.map((g) => (
