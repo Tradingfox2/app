@@ -59,6 +59,7 @@ export default function Connections() {
       <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
       <Text numberOfLines={1} style={styles.headerTitle}>{params.name || t("PROFILE")}</Text>
     </View>
+    <Text style={{ color: colors.textDim, fontSize: 12, lineHeight: 16, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>{t("Followers and Following are people lists. The Friends feed is separate.")}</Text>
     <View style={styles.tabs}>
       {(["followers", "following"] as Tab[]).map(item => (
         <Pressable key={item} accessibilityRole="button" testID={`connections-tab-${item}`} onPress={() => { setTab(item); setLoading(true); }} style={[styles.tab, tab === item && styles.tabOn]}>

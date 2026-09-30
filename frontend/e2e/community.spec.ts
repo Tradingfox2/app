@@ -202,7 +202,8 @@ test("activity consent defaults off and persists without changing language", asy
     await route.fulfill({ json: { ...user, activity_ranking_opt_in: optIn } }); return true;
   });
   await page.goto("/profile");
-  const consent = page.getByRole("switch", { name: "Appear in activity rankings" });
+  await page.getByTestId("open-settings").click();
+  const consent = page.getByTestId("settings-screen").getByRole("switch", { name: "Appear in activity rankings" });
   await expect(consent).not.toBeChecked();
   await consent.click();
   await expect(consent).toBeChecked();
@@ -249,8 +250,9 @@ test("paid plan selection does not silently activate a subscription", async ({ p
     return false;
   });
   await page.goto("/profile");
+  await page.getByTestId("open-settings").click();
   await page.getByTestId("plan-pro-btn").click();
-  await expect(page.getByRole("alert")).toHaveText("Plan changes require verified billing. No payment was taken.");
+  await expect(page.getByTestId("settings-screen").getByRole("alert")).toHaveText("Plan changes require verified billing. No payment was taken.");
   await expect(page.getByTestId("plan-free-btn").getByText("CURRENT", { exact: true })).toBeVisible();
   expect(attempts).toBe(1);
 });

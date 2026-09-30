@@ -310,6 +310,7 @@ test("a language change failure is shown instead of disappearing", async ({ page
     return false;
   });
   await page.goto("/profile");
+  await page.getByTestId("open-settings").click();
   await page.getByTestId("language-fr").click();
   await expect(page.getByTestId("language-error")).toHaveText("Fixture language failed");
 });

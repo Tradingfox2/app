@@ -187,6 +187,7 @@ test("the private-account switch is what makes requests possible", async ({ page
     await route.fulfill({ json: [] });
   });
   await page.goto("/profile");
+  await page.getByTestId("open-settings").click();
   await page.getByTestId("private-account-toggle").click();
   await expect.poll(() => writes).toEqual([{ is_private: true }]);
 });
