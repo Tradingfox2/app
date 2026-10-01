@@ -1195,6 +1195,10 @@ export const api = {
       body: JSON.stringify({ bio, specialties, credentials }),
     }),
   partnerDashboard: () => request<PartnerDashboard>("/partner/dashboard"),
+  connectPayouts: (country: string) =>
+    request<{ url: string }>("/partner/connect", { method: "POST", body: JSON.stringify({ country }) }),
+  connectStatus: () =>
+    request<{ stripe_account_id: string | null; payout_status: string; charges_enabled: boolean; payouts_enabled: boolean }>("/partner/connect/status"),
   communityRankings: () =>
     request<{
       communities: Pick<Community, "id" | "name" | "member_count">[];

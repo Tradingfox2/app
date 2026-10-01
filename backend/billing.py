@@ -36,6 +36,17 @@ API = "https://api.stripe.com/v1"
 TIMEOUT_SECONDS = 10.0
 #: Stripe's own default: a signed event older than this is a replay.
 SIGNATURE_TOLERANCE_SECONDS = 300
+#: Platform share of a connected coach's community subscription.
+CONNECT_FEE_PERCENT = 20
+# Express countries Stripe lists, kept to the EU, the UK, the US, Canada,
+# Japan, Singapore, Hong Kong, Australia, New Zealand, and South Korea.
+# Croatia is in the EU and is not on that Express list. Switzerland, Norway,
+# and Iceland are on the Express list and outside this region set.
+EXPRESS_COUNTRIES = frozenset({
+    "AT", "AU", "BE", "BG", "CA", "CY", "CZ", "DE", "DK", "EE", "ES", "FI",
+    "FR", "GB", "GR", "HK", "HU", "IE", "IT", "JP", "KR", "LT", "LU", "LV",
+    "MT", "NL", "NZ", "PL", "PT", "RO", "SE", "SG", "SI", "SK", "US",
+})
 
 
 class BillingError(Exception):
@@ -74,7 +85,7 @@ async def _call(method: str, path: str, data: dict | None = None, idempotency_ke
     return body
 
 
-async def create_checkout(*, community: dict, user: dict, success_url: str, cancel_url: str) -> dict:
+async def create_checkout(*, community: dict, user: dict, success_url: str, cancel_url: str, destination: str | None = None) -> dict:
     """A hosted Checkout page for a monthly subscription at the community's price.
 
     The price is sent inline (`price_data`), so an owner changing the price
@@ -99,7 +110,45 @@ async def create_checkout(*, community: dict, user: dict, success_url: str, canc
     for key, value in tags.items():
         data[f"metadata[{key}]"] = value
         data[f"subscription_data[metadata][{key}]"] = value
+    # A connected coach is paid by destination. Everyone else stays on the platform.
+    if destination:
+        data["subscription_data[transfer_data][destination]"] = destination
+        data["subscription_data[application_fee_percent]"] = str(CONNECT_FEE_PERCENT)
     return await _call("POST", "/checkout/sessions", data)
+
+
+def _account_id(account_id: str) -> str:
+    if not account_id.startswith("acct_") or "/" in account_id:
+        raise BillingError("invalid connected account")
+    return account_id
+
+
+async def create_express_account(*, country: str, user: dict) -> dict:
+    """An Express account. Stripe hosts onboarding; the country cannot change later."""
+    data = {
+        "type": "express",
+        "country": country,
+        "business_type": "individual",
+        "capabilities[card_payments][requested]": "true",
+        "capabilities[transfers][requested]": "true",
+        "metadata[user_id]": user["id"],
+    }
+    if user.get("email"):
+        data["email"] = user["email"]
+    return await _call("POST", "/accounts", data, idempotency_key=f"connect-{user['id']}-{country}")
+
+
+async def create_account_link(*, account_id: str, refresh_url: str, return_url: str) -> dict:
+    return await _call("POST", "/account_links", {
+        "account": _account_id(account_id),
+        "refresh_url": refresh_url,
+        "return_url": return_url,
+        "type": "account_onboarding",
+    })
+
+
+async def retrieve_account(account_id: str) -> dict:
+    return await _call("GET", f"/accounts/{_account_id(account_id)}")
 
 
 def pro_price_id(plan: str) -> str:

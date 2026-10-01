@@ -54,7 +54,7 @@
 | Variable | Value |
 | --- | --- |
 | `STRIPE_SECRET_KEY` | `sk_test_…` first, then `sk_live_…` |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_…` of an endpoint pointing at `https://<api>/api/billing/stripe/webhook`, subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` of an endpoint pointing at `https://<api>/api/billing/stripe/webhook`, subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed` |
 | `PUBLIC_APP_URL` | Web app origin Stripe returns to (`/community/{id}?checkout=success`) |
 
 For local testing: `stripe listen --forward-to localhost:8001/api/billing/stripe/webhook`
@@ -62,9 +62,12 @@ prints a `whsec_` for the session.
 
 ### Business decisions still open (not code)
 
-- **Paying coaches.** Everything is collected by the platform account. Paying
-  community owners automatically needs Stripe Connect onboarding plus a platform-fee
-  percentage — choose the fee and merchant-of-record model first.
+- **Paying coaches.** An approved coach connects with `POST /api/partner/connect`
+  (Express). When that owner is `connected`, community checkout sets
+  `transfer_data.destination` to `users.stripe_account_id` and
+  `application_fee_percent` to 20. Otherwise the charge stays on the platform.
+  `invoice.paid` writes `partner_ledger` in the invoice currency. No XAF and no
+  Mobile Money.
 - **Refunds and disputes** are handled in the Stripe dashboard. Cancelling there
   sends `customer.subscription.deleted`, which removes access automatically.
 - **Tax.** Stripe Tax can be switched on per account; no tax is computed here.

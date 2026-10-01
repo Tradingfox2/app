@@ -757,6 +757,18 @@ class CheckoutIn(BaseModel):
     invite_code: str | None = Field(default=None, max_length=64)
 
 
+class ConnectIn(BaseModel):
+    country: str = Field(min_length=2, max_length=2)
+
+    @field_validator("country")
+    @classmethod
+    def express_country(cls, value: str) -> str:
+        code = value.upper()
+        if code not in billing.EXPRESS_COUNTRIES:
+            raise ValueError("Express payouts are not available in this country")
+        return code
+
+
 @router.post("/communities/{community_id}/checkout")
 async def start_checkout(
     community_id: str, body: CheckoutIn | None = None, user: dict = Depends(current_user),
@@ -786,10 +798,15 @@ async def start_checkout(
             raise HTTPException(403, "This community is invite-only")
         invite_code = code
     back = f"{billing.app_url()}/community/{community_id}"
+    owner = await db.users.find_one(
+        {"id": community["owner_id"]}, {"_id": 0, "stripe_account_id": 1, "payout_status": 1},
+    ) or {}
+    destination = owner.get("stripe_account_id") if owner.get("payout_status") == "connected" else None
     try:
         session = await billing.create_checkout(
             community=community, user=user,
-            success_url=f"{back}?checkout=success", cancel_url=f"{back}?checkout=cancelled")
+            success_url=f"{back}?checkout=success", cancel_url=f"{back}?checkout=cancelled",
+            **({"destination": destination} if destination else {}))
     except billing.BillingError as exc:
         logger.warning("Stripe checkout for %s failed: %s", community_id, exc)
         raise HTTPException(502, "Could not open checkout. Try again in a moment.") from exc
@@ -799,6 +816,91 @@ async def start_checkout(
         "currency": community.get("currency", "EUR"), "created_at": now(),
     })
     return {"url": session["url"]}
+
+
+def _metadata_bags(invoice: dict) -> list[dict]:
+    bags: list[dict] = []
+    parent = ((invoice.get("parent") or {}).get("subscription_details") or {})
+    for value in (
+        invoice.get("metadata"),
+        parent.get("metadata"),
+        (invoice.get("subscription_details") or {}).get("metadata"),
+    ):
+        if isinstance(value, dict):
+            bags.append(value)
+    for line in ((invoice.get("lines") or {}).get("data") or []):
+        if isinstance(line, dict) and isinstance(line.get("metadata"), dict):
+            bags.append(line["metadata"])
+    return bags
+
+
+def _invoice_subscription_id(invoice: dict) -> str | None:
+    parent = ((invoice.get("parent") or {}).get("subscription_details") or {})
+    for value in (invoice.get("subscription"), parent.get("subscription")):
+        if isinstance(value, str) and value:
+            return value
+        if isinstance(value, dict) and isinstance(value.get("id"), str) and value["id"]:
+            return value["id"]
+    return None
+
+
+async def _record_partner_invoice(invoice: dict) -> None:
+    """Credit a connected club owner from invoice.paid. The currency is not converted."""
+    if not isinstance(invoice, dict):
+        return
+    bags = _metadata_bags(invoice)
+    if any(bag.get("kind") == "pro" for bag in bags):
+        return
+    community_id = next(
+        (bag["community_id"] for bag in bags if isinstance(bag.get("community_id"), str) and bag["community_id"]),
+        None,
+    )
+    owner_id = None
+    if community_id:
+        community = await db.communities.find_one({"id": community_id}, {"_id": 0, "owner_id": 1})
+        owner_id = (community or {}).get("owner_id")
+    if not owner_id:
+        sub_id = _invoice_subscription_id(invoice)
+        membership = await db.community_members.find_one(
+            {"stripe_subscription_id": sub_id}, {"_id": 0, "community_id": 1},
+        ) if sub_id else None
+        if membership:
+            community = await db.communities.find_one({"id": membership["community_id"]}, {"_id": 0, "owner_id": 1})
+            owner_id = (community or {}).get("owner_id")
+    if not isinstance(owner_id, str) or not owner_id:
+        return
+    owner = await db.users.find_one(
+        {"id": owner_id},
+        {"_id": 0, "id": 1, "email": 1, "staff_role": 1, "stripe_account_id": 1, "payout_status": 1},
+    )
+    # Platform-only checkout never moved the money, so it does not become coach balance.
+    if not owner or owner.get("payout_status") != "connected" or not owner.get("stripe_account_id"):
+        return
+    gross, currency, stripe_id = invoice.get("amount_paid"), invoice.get("currency"), invoice.get("id")
+    if type(gross) is not int or gross <= 0 or not isinstance(currency, str) or not currency.strip():
+        return
+    if not isinstance(stripe_id, str) or not stripe_id:
+        return
+    fee = invoice.get("application_fee_amount")
+    if type(fee) is not int:
+        fee = (gross * billing.CONNECT_FEE_PERCENT) // 100
+    if fee < 0 or fee > gross:
+        return
+    doc = {
+        "owner_id": owner_id, "partner_id": owner_id, "status": "available", "kind": "invoice.paid",
+        "gross_cents": gross, "fee_cents": fee, "net_cents": gross - fee, "currency": currency,
+        "stripe_id": stripe_id, "created_at": now(),
+    }
+    result = await db.partner_ledger.update_one({"stripe_id": stripe_id}, {"$setOnInsert": doc}, upsert=True)
+    if result.upserted_id is None:
+        return
+    await staff.audit(
+        owner, "partner_ledger.written", target_type="partner_ledger", target_id=stripe_id,
+        metadata={
+            "owner_id": owner_id, "kind": "invoice.paid", "gross_cents": gross,
+            "fee_cents": fee, "net_cents": gross - fee, "currency": currency,
+        },
+    )
 
 
 @router.post("/billing/stripe/webhook")
@@ -828,6 +930,8 @@ async def stripe_webhook(request: Request):
         await _subscription_changed(obj, deleted=kind == "customer.subscription.deleted")
     elif kind in {"invoice.paid", "invoice.payment_failed"}:
         await pro_billing.invoice_changed(obj, failed=kind == "invoice.payment_failed")
+        if kind == "invoice.paid":
+            await _record_partner_invoice(obj)
     await db.billing_events.update_one(
         {"id": event.get("id")}, {"$setOnInsert": {"type": kind, "received_at": now()}}, upsert=True)
     return {"received": True}
@@ -2987,6 +3091,76 @@ async def cancel_live_session(session_id: str, user: dict = Depends(current_user
     await _tell_rsvps(session, user, f"{session['title']} was cancelled")
 
 
+def _require_connect_coach(user: dict) -> None:
+    if not _coach_is_approved(user):
+        raise HTTPException(403, "Approved coach status required")
+    if not billing.secret_key():
+        raise HTTPException(503, "Payments are not set up yet")
+
+
+@router.post("/partner/connect")
+async def start_connect(body: ConnectIn, user: dict = Depends(current_user)):
+    """Open Stripe-hosted Express onboarding. The link grants no payout by itself."""
+    _require_connect_coach(user)
+    await ratelimit.hit("checkout", user["id"])
+    stored = await db.users.find_one(
+        {"id": user["id"]}, {"_id": 0, "stripe_account_id": 1, "email": 1},
+    ) or {}
+    account_id = stored.get("stripe_account_id")
+    back = f"{billing.app_url()}/partner"
+    try:
+        if not account_id:
+            account = await billing.create_express_account(country=body.country, user={**user, **stored})
+            account_id = account.get("id")
+            if not isinstance(account_id, str) or not account_id:
+                raise billing.BillingError("Stripe did not return an account")
+            await db.users.update_one({"id": user["id"]}, {"$set": {"stripe_account_id": account_id}})
+        link = await billing.create_account_link(
+            account_id=account_id,
+            refresh_url=f"{back}?connect=refresh",
+            return_url=f"{back}?connect=return",
+        )
+    except billing.BillingError as exc:
+        logger.warning("Connect onboarding for %s failed: %s", user["id"], exc)
+        raise HTTPException(502, "Could not open payout setup. Try again in a moment.") from exc
+    return {"url": link["url"]}
+
+
+@router.get("/partner/connect/status")
+async def connect_status(user: dict = Depends(current_user)):
+    """Store the Express account. Connected means Stripe enabled charges and payouts."""
+    _require_connect_coach(user)
+    stored = await db.users.find_one(
+        {"id": user["id"]}, {"_id": 0, "stripe_account_id": 1, "payout_status": 1},
+    ) or {}
+    account_id = stored.get("stripe_account_id")
+    if not account_id:
+        return {
+            "stripe_account_id": None,
+            "payout_status": stored.get("payout_status", "not_connected"),
+            "charges_enabled": False,
+            "payouts_enabled": False,
+        }
+    try:
+        account = await billing.retrieve_account(account_id)
+    except billing.BillingError as exc:
+        logger.warning("Connect status for %s failed: %s", user["id"], exc)
+        raise HTTPException(502, "Could not check payout status. Try again in a moment.") from exc
+    saved_id = account.get("id") if isinstance(account.get("id"), str) else account_id
+    charges, payouts = bool(account.get("charges_enabled")), bool(account.get("payouts_enabled"))
+    updates: dict = {"stripe_account_id": saved_id}
+    if charges and payouts:
+        updates["payout_status"] = "connected"
+    await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    status = "connected" if charges and payouts else stored.get("payout_status", "not_connected")
+    return {
+        "stripe_account_id": saved_id,
+        "payout_status": status,
+        "charges_enabled": charges,
+        "payouts_enabled": payouts,
+    }
+
+
 @router.get("/partner/dashboard")
 async def partner_dashboard(user: dict = Depends(current_user)):
     if not _coach_is_approved(user):
@@ -3007,7 +3181,11 @@ async def partner_dashboard(user: dict = Depends(current_user)):
         {"$match": {"partner_id": user["id"], "status": "available"}},
         {"$group": {"_id": "$currency", "gross_cents": {"$sum": "$gross_cents"}, "net_cents": {"$sum": "$net_cents"}}},
     ]
-    balances = [clean(row) async for row in db.partner_ledger.aggregate(ledger_pipeline)]
+    # `clean` drops Mongo `_id`, which is the currency this total is grouped by.
+    balances = [
+        {"_id": row.get("_id"), "gross_cents": row.get("gross_cents", 0), "net_cents": row.get("net_cents", 0)}
+        async for row in db.partner_ledger.aggregate(ledger_pipeline)
+    ]
     return {
         "community_count": len(communities),
         "active_members": active_members,
