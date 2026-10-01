@@ -8,6 +8,7 @@ import { analyticsMessages } from "./analytics-locales";
 import { communityMessages } from "./community-locales";
 import { personalSpaceMessages } from "./personal-space-locales";
 import { supportMessages } from "./support-locales";
+import { activityDayMessages } from "./activity-day-locales";
 import { waveAMessages } from "./wave-a-locales";
 
 type Messages = Record<string, string>;
@@ -183,7 +184,7 @@ void i18n.use(initReactI18next).init({
   resources: Object.fromEntries(
     Object.entries(messages).map(([locale, translation]) => [
       locale,
-      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale] } },
+      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...activityDayMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale] } },
     ]),
   ),
   lng: initialLocale,

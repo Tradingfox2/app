@@ -61,7 +61,7 @@ export function readTrainingTotals(data: unknown): TrainingTotals | null {
 
 /** Last seven local calendar days, oldest first, ending today. */
 export function trainingCalendar(
-  workouts: readonly ({ started_at?: string | null } | null | undefined)[],
+  workouts: readonly ({ started_at?: unknown } | null | undefined)[],
   now = new Date(),
 ): CalendarDay[] {
   const trained = new Set<string>();

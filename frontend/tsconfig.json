@@ -19,6 +19,7 @@
     "src/components/anatomy/ref",
     "src/linking.test.ts",
     "src/profile-patch.test.ts",
-    "src/training-week.test.ts"
+    "src/training-week.test.ts",
+    "src/activity-day.test.ts"
   ]
 }
