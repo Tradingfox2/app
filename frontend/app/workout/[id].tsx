@@ -20,6 +20,7 @@ import { api, type Community } from "@/src/api";
 import { track } from "@/src/analytics";
 import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
 import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
+import { useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -64,6 +65,8 @@ export default function WorkoutLogger() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t, formatNumber } = useI18n();
+  const press = usePressFeedback();
+  const pickerSearch = useFieldAffordance();
   const [sets, setSets] = useState<any[]>([]);
   const [exercises, setExercises] = useState<any[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -382,7 +385,7 @@ export default function WorkoutLogger() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="workout-logger">
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} testID="back-btn" hitSlop={12}>
+        <Pressable onPress={() => router.back()} testID="back-btn" hitSlop={12} style={press("ghost", styles.iconBtn)}>
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
         <View style={{ alignItems: "center" }}>
@@ -393,7 +396,7 @@ export default function WorkoutLogger() {
             </Text>
           ) : null}
         </View>
-        <Pressable onPress={finish} testID="finish-btn" hitSlop={12} disabled={finishing || finished}>
+        <Pressable onPress={finish} testID="finish-btn" hitSlop={12} disabled={finishing || finished} style={press("ghost", styles.finishBtn, { disabled: finishing || finished })}>
           <Text style={styles.finishTxt}>{finishing ? t("FINISHING…") : t("FINISH")}</Text>
         </Pressable>
       </View>
@@ -426,7 +429,7 @@ export default function WorkoutLogger() {
                     selectedExRef.current = p;
                     setSelectedEx(p);
                   }}
-                  style={[styles.planChip, active && styles.planChipActive, done > 0 && styles.planChipDone]}
+                  style={press("chip", [styles.planChip, active && styles.planChipActive, done > 0 && styles.planChipDone], { preserveBorder: active || done > 0 })}
                   accessibilityRole="button"
                   accessibilityLabel={t("{name}, {count} sets logged", { name: p.name, count: formatNumber(done) })}
                   testID={`planned-${p.slug}`}
@@ -443,7 +446,7 @@ export default function WorkoutLogger() {
             })}
             <Pressable
               onPress={() => router.push(`/muscles?workoutId=${id}` as Href)}
-              style={[styles.planChip, styles.planChipAdd]}
+              style={press("surface", [styles.planChip, styles.planChipAdd])}
               accessibilityRole="button"
               accessibilityLabel={t("Add exercises from the muscle explorer")}
               testID="add-from-muscles"
@@ -458,7 +461,7 @@ export default function WorkoutLogger() {
         <View style={styles.timer} testID="rest-timer">
           <Text style={styles.timerLabel}>{t("Rest")}</Text>
           <Text style={styles.timerVal}>{restRemaining}s</Text>
-          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Rest")}>
+          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Rest")} style={press("ghost", styles.skipBtn)}>
             <Ionicons name="close" color={colors.textDim} size={18} />
           </Pressable>
         </View>
@@ -478,7 +481,7 @@ export default function WorkoutLogger() {
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }}>
           <Pressable
             testID="pick-exercise-btn"
-            style={styles.exSelector}
+            style={press("surface", styles.exSelector)}
             onPress={() => setPickerOpen(true)}
           >
             <View style={{ flex: 1 }}>
@@ -517,7 +520,7 @@ export default function WorkoutLogger() {
           {selectedEx && (
             <Pressable
               testID="see-progression-btn"
-              style={styles.progLink}
+              style={press("ghost", styles.progLink)}
               onPress={() => router.push(`/progression/${selectedEx.id}`)}
             >
               <Ionicons name="trending-up" color={colors.text} size={16} />
@@ -532,7 +535,7 @@ export default function WorkoutLogger() {
           <FieldCol label="KG" value={weight} onChange={setWeight} testID="input-weight" />
           <FieldCol label="RPE" value={rpe} onChange={setRpe} testID="input-rpe" />
           <Pressable
-            style={styles.addBtn}
+            style={press("primary", styles.addBtn)}
             onPress={quickAddSet}
             testID="add-set-btn"
           >
@@ -551,17 +554,19 @@ export default function WorkoutLogger() {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHead}>
               <Text style={styles.pickerTitle}>{t("PICK EXERCISE")}</Text>
-              <Pressable onPress={() => setPickerOpen(false)} hitSlop={12}>
+              <Pressable onPress={() => setPickerOpen(false)} hitSlop={12} style={press("ghost", styles.iconBtn)} testID="picker-close">
                 <Ionicons name="close" color={colors.text} size={22} />
               </Pressable>
             </View>
             <TextInput
               placeholder={t("Search…")}
               placeholderTextColor={colors.textDim}
-              style={styles.pickerSearch}
+              style={[styles.pickerSearch, pickerSearch.style]}
               value={pickerQuery}
               onChangeText={setPickerQuery}
               testID="picker-search"
+              {...pickerSearch.hover}
+              {...pickerSearch.focus}
             />
             <ScrollView
               horizontal
@@ -589,7 +594,7 @@ export default function WorkoutLogger() {
               renderItem={({ item }) => (
                 <Pressable
                   testID={`picker-item-${item.slug}`}
-                  style={styles.pickerItem}
+                  style={press("surface", styles.pickerItem)}
                   onPress={() => {
                     selectedExRef.current = item;
                     setSelectedEx(item);
@@ -621,25 +626,25 @@ export default function WorkoutLogger() {
         {!audienceReady ? <ActivityIndicator color={colors.text} /> : <View style={styles.shareChips} testID="share-audience">
           {(clubs ?? []).map(club => {
             const selected = audience.kind === "club" && audience.id === club.id;
-            return <Pressable key={club.id} accessibilityRole="button" accessibilityState={{ selected }} testID={`share-audience-club-${club.id}`} onPress={() => pickAudience({ kind: "club", id: club.id })} style={[styles.shareChip, selected && styles.shareChipOn]}>
+            return <Pressable key={club.id} accessibilityRole="button" accessibilityState={{ selected }} testID={`share-audience-club-${club.id}`} onPress={() => pickAudience({ kind: "club", id: club.id })} style={press("chip", [styles.shareChip, selected && styles.shareChipOn], { preserveBorder: selected })}>
               <Text style={[styles.shareChipText, selected && styles.shareChipTextOn]}>{club.name}</Text>
             </Pressable>;
           })}
-          <Pressable accessibilityRole="button" accessibilityState={{ selected: audience.kind === "friends" }} testID="share-audience-friends" onPress={() => pickAudience({ kind: "friends" })} style={[styles.shareChip, audience.kind === "friends" && styles.shareChipOn]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: audience.kind === "friends" }} testID="share-audience-friends" onPress={() => pickAudience({ kind: "friends" })} style={press("chip", [styles.shareChip, audience.kind === "friends" && styles.shareChipOn], { preserveBorder: audience.kind === "friends" })}>
             <Text style={[styles.shareChipText, audience.kind === "friends" && styles.shareChipTextOn]}>{t("Friends")}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityState={{ selected: audience.kind === "public" }} testID="share-audience-public" onPress={() => pickAudience({ kind: "public" })} style={[styles.shareChip, audience.kind === "public" && styles.shareChipOn]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: audience.kind === "public" }} testID="share-audience-public" onPress={() => pickAudience({ kind: "public" })} style={press("chip", [styles.shareChip, audience.kind === "public" && styles.shareChipOn], { preserveBorder: audience.kind === "public" })}>
             <Text style={[styles.shareChipText, audience.kind === "public" && styles.shareChipTextOn]}>{t("Public")}</Text>
           </Pressable>
         </View>}
         {clubsError ? <View accessibilityRole="alert" testID="share-clubs-error">
           <Text style={styles.shareError}>{clubsError}</Text>
-          <Pressable accessibilityRole="button" testID="share-clubs-retry" onPress={() => void loadClubs()}><Text style={styles.shareRetry}>{t("Retry")}</Text></Pressable>
+          <Pressable accessibilityRole="button" testID="share-clubs-retry" onPress={() => void loadClubs()} style={press("ghost", styles.shareRetryBtn)}><Text style={styles.shareRetry}>{t("Retry")}</Text></Pressable>
         </View> : null}
         {shareError ? <Text accessibilityRole="alert" testID="share-error" style={styles.shareError}>{shareError}</Text> : null}
         <View style={styles.shareRow}>
-          <Pressable accessibilityRole="button" testID="share-done" onPress={() => router.back()} style={styles.shareSecondary}><Text style={styles.shareSecondaryText}>{t("DONE")}</Text></Pressable>
-          <Pressable accessibilityRole="button" testID="share-workout" disabled={sharing || !audienceReady} onPress={() => void share()} style={[styles.sharePrimary, (sharing || !audienceReady) && { opacity: 0.5 }]}><Text style={styles.sharePrimaryText}>{t("SHARE TO FEED")}</Text></Pressable>
+          <Pressable accessibilityRole="button" testID="share-done" onPress={() => router.back()} style={press("outline", styles.shareSecondary)}><Text style={styles.shareSecondaryText}>{t("DONE")}</Text></Pressable>
+          <Pressable accessibilityRole="button" testID="share-workout" disabled={sharing || !audienceReady} onPress={() => void share()} style={press("primary", [styles.sharePrimary, (sharing || !audienceReady) && { opacity: 0.5 }], { disabled: sharing || !audienceReady })}><Text style={styles.sharePrimaryText}>{t("SHARE TO FEED")}</Text></Pressable>
         </View>
       </View> : null}
     </SafeAreaView>
@@ -657,6 +662,7 @@ function FieldCol({
   onChange: (v: string) => void;
   testID: string;
 }) {
+  const field = useFieldAffordance();
   return (
     <View style={styles.col}>
       <Text style={styles.colLabel}>{label}</Text>
@@ -665,18 +671,21 @@ function FieldCol({
         value={value}
         onChangeText={onChange}
         keyboardType="decimal-pad"
-        style={styles.colInput}
+        style={[styles.colInput, field.style]}
         selectTextOnFocus
+        {...field.hover}
+        {...field.focus}
       />
     </View>
   );
 }
 
 function PickerChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const press = usePressFeedback();
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.pchip, active && styles.pchipActive]}
+      style={press("chip", [styles.pchip, active && styles.pchipActive], { preserveBorder: active })}
     >
       <Text style={[styles.pchipTxt, active && styles.pchipTxtActive]}>{label}</Text>
     </Pressable>
@@ -700,6 +709,7 @@ const styles = StyleSheet.create({
   shareChipText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
   shareChipTextOn: { color: colors.text },
   shareRetry: { color: colors.text, fontWeight: "800", fontSize: 12 },
+  shareRetryBtn: { alignSelf: "flex-start", minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: "row",
@@ -846,6 +856,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     padding: spacing.md,
+    alignSelf: "flex-start",
+    borderRadius: radius.sm,
   },
   progLinkTxt: { color: colors.text, fontWeight: "700" },
   entryBar: {
@@ -880,6 +892,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     fontVariant: ["tabular-nums"],
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+  },
+  skipBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+  },
+  finishBtn: {
+    minHeight: 44,
+    justifyContent: "center",
+    borderRadius: radius.sm,
   },
   addBtn: {
     backgroundColor: colors.brand,

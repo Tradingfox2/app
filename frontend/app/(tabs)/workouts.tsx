@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
+import { useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
@@ -28,6 +29,9 @@ type LibraryExercise = RecommendationExercise & { id: string };
 export default function Workouts() {
   const router = useRouter();
   const { t, formatDate } = useI18n();
+  const press = usePressFeedback();
+  const searchField = useFieldAffordance();
+  const titleField = useFieldAffordance();
   const [tab, setTab] = useState<Tab>("sessions");
   const [workouts, setWorkouts] = useState<any[]>([]);
   const [exercises, setExercises] = useState<LibraryExercise[]>([]);
@@ -174,7 +178,7 @@ export default function Workouts() {
             key={tabKey}
             testID={`tab-${tabKey}-btn`}
             onPress={() => setTab(tabKey)}
-            style={[styles.segBtn, tab === tabKey && styles.segBtnActive]}
+            style={press("chip", [styles.segBtn, tab === tabKey && styles.segBtnActive])}
           >
             <Text style={[styles.segTxt, tab === tabKey && styles.segTxtActive]}>
               {t(tabKey === "sessions" ? "SESSIONS" : "LIBRARY")}
@@ -186,7 +190,7 @@ export default function Workouts() {
       {loadError ? (
         <View accessibilityRole="alert" style={styles.errorBanner} testID="workouts-error">
           <Text style={styles.createError}>{loadError}</Text>
-          <Pressable accessibilityRole="button" onPress={() => void load()} testID="workouts-retry" style={styles.retryBtn}>
+          <Pressable accessibilityRole="button" onPress={() => void load()} testID="workouts-retry" style={press("ghost", styles.retryBtn)}>
             <Text style={styles.retryTxt}>{t("Retry")}</Text>
           </Pressable>
         </View>
@@ -223,7 +227,7 @@ export default function Workouts() {
                   testID="empty-new-session"
                   onPress={() => void createDated()}
                   disabled={creating}
-                  style={styles.emptyCta}
+                  style={press("primary", styles.emptyCta, { disabled: creating })}
                 >
                   <Text style={styles.emptyCtaTxt}>{creating ? t("CREATING...") : t("NEW SESSION")}</Text>
                 </Pressable>
@@ -233,7 +237,7 @@ export default function Workouts() {
           renderItem={({ item }) => (
             <Pressable
               testID={`workout-${item.id}`}
-              style={styles.sessionCard}
+              style={press("surface", styles.sessionCard)}
               onPress={() => {
                 if (item.activity && typeof item.activity === "object") {
                   router.push(`/record/${item.id}` as Href);
@@ -252,7 +256,7 @@ export default function Workouts() {
         />
       ) : (
         <>
-          <View style={styles.searchWrap}>
+          <View style={[styles.searchWrap, searchField.style]} {...searchField.hover}>
             <Ionicons name="search" color={colors.textMuted} size={18} />
             <TextInput
               testID="library-search"
@@ -262,6 +266,7 @@ export default function Workouts() {
               placeholderTextColor={colors.textDim}
               style={styles.searchInput}
               returnKeyType="search"
+              {...searchField.focus}
             />
             {query ? (
               <Pressable
@@ -269,6 +274,7 @@ export default function Workouts() {
                 accessibilityRole="button"
                 accessibilityLabel={t("Clear exercise search")}
                 hitSlop={8}
+                style={press("ghost", styles.clearSearch)}
               >
                 <Ionicons name="close-circle" color={colors.textMuted} size={18} />
               </Pressable>
@@ -327,7 +333,7 @@ export default function Workouts() {
                     onPress={() => setSelectedSlugs([])}
                     accessibilityRole="button"
                     accessibilityLabel={t("Clear selected exercises")}
-                    style={styles.clearSelection}
+                    style={press("ghost", styles.clearSelection)}
                   >
                     <Text style={styles.clearSelectionText}>{t("CLEAR")}</Text>
                   </Pressable>
@@ -341,7 +347,7 @@ export default function Workouts() {
                 <Ionicons name="search-outline" size={40} color={colors.textDim} />
                 <Text style={styles.emptyTxt}>{t("No exercises match these filters.")}</Text>
                 <Pressable
-                  style={styles.resetFilters}
+                  style={press("ghost", styles.resetFilters)}
                   onPress={() => {
                     setQuery("");
                     setCategory(null);
@@ -360,7 +366,7 @@ export default function Workouts() {
                 ]}
               >
                 <Pressable
-                  style={styles.exSelect}
+                  style={press("surface", styles.exSelect)}
                   testID={`exercise-${item.slug}`}
                   onPress={() => toggleExercise(item.slug)}
                   accessibilityRole="checkbox"
@@ -384,7 +390,7 @@ export default function Workouts() {
                 </Pressable>
                 <Pressable
                   testID={`exercise-demo-${item.slug}`}
-                  style={styles.exDemo}
+                  style={press("primary", styles.exDemo)}
                   onPress={() => setDemoExercise(item)}
                   accessibilityRole="button"
                   accessibilityLabel={t("Open {name} exercise demo", { name: item.name })}
@@ -399,8 +405,9 @@ export default function Workouts() {
 
       <Pressable
         testID="fab-new-workout"
-        style={styles.fab}
+        style={press("primary", [styles.fab, creating && { opacity: 0.6 }], { disabled: creating })}
         onPress={openNewSession}
+        disabled={creating}
       >
         <Ionicons name="add" color={colors.brandOn} size={28} />
         <Text style={styles.fabTxt}>
@@ -428,14 +435,16 @@ export default function Workouts() {
               testID="input-workout-title"
               placeholder={t("Session name")}
               placeholderTextColor={colors.textDim}
-              style={styles.sheetInput}
+              style={[styles.sheetInput, titleField.style]}
               value={newTitle}
               onChangeText={setNewTitle}
               autoFocus
+              {...titleField.hover}
+              {...titleField.focus}
             />
             {createError ? <Text accessibilityRole="alert" style={styles.createError} testID="create-error">{createError}</Text> : null}
             <Pressable
-              style={[styles.sheetCta, (!newTitle.trim() || creating) && styles.sheetCtaDisabled]}
+              style={press("primary", [styles.sheetCta, (!newTitle.trim() || creating) && styles.sheetCtaDisabled], { disabled: !newTitle.trim() || creating })}
               onPress={startWorkout}
               disabled={!newTitle.trim() || creating}
               testID="submit-workout-btn"
@@ -448,6 +457,8 @@ export default function Workouts() {
       <ExerciseDemoModal
         exercise={demoExercise}
         onClose={() => setDemoExercise(null)}
+        closeStyle={press("ghost")}
+        watchStyle={press("primary")}
       />
     </SafeAreaView>
   );
@@ -464,11 +475,12 @@ function Chip({
   onPress: () => void;
   testID?: string;
 }) {
+  const press = usePressFeedback();
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
+      style={press("chip", [styles.chip, active && styles.chipActive], { preserveBorder: active })}
     >
       <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{label}</Text>
     </Pressable>
@@ -498,6 +510,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   segBtnActive: { backgroundColor: colors.surface2 },
   segTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0, fontSize: 13 },
@@ -611,11 +625,11 @@ const styles = StyleSheet.create({
   selectionCopy: { flex: 1, minWidth: 0 },
   selectionCount: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
   selectionNames: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  clearSelection: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.sm },
+  clearSelection: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   clearSelectionText: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   empty: { alignItems: "center", padding: spacing.xxxl, gap: spacing.md },
   emptyTxt: { color: colors.textMuted },
-  resetFilters: { minHeight: 40, justifyContent: "center", paddingHorizontal: spacing.md },
+  resetFilters: { minHeight: 40, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radius.sm },
   resetFiltersText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   fab: {
     position: "absolute",
@@ -683,7 +697,14 @@ const styles = StyleSheet.create({
   createError: { color: colors.error, fontSize: 12, marginBottom: spacing.md },
   errorBanner: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   errorPad: { paddingHorizontal: spacing.lg },
-  retryBtn: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
+  retryBtn: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start", paddingHorizontal: spacing.sm, borderRadius: radius.sm },
+  clearSearch: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+  },
   retryTxt: { color: colors.text, fontWeight: "800" },
   emptyCta: {
     minHeight: 44,

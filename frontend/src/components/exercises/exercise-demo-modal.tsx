@@ -1,16 +1,27 @@
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View, type PressableProps, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import type { RecommendationExercise } from "../anatomy/muscle-types";
 import { colors, fonts, radius, spacing } from "../../theme";
 import { useI18n } from "../../i18n";
 
+function composePressStyle(base: ViewStyle, extra?: PressableProps["style"]): PressableProps["style"] {
+  if (extra == null) return base;
+  if (typeof extra === "function") return (state) => [base, extra(state)];
+  return [base, extra];
+}
+
 export function ExerciseDemoModal({
   exercise,
   onClose,
+  closeStyle,
+  watchStyle,
 }: {
   exercise: RecommendationExercise | null;
   onClose: () => void;
+  /** Optional hover and press. Omitted callers keep the original static styles. */
+  closeStyle?: PressableProps["style"];
+  watchStyle?: PressableProps["style"];
 }) {
   const { t } = useI18n();
   const videoUrl = exercise?.video_url?.trim();
@@ -34,7 +45,7 @@ export function ExerciseDemoModal({
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel={t("Close exercise demo")}
-              style={styles.closeButton}
+              style={composePressStyle(styles.closeButton, closeStyle)}
             >
               <Ionicons name="close" size={20} color={colors.text} />
             </Pressable>
@@ -66,7 +77,7 @@ export function ExerciseDemoModal({
 
           {canOpenVideo ? (
             <Pressable
-              style={styles.watchButton}
+              style={composePressStyle(styles.watchButton, watchStyle)}
               onPress={() => WebBrowser.openBrowserAsync(videoUrl)}
               accessibilityRole="button"
               accessibilityLabel={t("Watch {name} video", { name: exercise?.name ?? "" })}
