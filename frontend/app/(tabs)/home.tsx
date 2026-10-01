@@ -22,6 +22,12 @@ import { combinationActivation } from "@/src/components/anatomy/muscle-relations
 import { useI18n } from "@/src/i18n";
 import { FOCUS_LABELS } from "@/src/program-schema";
 import { datedSessionTitle } from "@/src/session-title";
+import {
+  readTrainingTotals,
+  readWorkoutCount,
+  trainingCalendar,
+  type CalendarDay,
+} from "@/src/training-week";
 
 function unreadLabel(count: number): string | null {
   if (count <= 0) return null;
@@ -113,9 +119,16 @@ export default function Home() {
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
   const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
+  const [workoutStamps, setWorkoutStamps] = useState<{ started_at?: string | null }[] | null>(null);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarSettled, setCalendarSettled] = useState(false);
 
   const load = useCallback(async () => {
-    const [todayResult, heatResult] = await Promise.allSettled([api.homeToday(), api.heatmap()]);
+    const [todayResult, heatResult, workoutsResult] = await Promise.allSettled([
+      api.homeToday(),
+      api.heatmap(),
+      api.workouts(),
+    ]);
     if (todayResult.status === "fulfilled") {
       setData(todayResult.value);
       setDashError(null);
@@ -123,6 +136,16 @@ export default function Home() {
       const reason = todayResult.reason;
       setDashError(reason instanceof Error ? reason.message : t("Could not load home"));
     }
+    if (workoutsResult.status === "fulfilled" && Array.isArray(workoutsResult.value)) {
+      setWorkoutStamps(workoutsResult.value);
+      setCalendarError(null);
+    } else if (workoutsResult.status === "fulfilled") {
+      setCalendarError(t("Could not load training days"));
+    } else {
+      const reason = workoutsResult.reason;
+      setCalendarError(reason instanceof Error ? reason.message : t("Could not load training days"));
+    }
+    setCalendarSettled(true);
     if (heatResult.status === "fulfilled") {
       setHeatmap(heatResult.value);
       setHeatLoaded(true);
@@ -153,8 +176,9 @@ export default function Home() {
   const sleep = data?.sleep?.value ?? 0;
   const hrv = data?.hrv?.value ?? 0;
   const restingHr = data?.resting_hr?.value ?? 0;
-  const workoutsWeek = data?.workouts_this_week ?? 0;
-  const training = data?.training ?? {};
+  const workoutCount = readWorkoutCount(data);
+  const training = readTrainingTotals(data);
+  const calendar = workoutStamps ? trainingCalendar(workoutStamps) : null;
   const wearableConnected = Boolean(data?.wearable_connected);
   const activeWorkout = data?.active_workout ?? null;
   const nextSession = data?.next_session ?? null;
@@ -243,10 +267,10 @@ export default function Home() {
           </View>
           <View style={styles.streak} testID="streak-badge">
             <Text style={styles.streakLabel}>{t("THIS WEEK")}</Text>
-            {data ? (
-              <Text style={styles.streakNum}>{workoutsWeek}</Text>
-            ) : (
+            {!dashSettled && workoutCount === null ? (
               <View style={styles.skeletonNum} />
+            ) : (
+              <Text style={styles.streakNum}>{workoutCount === null ? "—" : formatNumber(workoutCount)}</Text>
             )}
             <Text style={styles.streakLabel}>{t("workouts")}</Text>
           </View>
@@ -396,23 +420,25 @@ export default function Home() {
             <Text style={styles.cardTitle}>{t("TRAINING · 7 DAYS")}</Text>
             <View style={styles.streakPill}>
               <Ionicons name="flame" size={12} color={colors.blaze} />
-              <Text style={styles.streakPillTxt}>{data ? t("{count}d streak", { count: training.streak_days ?? 0 }) : "—"}</Text>
+              <Text style={styles.streakPillTxt}>
+                {training ? t("{count}d streak", { count: formatNumber(training.streakDays) }) : "—"}
+              </Text>
             </View>
           </View>
-          {data ? <View style={styles.statsRow}>
-            <Stat label={t("SETS")} value={formatNumber(training.sets_week ?? 0)} />
-            <Stat
-              label="TONNAGE"
-              value={
-                (training.tonnage_week_kg ?? 0) >= 1000
-                  ? `${((training.tonnage_week_kg ?? 0) / 1000).toFixed(1)}t`
-                  : `${Math.round(training.tonnage_week_kg ?? 0)}`
-              }
-              unit={(training.tonnage_week_kg ?? 0) >= 1000 ? "" : "kg"}
-            />
-            <Stat label={t("MINUTES")} value={formatNumber(training.minutes_week ?? 0)} />
-            <Stat label={t("MUSCLES")} value={formatNumber(training.muscles_week?.length ?? 0)} />
-          </View> : <View style={styles.skeletonBar} testID="home-stats-skeleton" />}
+          <WeekVolume
+            loading={!dashSettled && training === null && workoutCount === null}
+            error={dashError}
+            count={workoutCount}
+            training={training}
+            calendarTrained={Boolean(calendar?.some((day) => day.trained))}
+            onRetry={() => void load()}
+          />
+          <WeekCalendar
+            loading={!calendarSettled && calendar === null}
+            error={calendar ? null : calendarError}
+            days={calendar}
+            onRetry={() => void load()}
+          />
         </View>
 
         <DidYouKnow count={7} />
@@ -502,6 +528,123 @@ export default function Home() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function WeekVolume({
+  loading,
+  error,
+  count,
+  training,
+  calendarTrained,
+  onRetry,
+}: {
+  loading: boolean;
+  error: string | null;
+  count: number | null;
+  training: ReturnType<typeof readTrainingTotals>;
+  calendarTrained: boolean;
+  onRetry: () => void;
+}) {
+  const { t, formatNumber } = useI18n();
+  if (loading) {
+    return <View style={styles.skeletonBar} testID="home-stats-skeleton" accessibilityLabel={t("Loading home")} />;
+  }
+  const quiet = training !== null
+    && count === 0
+    && training.sets === 0
+    && training.tonnageKg === 0
+    && training.minutes === 0
+    && training.muscles === 0
+    && !calendarTrained;
+  if (training && quiet) {
+    return (
+      <Text style={styles.weekEmpty} testID="week-empty">
+        {t("No workouts in the last 7 days")}
+      </Text>
+    );
+  }
+  if (training) {
+    const heavy = training.tonnageKg >= 1000;
+    return (
+      <View style={styles.statsRow} testID="week-stats">
+        <Stat label={t("SETS")} value={formatNumber(training.sets)} />
+        <Stat
+          label={t("TONNAGE")}
+          value={
+            heavy
+              ? formatNumber(training.tonnageKg / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+              : formatNumber(Math.round(training.tonnageKg))
+          }
+          unit={heavy ? "t" : "kg"}
+        />
+        <Stat label={t("MINUTES")} value={formatNumber(training.minutes)} />
+        <Stat label={t("MUSCLES")} value={formatNumber(training.muscles)} />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.errorBanner} accessibilityRole="alert">
+      <Ionicons name="alert-circle" color={colors.live} size={16} />
+      <Text style={styles.errorTxt} testID="week-error">{error ?? t("This week is unavailable")}</Text>
+      <Pressable accessibilityRole="button" onPress={onRetry} testID="week-retry" style={styles.retryBtn}>
+        <Text style={styles.retryTxt}>{t("Retry")}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function WeekCalendar({
+  loading,
+  error,
+  days,
+  onRetry,
+}: {
+  loading: boolean;
+  error: string | null;
+  days: CalendarDay[] | null;
+  onRetry: () => void;
+}) {
+  const { t, formatDate } = useI18n();
+  if (loading) {
+    return <View style={styles.skeletonBar} testID="week-calendar-skeleton" accessibilityLabel={t("Loading home")} />;
+  }
+  if (!days) {
+    if (!error) return null;
+    return (
+      <View style={styles.errorBanner} accessibilityRole="alert">
+        <Ionicons name="alert-circle" color={colors.live} size={16} />
+        <Text style={styles.errorTxt} testID="week-days-error">{error}</Text>
+        <Pressable accessibilityRole="button" onPress={onRetry} testID="week-days-retry" style={styles.retryBtn}>
+          <Text style={styles.retryTxt}>{t("Retry")}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.weekRow} testID="week-calendar">
+      {days.map((day) => {
+        const labelKey = day.isToday
+          ? day.trained
+            ? "{day}, trained, today"
+            : "{day}, rest, today"
+          : day.trained
+            ? "{day}, trained"
+            : "{day}, rest";
+        return (
+          <View
+            key={day.key}
+            accessible
+            accessibilityLabel={t(labelKey, { day: formatDate(day.date, { weekday: "long" }) })}
+            testID={`week-day-${day.key}`}
+            style={[styles.weekDay, day.isToday && styles.weekDayToday]}
+          >
+            <Text style={styles.weekDayLabel}>{formatDate(day.date, { weekday: "narrow" })}</Text>
+            <View style={[styles.weekMark, day.trained ? styles.weekMarkTrained : styles.weekMarkRest]} />
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -729,6 +872,22 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   streakPillTxt: { color: colors.text, fontSize: 11, fontWeight: "700" },
+  weekEmpty: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
+  weekRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md },
+  weekDay: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  weekDayToday: { borderColor: colors.textMuted },
+  weekDayLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
+  weekMark: { width: 8, height: 8, borderRadius: 4 },
+  weekMarkTrained: { backgroundColor: colors.text },
+  weekMarkRest: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
   rings: {
     flexDirection: "row",
     justifyContent: "space-around",

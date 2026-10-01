@@ -30,6 +30,7 @@
 | GET | `/wearable-metrics` | `list_wearable` |
 | POST | `/wearable-metrics` | `add_wearable` |
 | GET | `/dashboard` | `dashboard` |
+| GET | `/home/today` | `home_today` |
 | GET | `/coach/relationships` | `list_relationships` |
 | POST | `/coach/request` | `request_coach` |
 | PATCH | `/coach/relationships/{rel_id}` | `update_relationship` |

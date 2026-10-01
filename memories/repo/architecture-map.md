@@ -351,3 +351,19 @@ through the shared module.
   `restRemaining > 0`. Rest timer math in `src/rest-timer.ts` is unchanged.
 - **Plan vs coach:** `/program` header is `t("Plan")`. The human coach stays
   Home `quick-coach` and `/coach/onboarding`. Screens are not merged.
+
+## Home week (verified 2026-10-01, `main` `bc67fd0` plus the calendar pass)
+
+- **Fold:** header, `LiveNowStrip` only when someone is live, rings on
+  `colors.ringPlate`, then `today-card`. The week block is `training-week-card`
+  under Today.
+- **Totals:** `GET /home/today` (`home_today_for` → `dashboard_snapshot`) is a
+  rolling 7×24h UTC window. `training` is `{sets_week, tonnage_week_kg,
+  minutes_week, muscles_week[], streak_days}`. There is still no per-day field.
+  `days_with_workout` stays internal to the streak.
+- **Calendar:** last seven local dates from `GET /workouts` `started_at`
+  (`trainingCalendar` in `frontend/src/training-week.ts`). No new endpoint.
+  Dots use `colors.text` / `surface2`. Chartreuse stays off this card.
+- **Honesty:** missing `training` fields are not painted as zero. A failed
+  `/home/today` shows `week-retry`. A quiet week shows `week-empty`. A failed
+  `/workouts` shows `week-days-retry` and keeps the last totals.

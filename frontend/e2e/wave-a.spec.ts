@@ -108,6 +108,125 @@ test("a failed home load keeps retry and does not paint rings as zero", async ({
   await expect(page.getByTestId("heatmap-error")).toContainText("heatmap down");
   await expect(page.getByTestId("rings-card")).not.toContainText(/^0$/);
   await expect(page.getByTestId("home-skeleton")).toHaveCount(0);
+  await expect(page.getByTestId("week-error")).toContainText("dashboard down");
+  await expect(page.getByTestId("week-retry")).toBeVisible();
+  await expect(page.getByTestId("home-stats-skeleton")).toHaveCount(0);
+  await expect(page.getByTestId("training-week-card").getByText("0", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("streak-badge")).toContainText("—");
+  await expect(page.getByTestId("streak-badge")).not.toContainText("0");
+});
+
+function localNoonIso(daysAgo: number): string {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - daysAgo);
+  const pad = (value: number) => String(Math.abs(Math.trunc(value))).padStart(2, "0");
+  const offset = -date.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T12:00:00${sign}${pad(offset / 60)}:${pad(offset % 60)}`;
+}
+
+function localDayKey(daysAgo: number): string {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - daysAgo);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+test("home calendar marks workout days under today and keeps the server week totals", async ({ page }) => {
+  await signIn(page);
+  await page.route("**/api/**", async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    const method = route.request().method();
+    if (path === "/auth/me") return route.fulfill({ json: me });
+    if (path === "/home/today") return route.fulfill({ json: todayBase });
+    if (path === "/workouts" && method === "GET") {
+      return route.fulfill({
+        json: [
+          { id: "today", started_at: localNoonIso(0) },
+          { id: "earlier", started_at: localNoonIso(2) },
+          { id: "old", started_at: localNoonIso(8) },
+          { id: "blank", started_at: null },
+        ],
+      });
+    }
+    if (path === "/muscle-heatmap") return route.fulfill({ json: { volumes: { chest: 10 }, max: 10 } });
+    if (path === "/dm/unread-count" || path === "/notifications/unread-count") return route.fulfill({ json: { count: 0 } });
+    if (path === "/tips/daily") return route.fulfill({ json: { date: "2026-09-30", tips: [] } });
+    return route.fulfill({ json: [] });
+  });
+
+  await page.goto("/home");
+  const todayBox = await page.getByTestId("today-card").boundingBox();
+  const weekBox = await page.getByTestId("training-week-card").boundingBox();
+  expect(todayBox && weekBox && todayBox.y + todayBox.height <= weekBox.y + 2).toBeTruthy();
+  await expect(page.getByTestId("week-calendar")).toBeVisible();
+  await expect(page.getByTestId(`week-day-${localDayKey(0)}`)).toHaveAttribute("aria-label", /trained/);
+  await expect(page.getByTestId(`week-day-${localDayKey(2)}`)).toHaveAttribute("aria-label", /trained/);
+  await expect(page.getByTestId(`week-day-${localDayKey(1)}`)).toHaveAttribute("aria-label", /rest/);
+  await expect(page.getByTestId(`week-day-${localDayKey(8)}`)).toHaveCount(0);
+  await expect(page.getByTestId("week-calendar").locator("[aria-label*='trained']")).toHaveCount(2);
+  await expect(page.getByTestId("week-stats")).toContainText("12");
+  await expect(page.getByTestId("week-stats")).toContainText("2.4");
+  await expect(page.getByTestId("week-stats")).toContainText("80");
+  await expect(page.getByTestId("training-week-card").getByText("START", { exact: true })).toHaveCount(0);
+});
+
+test("an empty training week shows rest days and does not invent totals", async ({ page }) => {
+  await signIn(page);
+  await page.route("**/api/**", async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    if (path === "/auth/me") return route.fulfill({ json: me });
+    if (path === "/home/today") {
+      return route.fulfill({
+        json: {
+          ...todayBase,
+          workouts_this_week: 0,
+          training: { sets_week: 0, tonnage_week_kg: 0, minutes_week: 0, muscles_week: [], streak_days: 0 },
+        },
+      });
+    }
+    if (path === "/workouts") return route.fulfill({ json: [] });
+    if (path === "/muscle-heatmap") return route.fulfill({ json: { volumes: {}, max: 0 } });
+    if (path === "/dm/unread-count" || path === "/notifications/unread-count") return route.fulfill({ json: { count: 0 } });
+    if (path === "/tips/daily") return route.fulfill({ json: { date: "2026-09-30", tips: [] } });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/home");
+  await expect(page.getByTestId("week-empty")).toContainText("No workouts in the last 7 days");
+  await expect(page.getByTestId("week-stats")).toHaveCount(0);
+  await expect(page.getByTestId("week-calendar").locator("[aria-label*='trained']")).toHaveCount(0);
+  await expect(page.getByTestId("week-calendar").locator("[aria-label*='rest']")).toHaveCount(7);
+  await expect(page.getByTestId("streak-badge")).toContainText("0");
+});
+
+test("a failed training-day load keeps the week totals and retries into the calendar", async ({ page }) => {
+  let workoutCalls = 0;
+  await signIn(page);
+  await page.route("**/api/**", async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    const method = route.request().method();
+    if (path === "/auth/me") return route.fulfill({ json: me });
+    if (path === "/home/today") return route.fulfill({ json: todayBase });
+    if (path === "/workouts" && method === "GET") {
+      workoutCalls += 1;
+      if (workoutCalls === 1) return route.fulfill({ status: 500, json: { detail: "days down" } });
+      return route.fulfill({ json: [{ id: "today", started_at: localNoonIso(0) }] });
+    }
+    if (path === "/muscle-heatmap") return route.fulfill({ json: { volumes: {}, max: 0 } });
+    if (path === "/dm/unread-count" || path === "/notifications/unread-count") return route.fulfill({ json: { count: 0 } });
+    if (path === "/tips/daily") return route.fulfill({ json: { date: "2026-09-30", tips: [] } });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/home");
+  await expect(page.getByTestId("week-days-error")).toContainText("days down");
+  await expect(page.getByTestId("week-days-retry")).toBeVisible();
+  await expect(page.getByTestId("week-calendar")).toHaveCount(0);
+  await expect(page.getByTestId("week-stats")).toContainText("12");
+  await page.getByTestId("week-days-retry").click();
+  await expect(page.getByTestId(`week-day-${localDayKey(0)}`)).toHaveAttribute("aria-label", /trained/);
+  await expect(page.getByTestId("week-days-error")).toHaveCount(0);
 });
 
 test("a failed empty start stays on home and shows the error", async ({ page }) => {

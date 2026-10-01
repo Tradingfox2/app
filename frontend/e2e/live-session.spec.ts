@@ -211,7 +211,21 @@ async function discovery(page: Page, sessions: unknown[]) {
     const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
     if (path === "/auth/me") return json(member);
     if (path === "/live-now") return json(sessions);
-    if (path === "/dashboard") return json({ workouts_this_week: 1, training: {}, wearable_connected: true, active_workout: null });
+    if (path === "/home/today" || path === "/dashboard") {
+      return json({
+        workouts_this_week: 1,
+        strain: { value: 8 },
+        recovery: { value: 60 },
+        sleep: { value: 7 },
+        hrv: { value: 40 },
+        resting_hr: { value: 50 },
+        wearable_connected: true,
+        training: { sets_week: 5, tonnage_week_kg: 400, minutes_week: 30, muscles_week: ["chest"], streak_days: 1 },
+        active_workout: null,
+        next_session: null,
+        clubs: [],
+      });
+    }
     if (path === "/muscle-heatmap") return json({ volumes: {}, max: 0 });
     if (path === "/communities") return json([]);
     if (path === "/coaches") return json([]);
