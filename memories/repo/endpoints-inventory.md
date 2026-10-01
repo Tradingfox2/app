@@ -57,7 +57,7 @@
 | PATCH | `/admin/reports/{report_id}` | `review_report` |
 | GET | `/admin/audit-log` | `audit_log` |
 
-## `backend/routers/community.py` (73)
+## `backend/routers/community.py` (75)
 
 | Method | Path | Handler |
 |---|---|---|
@@ -132,6 +132,8 @@
 | POST | `/live-sessions/{session_id}/start` | `start_live_session` |
 | POST | `/live-sessions/{session_id}/end` | `end_live_session` |
 | DELETE | `/live-sessions/{session_id}` | `cancel_live_session` |
+| POST | `/partner/connect` | `start_connect` |
+| GET | `/partner/connect/status` | `connect_status` |
 | GET | `/partner/dashboard` | `partner_dashboard` |
 | GET | `/community-rankings` | `community_rankings` |
 
