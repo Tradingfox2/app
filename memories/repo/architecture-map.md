@@ -352,18 +352,33 @@ through the shared module.
 - **Plan vs coach:** `/program` header is `t("Plan")`. The human coach stays
   Home `quick-coach` and `/coach/onboarding`. Screens are not merged.
 
-## Home week (verified 2026-10-01, `main` `bc67fd0` plus the calendar pass)
+## Home week (verified 2026-10-01, activity day on `cursor/home-activity-day-d3c3`)
 
 - **Fold:** header, `LiveNowStrip` only when someone is live, rings on
   `colors.ringPlate`, then `today-card`. The week block is `training-week-card`
-  under Today.
+  under Today. Nothing new sits above Today.
 - **Totals:** `GET /home/today` (`home_today_for` → `dashboard_snapshot`) is a
   rolling 7×24h UTC window. `training` is `{sets_week, tonnage_week_kg,
   minutes_week, muscles_week[], streak_days}`. There is still no per-day field.
   `days_with_workout` stays internal to the streak.
 - **Calendar:** last seven local dates from `GET /workouts` `started_at`
-  (`trainingCalendar` in `frontend/src/training-week.ts`). No new endpoint.
-  Dots use `colors.text` / `surface2`. Chartreuse stays off this card.
+  (`trainingCalendar` in `frontend/src/training-week.ts`). Each day is a button
+  to `/activity?day=YYYY-MM-DD`. The mark is an `ActivityRing` in `colors.blaze`
+  (`frontend/src/components/activity-ring.tsx`): arc from that day's logged
+  `duration_sec` against the busiest day in the seven, or a center dot when a
+  session exists but duration does not. Chartreuse stays off this card.
+- **Activity day:** `frontend/app/activity.tsx` plus `frontend/src/activity-day.ts`.
+  No new endpoint and no HealthKit. `api.wearable` is called for `steps` and
+  `calories`. Finished `duration_sec` is split across the local hours it
+  occupied; hours with none are omitted. Tonnage and distance come from
+  `GET /workouts/{id}/sets` (`weight_kg × reps`, `distance_m`) for sessions
+  that started that local day. `workout_sets.distance_m` still has no writer
+  in the logger. Wearable `calories` means Terra `total_burned_calories` or
+  Samsung active calories, one row per day — not Move, and not hourly.
+  `import_day` wins over `recorded_at` when the importer set it. `simulated:
+  true` is sample data. A missing or non-positive figure stays "Not measured",
+  never 0, and there is no Move goal.
 - **Honesty:** missing `training` fields are not painted as zero. A failed
   `/home/today` shows `week-retry`. A quiet week shows `week-empty`. A failed
-  `/workouts` shows `week-days-retry` and keeps the last totals.
+  `/workouts` shows `week-days-retry` and keeps the last totals. A failed
+  activity load keeps its own retry and does not fall through to "Not measured".

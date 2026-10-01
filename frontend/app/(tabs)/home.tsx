@@ -16,6 +16,7 @@ import { api } from "@/src/api";
 import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
 import { DidYouKnow } from "@/src/components/did-you-know";
 import { LiveNowStrip } from "@/src/components/live-now-strip";
+import { ActivityRing } from "@/src/components/activity-ring";
 import { colors, radius, spacing, type, card } from "@/src/theme";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
@@ -23,10 +24,13 @@ import { useI18n } from "@/src/i18n";
 import { FOCUS_LABELS } from "@/src/program-schema";
 import { datedSessionTitle } from "@/src/session-title";
 import {
+  weekActivity,
+  type ActivityWorkout,
+  type WeekDayActivity,
+} from "@/src/activity-day";
+import {
   readTrainingTotals,
   readWorkoutCount,
-  trainingCalendar,
-  type CalendarDay,
 } from "@/src/training-week";
 
 function unreadLabel(count: number): string | null {
@@ -119,7 +123,7 @@ export default function Home() {
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
   const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
-  const [workoutStamps, setWorkoutStamps] = useState<{ started_at?: string | null }[] | null>(null);
+  const [workoutStamps, setWorkoutStamps] = useState<ActivityWorkout[] | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [calendarSettled, setCalendarSettled] = useState(false);
 
@@ -178,7 +182,7 @@ export default function Home() {
   const restingHr = data?.resting_hr?.value ?? 0;
   const workoutCount = readWorkoutCount(data);
   const training = readTrainingTotals(data);
-  const calendar = workoutStamps ? trainingCalendar(workoutStamps) : null;
+  const calendar = workoutStamps ? weekActivity(workoutStamps) : null;
   const wearableConnected = Boolean(data?.wearable_connected);
   const activeWorkout = data?.active_workout ?? null;
   const nextSession = data?.next_session ?? null;
@@ -602,7 +606,7 @@ function WeekCalendar({
 }: {
   loading: boolean;
   error: string | null;
-  days: CalendarDay[] | null;
+  days: WeekDayActivity[] | null;
   onRetry: () => void;
 }) {
   const { t, formatDate } = useI18n();
@@ -631,17 +635,27 @@ function WeekCalendar({
           : day.trained
             ? "{day}, trained"
             : "{day}, rest";
+        const name = formatDate(day.date, { weekday: "long" });
         return (
-          <View
+          <Pressable
             key={day.key}
-            accessible
-            accessibilityLabel={t(labelKey, { day: formatDate(day.date, { weekday: "long" }) })}
+            accessibilityRole="button"
+            accessibilityLabel={`${t(labelKey, { day: name })}. ${t("Open this day")}`}
             testID={`week-day-${day.key}`}
+            onPress={() => router.push(`/activity?day=${day.key}` as Href)}
             style={[styles.weekDay, day.isToday && styles.weekDayToday]}
           >
-            <Text style={styles.weekDayLabel}>{formatDate(day.date, { weekday: "narrow" })}</Text>
-            <View style={[styles.weekMark, day.trained ? styles.weekMarkTrained : styles.weekMarkRest]} />
-          </View>
+            <Text style={[styles.weekDayLabel, day.isToday && styles.weekDayLabelToday]}>
+              {formatDate(day.date, { weekday: "narrow" })}
+            </Text>
+            <ActivityRing
+              size={22}
+              stroke={2.5}
+              progress={day.fill}
+              color={colors.blaze}
+              marker={day.trained && day.fill <= 0}
+            />
+          </Pressable>
         );
       })}
     </View>
@@ -885,9 +899,7 @@ const styles = StyleSheet.create({
   },
   weekDayToday: { borderColor: colors.textMuted },
   weekDayLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
-  weekMark: { width: 8, height: 8, borderRadius: 4 },
-  weekMarkTrained: { backgroundColor: colors.text },
-  weekMarkRest: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
+  weekDayLabelToday: { color: colors.text },
   rings: {
     flexDirection: "row",
     justifyContent: "space-around",
