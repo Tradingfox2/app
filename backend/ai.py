@@ -113,6 +113,23 @@ def active_model_label(provider: Optional[str] = None, task: str = "default") ->
     return f"{p}:{default_model(p, task)}"
 
 
+def provider_configured() -> bool:
+    """Whether the selected provider has credentials. Does not touch the network.
+
+    `resolve_provider` falls back to Ollama for `auto` with no keys and for
+    unknown values such as CI's `none`. That fallback is not a configured
+    provider. Ollama counts only when `LLM_PROVIDER` is explicitly `ollama`.
+    """
+    provider = resolve_provider()
+    if provider == "anthropic":
+        return bool(ANTHROPIC_API_KEY)
+    if provider == "openrouter":
+        return bool(OPENROUTER_API_KEY)
+    if provider == "ollama":
+        return (LLM_PROVIDER or "").lower() == "ollama"
+    return False
+
+
 def provider_status() -> dict[str, Any]:
     """Cheap, non-network summary for GET /api/coach/status."""
     active = resolve_provider()

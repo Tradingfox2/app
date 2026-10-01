@@ -8,6 +8,7 @@ Access control mirrors Row Level Security:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import secrets
@@ -22,15 +23,16 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from jwt import InvalidTokenError
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
 import media_storage
 import readiness
 import training_load
+from ai import provider_configured, resolve_provider
 from locales import DEFAULT_LOCALE, SUPPORTED_LOCALES, normalize_locale
 
 ROOT_DIR = Path(__file__).parent
@@ -39,16 +41,16 @@ load_dotenv(ROOT_DIR / ".env")
 # --------------------------------------------------------------------------- #
 # Config                                                                      #
 # --------------------------------------------------------------------------- #
-mongo_url = os.environ["MONGO_URL"]
-db_name = os.environ.get("DB_NAME", "ironflow")
+# Motor client lives in db.py (tz_aware). Same objects as before; scripts
+# import that module so they do not load this file's routers.
+from db import client, db, db_name, mongo_url  # noqa: E402
+
 JWT_SECRET = os.environ.get("JWT_SECRET") or secrets.token_hex(32)
 JWT_ALG = "HS256"
 JWT_TTL_MIN = 60 * 24 * 30  # 30 days
-
-# tz_aware: Mongo stores UTC; without this, reads come back naive and break
-# arithmetic against now() (timezone-aware) — e.g. muscle recovery ages.
-client = AsyncIOMotorClient(mongo_url, tz_aware=True)
-db = client[db_name]
+# Bound the health probe. The client's own server-selection wait is 30s, which
+# would hold a load-balancer check open until it gives up.
+HEALTH_MONGO_TIMEOUT_SEC = 2.0
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -473,6 +475,32 @@ api = APIRouter(prefix="/api")
 @api.get("/")
 async def root():
     return {"service": "ironflow", "status": "ok"}
+
+
+@api.get("/health")
+async def health():
+    """Readiness: Mongo answers a ping, and whether an AI provider is configured.
+
+    AI is reported only. A missing key does not fail the probe — coach routes
+    already degrade, and CI runs with `LLM_PROVIDER=none`. Mongo down is 503
+    so Docker and Render stop sending traffic. The body never includes the
+    driver error (it can echo the host).
+    """
+    mongo_ok = False
+    try:
+        await asyncio.wait_for(db.command("ping"), timeout=HEALTH_MONGO_TIMEOUT_SEC)
+        mongo_ok = True
+    except Exception:  # noqa: BLE001 — any failure means Mongo is not ready
+        logger.warning("Mongo health ping failed")
+    body = {
+        "status": "ok" if mongo_ok else "unavailable",
+        "mongo": mongo_ok,
+        "ai_configured": provider_configured(),
+        "ai_provider": resolve_provider(),
+    }
+    if not mongo_ok:
+        return JSONResponse(status_code=503, content=body)
+    return body
 
 
 # ---- Auth ----------------------------------------------------------------- #

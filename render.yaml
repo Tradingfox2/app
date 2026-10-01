@@ -1,0 +1,105 @@
+# IronFlow on Render. MongoDB is Atlas (see docs/DEPLOY.md); this file does not
+# create a database. Python 3.12 is pinned by backend/Dockerfile.
+services:
+  - type: web
+    name: api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - fromGroup: ironflow-backend
+      - fromGroup: ironflow-integrations
+      - key: CENTRIFUGO_API_KEY
+        fromService:
+          name: centrifugo
+          type: web
+          envVarKey: CENTRIFUGO_HTTP_API_KEY
+      - key: CENTRIFUGO_TOKEN_SECRET
+        fromService:
+          name: centrifugo
+          type: web
+          envVarKey: CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY
+      - key: CENTRIFUGO_URL
+        sync: false
+
+  - type: web
+    name: centrifugo
+    runtime: docker
+    dockerfilePath: ./deploy/centrifugo/Dockerfile
+    dockerContext: ./deploy/centrifugo
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: CENTRIFUGO_HTTP_SERVER_PORT
+        value: "10000"
+      - key: CENTRIFUGO_HEALTH_ENABLED
+        value: "true"
+      - key: CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY
+        generateValue: true
+      - key: CENTRIFUGO_HTTP_API_KEY
+        generateValue: true
+      - key: CENTRIFUGO_CLIENT_ALLOWED_ORIGINS
+        sync: false
+
+envVarGroups:
+  - name: ironflow-backend
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: ironflow
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: APP_PUBLIC_URL
+        sync: false
+      - key: MODERATION_BACKEND
+        value: rules
+      - key: RATE_LIMITS
+        value: "on"
+      - key: PUSH_ENABLED
+        value: "on"
+
+  - name: ironflow-integrations
+    envVars:
+      - key: LLM_PROVIDER
+        value: auto
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: MEDIA_S3_BUCKET
+        sync: false
+      - key: MEDIA_S3_ENDPOINT
+        sync: false
+      - key: MEDIA_S3_ACCESS_KEY
+        sync: false
+      - key: MEDIA_S3_SECRET_KEY
+        sync: false
+      - key: MEDIA_S3_REGION
+        value: auto
+      - key: MEDIA_PUBLIC_BASE_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: EMERGENT_LLM_KEY
+        sync: false
+      - key: INTEGRATION_PROXY_URL
+        sync: false
+      - key: TERRA_API_KEY
+        sync: false
+      - key: TERRA_DEV_ID
+        sync: false
+      - key: TERRA_SIGNING_SECRET
+        sync: false
+      - key: TERRA_LABS_ENABLED
+        value: "false"
+      - key: N8N_WEBHOOK_SECRET
+        sync: false
