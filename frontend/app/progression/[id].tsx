@@ -3,8 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import Svg, { Polyline, Line, Circle } from "react-native-svg";
 import { api } from "@/src/api";
+import { LineChart, chartGeometry } from "@/src/components/line-chart";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -31,23 +31,11 @@ export default function ProgressionScreen() {
   const series = useMemo(() => data?.series ?? [], [data?.series]);
   const pr = data?.pr;
 
-  const chart = useMemo(() => {
-    const w = 320;
-    const h = 160;
-    const pad = 24;
-    if (series.length === 0) return { w, h, pad, points: [], min: 0, max: 0 };
-    const vals = series.map((s: any) => s.best_e1rm);
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const range = Math.max(1, max - min);
-    const stepX = series.length === 1 ? 0 : (w - pad * 2) / (series.length - 1);
-    const points = series.map((s: any, i: number) => {
-      const x = pad + i * stepX;
-      const y = h - pad - ((s.best_e1rm - min) / range) * (h - pad * 2);
-      return { x, y, ...s };
-    });
-    return { w, h, pad, points, min, max };
-  }, [series]);
+  const values = useMemo(
+    () => series.map((item: { best_e1rm: number }) => item.best_e1rm),
+    [series],
+  );
+  const chart = useMemo(() => chartGeometry(values), [values]);
 
   const totalTonnage = series.reduce((acc: number, s: any) => acc + (s.tonnage || 0), 0);
   const totalSets = series.reduce((acc: number, s: any) => acc + (s.sets || 0), 0);
@@ -80,39 +68,13 @@ export default function ProgressionScreen() {
 
         <View style={styles.chartCard}>
           <Text style={styles.cardTitle}>{t("ESTIMATED 1RM")}</Text>
-          {chart.points.length === 0 ? (
+          {values.length === 0 ? (
             <View style={styles.chartEmpty}>
               <Ionicons name="analytics-outline" size={40} color={colors.textDim} />
               <Text style={styles.emptyTxt}>{t("Log some sets to see progression")}</Text>
             </View>
           ) : (
-            <Svg width="100%" height={chart.h} viewBox={`0 0 ${chart.w} ${chart.h}`}>
-              <Line
-                x1={chart.pad}
-                y1={chart.h - chart.pad}
-                x2={chart.w - chart.pad}
-                y2={chart.h - chart.pad}
-                stroke={colors.border}
-                strokeWidth={1}
-              />
-              <Polyline
-                points={chart.points.map((p: any) => `${p.x},${p.y}`).join(" ")}
-                stroke={colors.text}
-                strokeWidth={3}
-                fill="none"
-              />
-              {chart.points.map((p: any, i: number) => (
-                <Circle
-                  key={i}
-                  cx={p.x}
-                  cy={p.y}
-                  r={4}
-                  fill={colors.text}
-                  stroke={colors.bg}
-                  strokeWidth={2}
-                />
-              ))}
-            </Svg>
+            <LineChart values={values} />
           )}
           <View style={styles.chartFoot}>
             <Text style={styles.footLbl}>{t("MIN")} {formatNumber(Math.round(chart.min))}kg</Text>

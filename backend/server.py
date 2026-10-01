@@ -1389,6 +1389,7 @@ async def progression(exercise_id: str, user: dict = Depends(current_user)):
 import analytics  # noqa: E402
 from routers.labs import router as labs_router  # noqa: E402
 from routers.recordings import router as recordings_router  # noqa: E402
+from routers.trends import router as trends_router  # noqa: E402
 from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import next_planned_session, router as program_router  # noqa: E402
@@ -1427,6 +1428,7 @@ api.include_router(tickets_router)
 api.include_router(analytics_router)
 api.include_router(labs_router)
 api.include_router(recordings_router)
+api.include_router(trends_router)
 api.include_router(notifications_router)
 api.include_router(search_router)
 api.include_router(wearables_router)

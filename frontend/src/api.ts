@@ -807,6 +807,25 @@ export type BiomarkerSeries = {
   points: { date: string; value: number }[];
 };
 
+export type TrendPoint = { date: string; value: number | null };
+
+export type TrendSeriesName =
+  | "readiness"
+  | "hrv"
+  | "resting_hr"
+  | "sleep_hours"
+  | "load_au"
+  | "tonnage";
+
+export type Trends = {
+  days: 30 | 90;
+  start: string;
+  end: string;
+  series: Record<TrendSeriesName, TrendPoint[]>;
+  muscles: Record<string, TrendPoint[]>;
+  units: Record<TrendSeriesName, string>;
+};
+
 const TOKEN_KEY = "ironflow_token";
 
 export const auth = {
@@ -1318,6 +1337,7 @@ export const api = {
 
   progression: (exerciseId: string) =>
     request<{ series: any[]; pr: any }>(`/progression/${exerciseId}`),
+  trends: (days: 30 | 90) => request<Trends>(`/trends?days=${days}`),
   heatmap: () => request<MuscleHeatmapData>("/muscle-heatmap"),
 
   muscleRecommendations: (
