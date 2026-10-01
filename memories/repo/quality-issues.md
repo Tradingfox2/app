@@ -40,6 +40,13 @@ enough.
 
 ## Fixed — kept as precedent
 
+### Home week card painted zeros and an endless skeleton (2026-10-01)
+`training-week-card` used `?? 0` and left `home-stats-skeleton` up after
+`GET /home/today` failed. `readTrainingTotals` now refuses a partial block,
+the card shows `week-retry` or `week-empty`, and the calendar is the existing
+`GET /workouts` list. `TONNAGE` goes through `t()`. Regression:
+`frontend/e2e/wave-a.spec.ts` and `frontend/src/training-week.test.ts`.
+
 ### What running on an Android phone found (2026-09-15)
 Web e2e passed; the Android emulator (Expo Go, SDK 54) did not:
 - Importing `expo-notifications` in Expo Go put up an error overlay at startup.
