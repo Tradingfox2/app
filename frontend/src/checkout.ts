@@ -21,6 +21,17 @@ export async function openCheckout(communityId: string, inviteCode?: string): Pr
   return "closed";
 }
 
+/** Partner Checkout for one gym. The return URL does not grant the plan. */
+export async function openGymCheckout(gymId: string): Promise<"redirected" | "closed"> {
+  const { url } = await api.gymSubscribe(gymId);
+  if (Platform.OS === "web") {
+    window.location.assign(url);
+    return "redirected";
+  }
+  await WebBrowser.openBrowserAsync(url);
+  return "closed";
+}
+
 /** Ask the server a few times whether the payment has activated the membership. */
 export async function waitForMembership(communityId: string, attempts = 8, everyMs = 2500): Promise<boolean> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
