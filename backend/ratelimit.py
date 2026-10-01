@@ -57,6 +57,8 @@ LIMITS: dict[str, tuple[int, int]] = {
     # One hit per request, and a request carries at most 25 events.
     "analytics": (60, 60),
     "gym_redeem": (15, 600),
+    # Coach chat: 40 messages per user per day.
+    "coach_chat": (40, 86400),
 }
 
 

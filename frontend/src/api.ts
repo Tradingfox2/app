@@ -840,6 +840,30 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+async function requestText(path: string, options: RequestInit = {}): Promise<string> {
+  const token = await auth.getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((options.headers as Record<string, string>) ?? {}),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}/api${path}`, { ...options, headers });
+  const text = await res.text();
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const parsed = JSON.parse(text) as { detail?: unknown };
+      if (typeof parsed.detail === "string") detail = parsed.detail;
+    } catch {
+      detail = "";
+    }
+    const error = new Error(detail || `Request failed: ${res.status}`) as Error & { status: number };
+    error.status = res.status;
+    throw error;
+  }
+  return text;
+}
+
 export type UploadFile = { uri: string; name: string; mimeType: string };
 
 async function upload<T>(path: string, file: UploadFile): Promise<T> {
@@ -1337,6 +1361,10 @@ export const api = {
   // One personalised coaching sentence per day (fast model, cached server-side)
   coachTip: () =>
     request<{ date: string; source: string; tip: string; focus: string }>("/coach/tip"),
+  coachHistory: () =>
+    request<{ role: "user" | "assistant"; content: string }[]>("/coach/chat"),
+  coachChat: (message: string) =>
+    requestText("/coach/chat", { method: "POST", body: JSON.stringify({ message }) }),
 
   // Daily did-you-know tips (5-10, stable per user per day)
   dailyTips: (count = 7) =>

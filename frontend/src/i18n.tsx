@@ -13,6 +13,7 @@ import { activityDayMessages } from "./activity-day-locales";
 import { recorderMessages } from "./recorder-locales";
 import { gymMessages } from "./gym-locales";
 import { waveAMessages } from "./wave-a-locales";
+import { coachChatMessages } from "./coach-chat-locales";
 
 type Messages = Record<string, string>;
 
@@ -187,7 +188,7 @@ void i18n.use(initReactI18next).init({
   resources: Object.fromEntries(
     Object.entries(messages).map(([locale, translation]) => [
       locale,
-      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...activityDayMessages[locale as SupportedLocale], ...recorderMessages[locale as SupportedLocale], ...accountingMessages[locale as SupportedLocale], ...gymMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale] } },
+      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...activityDayMessages[locale as SupportedLocale], ...recorderMessages[locale as SupportedLocale], ...accountingMessages[locale as SupportedLocale], ...gymMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale], ...coachChatMessages[locale as SupportedLocale] } },
     ]),
   ),
   lng: initialLocale,

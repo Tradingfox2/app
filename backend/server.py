@@ -412,6 +412,7 @@ async def lifespan(app: FastAPI):
     await db.community_invites.create_index("code", unique=True)
     await db.community_invites.create_index([("community_id", 1), ("revoked_at", 1), ("created_at", -1)])
     await db.rate_limits.create_index("key", unique=True)
+    await db.coach_conversations.create_index([("user_id", 1), ("created_at", -1)])
     # TTL: a window's counter deletes itself once the window has passed.
     await db.rate_limits.create_index("expires_at", expireAfterSeconds=0)
     await db.direct_messages.create_index([("thread_key", 1), ("created_at", -1)])
@@ -1368,6 +1369,7 @@ from routers.recordings import router as recordings_router  # noqa: E402
 from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import next_planned_session, router as program_router  # noqa: E402
+from routers.coach_chat import router as coach_chat_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 from routers.gyms import ensure_indexes as ensure_gym_indexes  # noqa: E402
 from routers.gyms import router as gyms_router  # noqa: E402
@@ -1394,6 +1396,7 @@ async def home_today_for(uid: str) -> dict:
 
 
 api.include_router(program_router)
+api.include_router(coach_chat_router)
 api.include_router(community_router)
 api.include_router(social_router)
 api.include_router(admin_router)
