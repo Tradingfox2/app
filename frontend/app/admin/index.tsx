@@ -545,6 +545,7 @@ export default function AdminConsole() {
                 <Text style={styles.meta}>{account.email}</Text>
               </View>
               {account.staff_role ? <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(account.staff_role.toUpperCase())}</Text></View> : null}
+              {account.gym_owner ? <View style={styles.staffTag} testID={`gym-owner-${account.id}`}><Text style={styles.staffTagText}>{t("GYM OWNER")}</Text></View> : null}
               {account.suspended_at ? <View style={styles.suspendedTag}><Text style={styles.suspendedTagText}>{t("SUSPENDED")}</Text></View> : null}
               <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
             </Affordance>

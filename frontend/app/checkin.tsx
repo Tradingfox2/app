@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, type Href } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { api } from "@/src/api";
+import { api, type GymReward } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { datedSessionTitle } from "@/src/session-title";
@@ -30,6 +30,8 @@ export default function CheckinScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeWorkoutId, setActiveWorkoutId] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<GymReward[]>([]);
+  const [ownsGym, setOwnsGym] = useState(false);
   const [starting, setStarting] = useState(false);
   const scannedRef = useRef(false);
 
@@ -45,6 +47,9 @@ export default function CheckinScreen() {
     } finally {
       setLoading(false);
     }
+    // Rewards and the owner link must not fail the gym list (first paint of this screen).
+    api.gymRewards().then((rows) => setRewards(Array.isArray(rows) ? rows : [])).catch(() => setRewards([]));
+    api.myGyms().then((rows) => setOwnsGym(Array.isArray(rows) && rows.length > 0)).catch(() => setOwnsGym(false));
   }, [t]);
 
   useFocusEffect(useCallback(() => {
@@ -209,6 +214,9 @@ export default function CheckinScreen() {
                 <Text style={styles.resultMeta} testID="visits-until-reward">
                   {t("{count} visits until reward", { count: formatNumber(result.visits_until_reward ?? 0) })}
                 </Text>
+                {result.reward?.code ? (
+                  <Text style={styles.resultMeta} testID="checkin-reward-code">{result.reward.code}</Text>
+                ) : null}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={activeWorkoutId ? t("Resume your live session") : t("Start a workout")}
@@ -235,6 +243,24 @@ export default function CheckinScreen() {
             ) : null}
             {!loading && !loadError && gyms.length === 0 ? (
               <Text style={styles.explainTxt} testID="checkin-empty">{t("No partner gyms yet.")}</Text>
+            ) : null}
+
+            {ownsGym ? (
+              <Pressable testID="manage-gym-link" accessibilityRole="button" accessibilityLabel={t("MANAGE GYM")} onPress={() => router.push("/gym/manage" as Href)} style={styles.settingsBtn}>
+                <Text style={styles.settingsTxt}>{t("MANAGE GYM")}</Text>
+              </Pressable>
+            ) : null}
+            {rewards.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>{t("YOUR REWARDS")}</Text>
+                {rewards.map((reward) => (
+                  <View key={reward.id} style={styles.visitRow} testID={`reward-${reward.id}`}>
+                    <Ionicons name="gift-outline" size={14} color={colors.textMuted} />
+                    <Text style={styles.visitTxt}>{reward.gym_name} · {reward.title || t("Partner reward")} · {reward.code}</Text>
+                    <Text style={styles.visitDate}>{formatDate(reward.expires_at)}</Text>
+                  </View>
+                ))}
+              </>
             ) : null}
 
             <Text style={styles.sectionTitle}>{t("PARTNER GYMS")}</Text>

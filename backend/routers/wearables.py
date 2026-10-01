@@ -1,11 +1,11 @@
-"""Wearables (Terra-ready, simulated until keys are provided) + gym QR check-ins.
+"""Wearables (Terra-ready, simulated until keys are provided).
 
 - "Sources connectées": connect/disconnect/sync per provider.
 - POST /webhooks/terra is the ready-to-plug Terra webhook (normalizes payloads
   into wearable_metrics). Real OAuth activates once TERRA_API_KEY/TERRA_DEV_ID
   are set in backend/.env.
-- QR check-in: scan "IRONFLOW-GYM:<id>" -> gym visit, optional workout link,
-  partner reward unlocks every N visits.
+
+Gym QR check-ins live in routers/gyms.py.
 """
 import csv
 import io
@@ -21,9 +21,8 @@ from typing import Optional
 import requests as http
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
 
-from server import clean, current_user, db, new_id, now, optional_user
+from server import clean, current_user, db, new_id, now
 from terra_labs import verify_webhook_signature
 from routers.labs import claim_terra_lab_event, process_claimed_terra_lab_event
 
@@ -784,90 +783,3 @@ async def technogym_webhook(request: Request):
         {"user_id": uid, "provider": "technogym"}, {"$set": {"last_sync_at": now()}}
     )
     return {"received": True, "processed": written}
-
-
-# --------------------------------------------------------------------------- #
-# Gym QR check-ins                                                            #
-# --------------------------------------------------------------------------- #
-SEED_GYMS = [
-    {"name": "IronFlow Bastille", "city": "Paris", "reward_every": 10},
-    {"name": "IronFlow Part-Dieu", "city": "Lyon", "reward_every": 10},
-    {"name": "IronFlow Vieux-Port", "city": "Marseille", "reward_every": 10},
-]
-
-
-async def ensure_gyms(user: Optional[dict] = None):
-    """Seed the demo gyms only when the *test account* asks for them.
-
-    Real gyms are created by partners (admin flow); real athletes never see
-    seeded mock venues unless one already exists in the database.
-    """
-    if user is None or not is_demo_user(user):
-        return
-    if await db.gyms.count_documents({}) == 0:
-        for g in SEED_GYMS:
-            gid = new_id()
-            await db.gyms.insert_one(
-                {"id": gid, **g, "qr_payload": f"IRONFLOW-GYM:{gid}", "created_at": now()}
-            )
-
-
-class CheckinIn(BaseModel):
-    qr_payload: str
-    workout_id: Optional[str] = None
-
-
-@router.get("/gyms")
-async def list_gyms(user: Optional[dict] = Depends(optional_user)):
-    # Public list (QR flows); demo gyms are only seeded for the test account.
-    await ensure_gyms(user)
-    return [clean(g) async for g in db.gyms.find({}, {"_id": 0}).sort("name", 1)]
-
-
-@router.post("/gyms/checkin", status_code=201)
-async def gym_checkin(body: CheckinIn, user: dict = Depends(current_user)):
-    await ensure_gyms(user)
-    payload = body.qr_payload.strip()
-    if not payload.upper().startswith("IRONFLOW-GYM:"):
-        raise HTTPException(422, "QR code non reconnu")
-    gym_id = payload.split(":", 1)[1]
-    gym = await db.gyms.find_one({"id": gym_id}, {"_id": 0})
-    if not gym:
-        raise HTTPException(404, "Salle inconnue")
-    if body.workout_id:
-        w = await db.workouts.find_one({"id": body.workout_id, "user_id": user["id"]})
-        if not w:
-            raise HTTPException(404, "Workout not found")
-        await db.workouts.update_one({"id": body.workout_id}, {"$set": {"gym_id": gym_id}})
-    visit = {
-        "id": new_id(),
-        "user_id": user["id"],
-        "gym_id": gym_id,
-        "workout_id": body.workout_id,
-        "checked_in_at": now(),
-    }
-    await db.gym_visits.insert_one(dict(visit))
-    total = await db.gym_visits.count_documents({"user_id": user["id"], "gym_id": gym_id})
-    reward_every = gym.get("reward_every", 10)
-    return {
-        "visit": clean(visit),
-        "gym": clean(gym),
-        "total_visits": total,
-        "reward_unlocked": total % reward_every == 0,
-        "visits_until_reward": (reward_every - total % reward_every) % reward_every,
-    }
-
-
-@router.get("/gyms/visits")
-async def my_visits(user: dict = Depends(current_user)):
-    visits = [
-        clean(v)
-        async for v in db.gym_visits.find({"user_id": user["id"]}, {"_id": 0})
-        .sort("checked_in_at", -1)
-        .limit(50)
-    ]
-    gyms = {g["id"]: g async for g in db.gyms.find({}, {"_id": 0})}
-    for v in visits:
-        g = gyms.get(v["gym_id"])
-        v["gym_name"] = g["name"] if g else "?"
-    return visits

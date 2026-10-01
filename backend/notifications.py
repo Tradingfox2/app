@@ -37,6 +37,7 @@ PROGRAM_ADOPTED = "program_adopted"
 COMMENT_REPLY = "comment_reply"
 COMMENT_LIKE = "comment_like"
 JOIN_REQUEST = "join_request"
+GYM_REWARD = "gym_reward"
 
 #: Repeated events on the same object collapse into one row instead of
 #: flooding the list — "X and 4 others liked your post". Only unread rows
