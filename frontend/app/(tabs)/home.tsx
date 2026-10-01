@@ -514,27 +514,41 @@ export default function Home() {
           />
         </View>
 
-        <Pressable
-          style={(state) => [styles.tipCard, pressableStyle(state, { variant: "surface", reduceMotion })]}
-          onPress={() => router.push("/program")}
-          accessibilityRole="button"
-          accessibilityLabel={t("Open the AI coach")}
-          testID="coach-tip-card"
-        >
-          <View style={styles.cardHead}>
-            <Text style={styles.tipTitle}>{t("COACH TIP")}</Text>
-            {coach && !coach.connected ? (
-              <View style={styles.coachBadge}>
-                <Ionicons name="alert-circle" size={14} color={colors.warning} />
-                <Text style={styles.coachBadgeTxt}>{t("AI OFFLINE")}</Text>
+        <View style={styles.tipCard} testID="coach-tip-card">
+          <Pressable
+            onPress={() => router.push("/coach/chat" as Href)}
+            accessibilityRole="button"
+            accessibilityLabel={t("Open the AI coach")}
+            testID="coach-tip-open"
+            style={(state) => pressableStyle(state, { variant: "surface", reduceMotion })}
+          >
+            <View style={styles.cardHead}>
+              <Text style={styles.tipTitle}>{t("COACH TIP")}</Text>
+              <View style={styles.tipMeta}>
+                {coach && !coach.connected ? (
+                  <View style={styles.coachBadge}>
+                    <Ionicons name="alert-circle" size={14} color={colors.warning} />
+                    <Text style={styles.coachBadgeTxt}>{t("AI OFFLINE")}</Text>
+                  </View>
+                ) : null}
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </View>
-            ) : null}
-          </View>
-          <Text style={styles.tipTxt} testID="coach-tip-text">
-            {coachTip?.tip ??
-              t("Recovery is your compass. Push hard on green days, glide on red ones.")}
-          </Text>
-        </Pressable>
+            </View>
+            <Text style={styles.tipTxt} testID="coach-tip-text">
+              {coachTip?.tip ??
+                t("Recovery is your compass. Push hard on green days, glide on red ones.")}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/program")}
+            accessibilityRole="button"
+            accessibilityLabel={t("Open your training plan")}
+            testID="coach-tip-plan"
+            style={(state) => [styles.tipPlan, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          >
+            <Text style={styles.tipPlanTxt}>{t("TRAINING PLAN")}</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.heatCard} testID="home-heatmap-card">
           <Text style={styles.cardTitle}>{t("MUSCLE LOAD · 7 DAYS")}</Text>
@@ -1012,6 +1026,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   tipTxt: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  tipMeta: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  tipPlan: {
+    alignSelf: "flex-end",
+    marginTop: spacing.md,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tipPlanTxt: { color: colors.text, fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   coachBadge: {
     flexDirection: "row",
     alignItems: "center",
