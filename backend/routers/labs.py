@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from ai import active_model_label, llm_json, llm_labs_json, ocr_document
 from locales import lab_disclaimer, lab_language_instruction, normalize_locale
 import notifications
-from server import can_access_user_data, clean, current_user, db, new_id, now
+from server import can_access_user_data, clean, current_user, db, new_id, now, require_pro
 from storage import put_object
 from terra_labs import format_observation_for_interpretation, map_result, upload_report
 
@@ -488,7 +488,7 @@ async def process_claimed_terra_lab_event(payload: dict):
 async def upload_lab(
     background: BackgroundTasks,
     file: UploadFile = File(...),
-    user: dict = Depends(current_user),
+    user: dict = Depends(require_pro),
 ):
     mime = (file.content_type or "").lower()
     allowed_mimes = TERRA_ALLOWED_MIMES if TERRA_LABS_CONFIGURED else ALLOWED_MIMES

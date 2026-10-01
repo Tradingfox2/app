@@ -12,9 +12,11 @@ Unconfigured is explicit, not silent: with no `STRIPE_SECRET_KEY` a checkout
 answers 503, so a paid community never pretends to take money it cannot.
 
 Environment:
-- `STRIPE_SECRET_KEY`      sk_test_… or sk_live_… (server only, never shipped)
-- `STRIPE_WEBHOOK_SECRET`  whsec_… from the webhook endpoint in the dashboard
-- `PUBLIC_APP_URL`         where Stripe sends people back, e.g. https://app.ironflow.fit
+- `STRIPE_SECRET_KEY`         sk_test_… or sk_live_… (server only, never shipped)
+- `STRIPE_WEBHOOK_SECRET`     whsec_… from the webhook endpoint in the dashboard
+- `STRIPE_PRICE_PRO_MONTHLY`  Price id for the Pro monthly plan
+- `STRIPE_PRICE_PRO_YEARLY`   Price id for the Pro yearly plan
+- `PUBLIC_APP_URL`            where Stripe sends people back, e.g. https://app.ironflow.fit
 """
 from __future__ import annotations
 
@@ -98,6 +100,44 @@ async def create_checkout(*, community: dict, user: dict, success_url: str, canc
         data[f"metadata[{key}]"] = value
         data[f"subscription_data[metadata][{key}]"] = value
     return await _call("POST", "/checkout/sessions", data)
+
+
+def pro_price_id(plan: str) -> str:
+    env = {"pro_monthly": "STRIPE_PRICE_PRO_MONTHLY", "pro_yearly": "STRIPE_PRICE_PRO_YEARLY"}[plan]
+    return os.environ.get(env, "")
+
+
+async def create_customer(user: dict) -> dict:
+    data = {"metadata[user_id]": user["id"]}
+    if user.get("email"):
+        data["email"] = user["email"]
+    if user.get("full_name"):
+        data["name"] = user["full_name"]
+    return await _call("POST", "/customers", data, idempotency_key=f"pro-customer-{user['id']}")
+
+
+async def create_pro_checkout(*, customer_id: str, user_id: str, plan: str, price_id: str, success_url: str, cancel_url: str) -> dict:
+    """Subscription Checkout. Yearly includes a 7-day trial. Grants nothing by itself."""
+    data = {
+        "mode": "subscription", "customer": customer_id, "client_reference_id": user_id,
+        "line_items[0][price]": price_id, "line_items[0][quantity]": "1",
+        "success_url": success_url, "cancel_url": cancel_url, "allow_promotion_codes": "true",
+        "automatic_tax[enabled]": "true", "billing_address_collection": "required", "customer_update[address]": "auto",
+        "metadata[kind]": "pro", "metadata[user_id]": user_id, "metadata[plan]": plan,
+        "subscription_data[metadata][kind]": "pro", "subscription_data[metadata][user_id]": user_id,
+        "subscription_data[metadata][plan]": plan,
+    }
+    if plan == "pro_yearly":
+        data["subscription_data[trial_period_days]"] = "7"
+    return await _call("POST", "/checkout/sessions", data)
+
+
+async def create_portal(*, customer_id: str, return_url: str) -> dict:
+    return await _call("POST", "/billing_portal/sessions", {"customer": customer_id, "return_url": return_url})
+
+
+async def retrieve_price(price_id: str) -> dict:
+    return await _call("GET", f"/prices/{price_id}")
 
 
 async def cancel_subscription(subscription_id: str) -> None:

@@ -22,7 +22,7 @@ import requests as http
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
-from server import clean, current_user, db, new_id, now
+from server import clean, current_user, db, new_id, now, require_pro
 from terra_labs import verify_webhook_signature
 from routers.labs import claim_terra_lab_event, process_claimed_terra_lab_event
 
@@ -430,7 +430,7 @@ async def disconnect_source(provider: str, user: dict = Depends(current_user)):
 
 
 @router.post("/wearables/sources/{provider}/sync")
-async def sync_source(provider: str, user: dict = Depends(current_user)):
+async def sync_source(provider: str, user: dict = Depends(require_pro)):
     """Simulated sync: writes 7 days of normalized metrics for this provider."""
     src = await db.wearable_sources.find_one(
         {"user_id": user["id"], "provider": provider, "status": "connected"}, {"_id": 0}

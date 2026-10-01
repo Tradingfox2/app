@@ -68,7 +68,7 @@ prints a `whsec_` for the session.
 - **Refunds and disputes** are handled in the Stripe dashboard. Cancelling there
   sends `customer.subscription.deleted`, which removes access automatically.
 - **Tax.** Stripe Tax can be switched on per account; no tax is computed here.
-- The app-wide Pro plan (`/api/subscriptions`) is separate and still fail-closed.
+- The app-wide Pro plan is Stripe Checkout (`POST /api/subscriptions/checkout`). `POST /api/subscriptions` still cannot mint a paid plan.
 
 ## Verification
 

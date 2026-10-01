@@ -258,6 +258,21 @@ async def current_user(
     return user
 
 
+async def require_pro(user: dict = Depends(current_user)) -> dict:
+    """A live Pro row. `past_due` still counts while Stripe retries the card."""
+    sub = await db.subscriptions.find_one(
+        {
+            "user_id": user["id"],
+            "plan": {"$in": ["pro", "pro_monthly", "pro_yearly"]},
+            "status": {"$in": ["active", "trialing", "past_due"]},
+        },
+        {"_id": 1},
+    )
+    if not sub:
+        raise HTTPException(402, "Pro subscription required")
+    return user
+
+
 async def optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> dict | None:
@@ -407,6 +422,11 @@ async def lifespan(app: FastAPI):
         "stripe_subscription_id", partialFilterExpression={"stripe_subscription_id": {"$type": "string"}})
     await db.community_checkouts.create_index("id", unique=True)
     await db.billing_events.create_index("id", unique=True)
+    await db.subscriptions.create_index("user_id")
+    await db.subscriptions.create_index(
+        "stripe_subscription_id", unique=True,
+        partialFilterExpression={"stripe_subscription_id": {"$type": "string"}},
+    )
     await db.push_tokens.create_index("token", unique=True)
     await db.push_tokens.create_index("user_id")
     await db.community_invites.create_index("code", unique=True)
@@ -885,7 +905,7 @@ async def list_biomarkers(user: dict = Depends(current_user), owner_id: Optional
 
 
 @api.post("/biomarkers")
-async def add_biomarker(body: BiomarkerIn, user: dict = Depends(current_user)):
+async def add_biomarker(body: BiomarkerIn, user: dict = Depends(require_pro)):
     doc = {
         "id": new_id(),
         "user_id": user["id"],
@@ -1276,10 +1296,13 @@ async def create_session(body: GroupSessionIn, user: dict = Depends(current_user
 @api.get("/subscriptions/current")
 async def current_sub(user: dict = Depends(current_user)):
     sub = await db.subscriptions.find_one(
-        {"user_id": user["id"], "status": "active"}, {"_id": 0}
+        {"user_id": user["id"], "status": {"$in": ["active", "trialing", "past_due"]}},
+        {"_id": 0},
     )
     if not sub:
         return {"plan": "free", "status": "active"}
+    for key in ("currency", "amount_cents", "current_period_end"):
+        sub.setdefault(key, None)
     return clean(sub)
 
 

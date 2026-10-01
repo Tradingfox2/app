@@ -5,16 +5,33 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useAuth } from "@/src/auth-context";
-import { api, type SupportedLocale } from "@/src/api";
+import { api, type ProPlanPrice, type SupportedLocale } from "@/src/api";
 import { card, colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Avatar } from "@/src/components/social/avatar";
 
 const PLANS: { key: string; name: string; price: string; features: string[] }[] = [
   { key: "free", name: "FREE", price: "€0", features: ["Workout tracker", "50 exercises", "Community feed"] },
-  { key: "pro", name: "PRO", price: "€9.90 / mo", features: ["Biomarker uploads", "Wearable sync", "AI insights"] },
+  { key: "pro", name: "PRO", price: "", features: ["Biomarker uploads", "Wearable sync", "AI insights"] },
   { key: "elite", name: "ELITE", price: "€29 / mo", features: ["1:1 coach", "Group sessions", "Priority support"] },
 ];
+
+const ZERO_DECIMAL = new Set(["bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf"]);
+
+function formatMinor(amount: number, currency: string, locale: string): string {
+  const code = currency.trim();
+  if (!code) return String(amount);
+  const major = ZERO_DECIMAL.has(code.toLowerCase()) ? amount : amount / 100;
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency: code.toUpperCase() }).format(major);
+  } catch {
+    return `${amount} ${code.toUpperCase()}`;
+  }
+}
+
+function isPro(plan: string | undefined): boolean {
+  return plan === "pro" || plan === "pro_monthly" || plan === "pro_yearly";
+}
 
 const LANGUAGES: { code: SupportedLocale; label: string }[] = [
   { code: "fr", label: "FRANÇAIS" },
@@ -26,7 +43,7 @@ const LANGUAGES: { code: SupportedLocale; label: string }[] = [
 
 export default function Settings() {
   const { user, logout, refresh } = useAuth();
-  const { t } = useI18n();
+  const { t, localeTag } = useI18n();
   const router = useRouter();
   const [sub, setSub] = useState<any>(null);
   const [ref, setRef] = useState<any>(null);
@@ -34,6 +51,9 @@ export default function Settings() {
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState("");
   const [planError, setPlanError] = useState("");
+  const [prices, setPrices] = useState<ProPlanPrice[] | null>(null);
+  const [pricesLoading, setPricesLoading] = useState(false);
+  const billingBusy = useRef(false);
   const signingOutRef = useRef(false);
   const rankingBusy = useRef(false);
   const [savingRanking, setSavingRanking] = useState(false);
@@ -110,6 +130,43 @@ export default function Settings() {
     setPlanError("");
     try { await api.setSub(plan); await load(); }
     catch { setPlanError(t("Plan changes require verified billing. No payment was taken.")); }
+  };
+
+  const fail = (cause: unknown, fallback: string) => {
+    setPlanError(cause instanceof Error ? cause.message : t(fallback));
+  };
+  const webOnly = () => {
+    if (Platform.OS === "web") return false;
+    setPlanError(t("Pro is available on the web app."));
+    return true;
+  };
+  const openPortal = async () => {
+    if (billingBusy.current || webOnly()) return;
+    setPlanError("");
+    billingBusy.current = true;
+    try {
+      const portal = await api.subscriptionPortal();
+      if (portal.url) window.location.assign(portal.url);
+    } catch (cause) { fail(cause, "Could not open checkout."); }
+    finally { billingBusy.current = false; }
+  };
+  const openPro = async () => {
+    setPlanError("");
+    if (isPro(sub?.plan) || webOnly() || prices || pricesLoading) return;
+    setPricesLoading(true);
+    try { setPrices((await api.subscriptionPlans()).plans ?? []); }
+    catch (cause) { fail(cause, "Payments are not set up yet."); }
+    finally { setPricesLoading(false); }
+  };
+  const startCheckout = async (plan: ProPlanPrice["plan"]) => {
+    if (billingBusy.current) return;
+    setPlanError("");
+    billingBusy.current = true;
+    try {
+      const session = await api.subscriptionCheckout(plan);
+      if (session.url && Platform.OS === "web") window.location.assign(session.url);
+    } catch (cause) { fail(cause, "Could not open checkout."); }
+    finally { billingBusy.current = false; }
   };
 
   const selectLanguage = async (locale: SupportedLocale) => {
@@ -292,40 +349,50 @@ export default function Settings() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("SUBSCRIPTION")}</Text>
-          <Text style={styles.languageHint}>{t("Plan changes require verified billing. No payment was taken.")}</Text>
           {planError ? <Text accessibilityRole="alert" style={{ color: colors.error }}>{planError}</Text> : null}
           {PLANS.map((p) => {
-            const active = (sub?.plan ?? "free") === p.key;
+            const active = p.key === "pro" ? isPro(sub?.plan) : (sub?.plan ?? "free") === p.key;
             return (
-              <Affordance
-                key={p.key}
-                testID={`plan-${p.key}-btn`}
-                onPress={() => selectPlan(p.key)}
-                style={[styles.planCard, active && styles.planCardActive]}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={styles.planHead}>
-                    <Text style={styles.planName}>{p.name}</Text>
-                    {active && (
-                      <View style={styles.planBadge}>
-                        <Text style={styles.planBadgeTxt}>{t("CURRENT")}</Text>
-                      </View>
-                    )}
+              <View key={p.key}>
+                <Affordance
+                  testID={`plan-${p.key}-btn`}
+                  onPress={() => { if (p.key === "pro") void openPro(); else void selectPlan(p.key); }}
+                  style={[styles.planCard, active && styles.planCardActive]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.planHead}>
+                      <Text style={styles.planName}>{p.name}</Text>
+                      {active && (
+                        <View style={styles.planBadge}>
+                          <Text style={styles.planBadgeTxt}>{t("CURRENT")}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {p.price ? <Text style={styles.planPrice}>{p.price}</Text> : null}
+                    <View style={{ marginTop: spacing.sm, gap: 4 }}>
+                      {p.features.map((f) => (
+                        <View key={f} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Ionicons name="checkmark" size={12} color={colors.text} />
+                          <Text style={styles.planFeature}>{t(f)}</Text>
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                  <Text style={styles.planPrice}>{p.price}</Text>
-                  <View style={{ marginTop: spacing.sm, gap: 4 }}>
-                    {p.features.map((f) => (
-                      <View
-                        key={f}
-                        style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                      >
-                        <Ionicons name="checkmark" size={12} color={colors.text} />
-                        <Text style={styles.planFeature}>{t(f)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </Affordance>
+                </Affordance>
+                {p.key === "pro" && isPro(sub?.plan) ? (
+                  <Affordance testID="plan-manage-btn" onPress={() => void openPortal()} style={styles.planCard}>
+                    <Text style={styles.planName}>{t("MANAGE BILLING")}</Text>
+                  </Affordance>
+                ) : null}
+                {p.key === "pro" && pricesLoading ? <Text style={styles.languageHint}>{t("Loading prices…")}</Text> : null}
+                {p.key === "pro" && prices?.map((price) => (
+                  <Affordance key={price.plan} testID={price.plan === "pro_yearly" ? "plan-pro-yearly" : "plan-pro-monthly"} onPress={() => void startCheckout(price.plan)} style={styles.planCard}>
+                    <Text style={styles.planName}>{price.interval === "year" ? t("YEARLY") : t("MONTHLY")}</Text>
+                    <Text style={styles.planPrice}>{formatMinor(price.amount_cents, price.currency, localeTag)}</Text>
+                    {price.interval === "year" ? <Text style={styles.planFeature}>{t("7-day free trial")}</Text> : null}
+                  </Affordance>
+                ))}
+              </View>
             );
           })}
         </View>

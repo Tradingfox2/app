@@ -15,6 +15,7 @@ from pymongo.errors import DuplicateKeyError
 from server import clean, current_user, db, new_id, now, optional_user
 from community_rankings import build_rankings
 import billing
+import pro_billing
 import challenges
 import moderation
 import notifications
@@ -815,10 +816,18 @@ async def stripe_webhook(request: Request):
         return {"received": True}
     kind = event.get("type")
     obj = (event.get("data") or {}).get("object") or {}
-    if kind == "checkout.session.completed":
+    # Pro uses the same signed endpoint. Community events have no kind=pro metadata
+    # and no row in `subscriptions`, so they still take the membership path.
+    if kind == "checkout.session.completed" and (obj.get("metadata") or {}).get("kind") == "pro":
+        await pro_billing.checkout_completed(obj)
+    elif kind == "checkout.session.completed":
         await _checkout_completed(obj)
+    elif kind in {"customer.subscription.deleted", "customer.subscription.updated"} and await pro_billing.is_pro_event(obj):
+        await pro_billing.subscription_changed(obj, deleted=kind == "customer.subscription.deleted")
     elif kind in {"customer.subscription.deleted", "customer.subscription.updated"}:
         await _subscription_changed(obj, deleted=kind == "customer.subscription.deleted")
+    elif kind in {"invoice.paid", "invoice.payment_failed"}:
+        await pro_billing.invoice_changed(obj, failed=kind == "invoice.payment_failed")
     await db.billing_events.update_one(
         {"id": event.get("id")}, {"$setOnInsert": {"type": kind, "received_at": now()}}, upsert=True)
     return {"received": True}

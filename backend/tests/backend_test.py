@@ -58,6 +58,17 @@ def demo_headers(demo_auth: dict) -> dict:
     return {"Authorization": f"Bearer {demo_auth['token']}", "Content-Type": "application/json"}
 
 
+@pytest.fixture(scope="session", autouse=True)
+def demo_pro(demo_auth: dict):
+    """Lab upload and wearable sync require Pro. The seeded demo user is granted it here."""
+    mongo = MongoClient(os.environ.get("MONGO_URL", "mongodb://127.0.0.1:27017"))
+    mongo[os.environ.get("DB_NAME", "ironflow")].subscriptions.update_one(
+        {"user_id": demo_auth["user"]["id"]},
+        {"$set": {"plan": "pro", "status": "active", "user_id": demo_auth["user"]["id"]}},
+        upsert=True,
+    )
+
+
 @pytest.fixture(scope="class")
 def completed_lab_report(demo_auth: dict):
     client = MongoClient(os.environ.get("MONGO_URL", "mongodb://127.0.0.1:27017"))
