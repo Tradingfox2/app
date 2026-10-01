@@ -199,6 +199,8 @@ export default function Home() {
   const training = readTrainingTotals(data);
   const calendar = workoutStamps ? weekActivity(workoutStamps) : null;
   const wearableConnected = Boolean(data?.wearable_connected);
+  const readinessConfidence = data?.readiness?.confidence;
+  const showMorning = typeof readinessConfidence === "number" && readinessConfidence < 0.5;
   const activeWorkout = data?.active_workout ?? null;
   const nextSession = data?.next_session ?? null;
   const showSkeleton = !dashSettled;
@@ -365,6 +367,19 @@ export default function Home() {
             </>
           ) : null}
         </View>
+
+        {showMorning ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Tell your coach how you slept.")}
+            testID="home-morning"
+            onPress={() => router.push("/morning" as Href)}
+            style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          >
+            <Ionicons name="moon-outline" size={18} color={colors.text} />
+            <Text style={styles.coachRowTxt}>{t("HOW YOU SLEPT")}</Text>
+          </Pressable>
+        ) : null}
 
         {/* The LIVE NOW strip above owns the band under the header. This card sits under the rings. */}
         <View style={styles.todayCard} testID="today-card">

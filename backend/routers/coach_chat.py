@@ -105,7 +105,8 @@ async def _context(uid: str) -> str:
     return (
         f"RECOVERY ({fatigue}): {reasons}\n"
         f"HRV {recovery.get('hrv')} ms, baseline {recovery.get('hrv_baseline_7d')} ms, "
-        f"sleep {recovery.get('sleep_hours')} h, score {recovery.get('recovery_score')}\n"
+        f"sleep {recovery.get('sleep_hours')} h, score {recovery.get('recovery_score')}, "
+        f"soreness {recovery.get('soreness')}, mood {recovery.get('mood')}\n"
         f"TRAINING (14d): {'; '.join(history) or 'none'}\n"
         f"BIOMARKERS: {'; '.join(markers) or 'none'}\n"
         f"ACTIVE PROGRAM: {summary}\n"
