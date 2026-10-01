@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
@@ -20,7 +20,9 @@ export default function AuthScreen() {
   const { login, register } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const params = useLocalSearchParams<{ ref?: string | string[] }>();
+  const referralCode = (Array.isArray(params.ref) ? params.ref[0] : params.ref)?.trim() ?? "";
+  const [mode, setMode] = useState<"login" | "register">(referralCode ? "register" : "login");
   const [role, setRole] = useState<"athlete" | "coach">("athlete");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,7 +35,7 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       if (mode === "login") await login(email.trim(), password);
-      else await register(email.trim(), password, name.trim() || email.split("@")[0], role);
+      else await register(email.trim(), password, name.trim() || email.split("@")[0], role, referralCode || undefined);
       router.replace("/(tabs)/home");
     } catch (e: any) {
       setErr(e.message ?? t("Something went wrong"));
@@ -71,6 +73,9 @@ export default function AuthScreen() {
           <Text style={styles.tagline}>
             {mode === "login" ? t("Welcome back.") : t("Own your performance.")}
           </Text>
+          {mode === "register" && referralCode ? (
+            <Text style={styles.tagline}>{t("Invited with code {code}", { code: referralCode })}</Text>
+          ) : null}
 
           {mode === "register" && (
             <>

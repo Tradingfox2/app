@@ -36,6 +36,11 @@ export function buildPostUrl(id: string): string {
   return `${POST_SCHEME}://post/${pathId}`;
 }
 
+/** Signup link shared from Settings. The code is the referrer's, not a reward. */
+export function buildJoinUrl(code: string): string {
+  return `${POST_SCHEME}://join?ref=${encodeURIComponent(code)}`;
+}
+
 export function shareTargetUrl(target: ShareTarget, id: string, message?: string): string {
   const url = buildPostUrl(id);
   const snippet = message?.trim() ?? "";

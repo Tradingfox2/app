@@ -5,7 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useAuth } from "@/src/auth-context";
-import { api, type ProPlanPrice, type SupportedLocale } from "@/src/api";
+import { api, type AccountingBucket, type ProPlanPrice, type ReferralSummary, type SupportedLocale } from "@/src/api";
+import { buildJoinUrl, shareLink } from "@/src/share";
 import { card, colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Avatar } from "@/src/components/social/avatar";
@@ -29,6 +30,26 @@ function formatMinor(amount: number, currency: string, locale: string): string {
   }
 }
 
+function rewardText(section: AccountingBucket, translate: (source: string) => string, locale: string): string {
+  switch (section.state) {
+    case "none_in_period":
+      return translate("Nothing earned yet.");
+    case "unavailable":
+      return translate("Could not read this section.");
+    case "recorded":
+      if (!section.amounts_stored) return translate("Amounts are not stored on these rows.");
+      return section.totals.map((row) => (
+        row.currency
+          ? formatMinor(row.amount_cents, row.currency, locale)
+          : `${row.amount_cents} · ${translate("Currency not recorded")}`
+      )).join(" · ");
+    default: {
+      const unreachable: never = section;
+      return unreachable;
+    }
+  }
+}
+
 function isPro(plan: string | undefined): boolean {
   return plan === "pro" || plan === "pro_monthly" || plan === "pro_yearly";
 }
@@ -46,7 +67,9 @@ export default function Settings() {
   const { t, localeTag } = useI18n();
   const router = useRouter();
   const [sub, setSub] = useState<any>(null);
-  const [ref, setRef] = useState<any>(null);
+  const [ref, setRef] = useState<ReferralSummary | null>(null);
+  const [refLoading, setRefLoading] = useState(false);
+  const [refError, setRefError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState("");
@@ -113,13 +136,17 @@ export default function Settings() {
   }, [logout, router]);
 
   const load = useCallback(async () => {
-    const [s, r] = await Promise.all([
-      api.currentSub().catch(() => ({ plan: "free" })),
-      api.referral().catch(() => null),
-    ]);
-    setSub(s);
-    setRef(r);
+    setSub(await api.currentSub().catch(() => ({ plan: "free" })));
   }, []);
+  // The referral route is not part of first paint. It runs when the card is opened.
+  const loadReferral = async () => {
+    if (refLoading) return;
+    setRefLoading(true);
+    setRefError("");
+    try { setRef(await api.referral()); }
+    catch (cause) { setRefError(cause instanceof Error ? cause.message : t("Could not load your referral.")); }
+    finally { setRefLoading(false); }
+  };
 
   useEffect(() => {
     load();
@@ -397,16 +424,33 @@ export default function Settings() {
           })}
         </View>
 
-        <View style={styles.section}>
+        <View style={styles.section} testID="referral-card">
           <Text style={styles.sectionTitle}>{t("REFER & EARN")}</Text>
-          <View style={styles.refCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.refLabel}>{t("YOUR REFERRAL CODE")}</Text>
-              <Text style={styles.refCode}>{ref?.code ?? "—"}</Text>
-              <Text style={styles.refMeta}>{t("Share your code. Rewards appear after verified conversions.")}</Text>
+          {!ref ? (
+            <Affordance testID="referral-load" accessibilityRole="button" onPress={() => void loadReferral()} style={styles.refCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.planName}>{refLoading ? t("LOADING REFERRAL…") : t("SEE MY REFERRAL")}</Text>
+                <Text style={styles.refMeta}>{t("Share your code. Rewards appear after verified conversions.")}</Text>
+                {refError ? <Text style={styles.languageError}>{refError}</Text> : null}
+              </View>
+              <Ionicons name="gift" size={28} color={colors.text} />
+            </Affordance>
+          ) : (
+            <View style={styles.refCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.refLabel}>{t("YOUR REFERRAL CODE")}</Text>
+                <Text style={styles.refCode}>{ref.code}</Text>
+                <Text style={styles.refMeta} testID="referral-link">{buildJoinUrl(ref.code)}</Text>
+                <Text style={styles.refMeta}>{t("People you referred")}: {ref.counts.referred}</Text>
+                <Text style={styles.refMeta}>{t("Paid conversions")}: {ref.counts.converted}</Text>
+                <Text style={styles.refMeta}>{t("Pending reward")}: {rewardText(ref.pending, t, localeTag)}</Text>
+                <Text style={styles.refMeta}>{t("Paid reward")}: {rewardText(ref.paid, t, localeTag)}</Text>
+                <Affordance testID="referral-share" accessibilityRole="button" onPress={() => { void shareLink(buildJoinUrl(ref.code)); }} style={{ marginTop: spacing.sm }}>
+                  <Text style={styles.planName}>{t("SHARE")}</Text>
+                </Affordance>
+              </View>
             </View>
-            <Ionicons name="gift" size={28} color={colors.text} />
-          </View>
+          )}
         </View>
 
         <Affordance
