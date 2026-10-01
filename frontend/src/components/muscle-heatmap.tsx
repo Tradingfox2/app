@@ -9,6 +9,7 @@ import {
   Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, spacing } from "@/src/theme";
 import { AnatomyBody } from "@/src/components/anatomy/anatomy-body";
 import type {
@@ -40,6 +41,8 @@ type Props = {
   showStatus?: boolean;
   onPress?: () => void;
   onMusclePress?: (muscle: MuscleSlug) => void;
+  /** Home-only hover and press. Other callers keep today's static prompt. */
+  affordance?: boolean;
 };
 
 export function MuscleHeatmap({
@@ -56,8 +59,10 @@ export function MuscleHeatmap({
   showStatus = true,
   onPress,
   onMusclePress,
+  affordance = false,
 }: Props) {
   const { t } = useI18n();
+  const softenMotion = useReducedMotion();
   const mapped = volumes as Partial<Record<MuscleSlug, number>>;
   const yaw = useRef(new Animated.Value(0.5)).current;
   const shouldSpin = spinning && !reduceMotion;
@@ -155,7 +160,11 @@ export function MuscleHeatmap({
           onPress={onPress}
           accessibilityRole="button"
           accessibilityLabel={t("Open muscle explorer")}
-          style={styles.explorePrompt}
+          style={
+            affordance
+              ? (state) => [styles.explorePrompt, pressableStyle(state, { variant: "quiet", reduceMotion: softenMotion })]
+              : styles.explorePrompt
+          }
         >
           <Text style={styles.exploreText}>{t("Explore muscles")}</Text>
           <Ionicons name="chevron-forward" size={14} color={colors.text} />

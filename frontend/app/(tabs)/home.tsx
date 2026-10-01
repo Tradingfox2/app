@@ -17,6 +17,7 @@ import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
 import { DidYouKnow } from "@/src/components/did-you-know";
 import { LiveNowStrip } from "@/src/components/live-now-strip";
 import { ActivityRing } from "@/src/components/activity-ring";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing, type, card } from "@/src/theme";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
@@ -105,6 +106,7 @@ function Ring({
 export default function Home() {
   const { user } = useAuth();
   const { t, formatDate, formatNumber } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [data, setData] = useState<any>(null);
   const [dashError, setDashError] = useState<string | null>(null);
   const [dashSettled, setDashSettled] = useState(false);
@@ -280,13 +282,18 @@ export default function Home() {
           </View>
         </View>
 
-        <LiveNowStrip />
+        <LiveNowStrip affordance />
 
         {dashError ? (
           <View style={styles.errorBanner} accessibilityRole="alert">
             <Ionicons name="alert-circle" color={colors.live} size={16} />
             <Text style={styles.errorTxt} testID="home-error">{dashError}</Text>
-            <Pressable accessibilityRole="button" onPress={() => void load()} testID="home-retry" style={styles.retryBtn}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void load()}
+              testID="home-retry"
+              style={(state) => [styles.retryBtn, pressableStyle(state, { variant: "hairline", reduceMotion })]}
+            >
               <Text style={styles.retryTxt}>{t("Retry")}</Text>
             </Pressable>
           </View>
@@ -321,7 +328,7 @@ export default function Home() {
                   accessibilityRole="button"
                   accessibilityLabel={t("Connect a wearable source")}
                   onPress={() => router.push("/sources")}
-                  style={styles.connectRow}
+                  style={(state) => [styles.connectRow, pressableStyle(state, { variant: "hairline", reduceMotion })]}
                   testID="connect-source-cta"
                 >
                   <Ionicons name="watch-outline" size={16} color={colors.text} />
@@ -358,7 +365,7 @@ export default function Home() {
               accessibilityRole="button"
               accessibilityLabel={t("Resume your live session")}
               onPress={resume}
-              style={[styles.startCta, styles.resumeCta]}
+              style={(state) => [styles.startCta, styles.resumeCta, pressableStyle(state, { variant: "primary", reduceMotion })]}
               testID="start-workout-cta"
             >
               <Ionicons name="play-circle" size={22} color={colors.brandOn} />
@@ -370,7 +377,7 @@ export default function Home() {
               accessibilityLabel={t("Start day {day} session", { day: nextSession.day_index })}
               onPress={() => void startDay()}
               disabled={starting}
-              style={styles.startCta}
+              style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion, disabled: starting })]}
               testID="today-start-day"
             >
               <Ionicons name="play" size={18} color={colors.brandOn} />
@@ -381,7 +388,7 @@ export default function Home() {
               accessibilityRole="button"
               accessibilityLabel={t("Open your training plan")}
               onPress={() => router.push("/program")}
-              style={styles.startCta}
+              style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion })]}
               testID="today-generate"
             >
               <Ionicons name="sparkles" size={18} color={colors.brandOn} />
@@ -394,7 +401,7 @@ export default function Home() {
               accessibilityLabel={t("Start a workout")}
               onPress={() => void startEmpty()}
               disabled={starting}
-              style={styles.secondaryCta}
+              style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: starting })]}
               testID={nextSession ? "today-start-empty" : "start-workout-cta"}
             >
               <Text style={styles.secondaryCtaTxt}>{starting ? t("STARTING…") : t("START EMPTY")}</Text>
@@ -405,7 +412,7 @@ export default function Home() {
               accessibilityLabel={t("Start a workout")}
               onPress={() => void startEmpty()}
               disabled={starting}
-              style={styles.secondaryCta}
+              style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: starting })]}
               testID="today-start-empty"
             >
               <Text style={styles.secondaryCtaTxt}>{t("START EMPTY")}</Text>
@@ -457,7 +464,7 @@ export default function Home() {
           accessibilityRole="button"
           accessibilityLabel={t("Record a walk, run, or ride")}
           testID="quick-record"
-          style={styles.coachRow}
+          style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
           onPress={() => router.push("/record" as Href)}
         >
           <Ionicons name="walk-outline" size={18} color={colors.text} />
@@ -467,7 +474,7 @@ export default function Home() {
           accessibilityRole="button"
           accessibilityLabel={t("TRAIN WITH A COACH")}
           testID="quick-coach"
-          style={styles.coachRow}
+          style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
           onPress={() => router.push((user?.role === "coach" ? "/partner" : "/coach/onboarding") as Href)}
         >
           <Ionicons name="ribbon-outline" size={18} color={colors.text} />
@@ -484,7 +491,7 @@ export default function Home() {
         </View>
 
         <Pressable
-          style={styles.tipCard}
+          style={(state) => [styles.tipCard, pressableStyle(state, { variant: "surface", reduceMotion })]}
           onPress={() => router.push("/program")}
           accessibilityRole="button"
           accessibilityLabel={t("Open the AI coach")}
@@ -511,7 +518,12 @@ export default function Home() {
             <View accessibilityRole="alert" style={styles.errorBanner}>
               <Ionicons name="alert-circle" color={colors.live} size={16} />
               <Text style={styles.errorTxt} testID="heatmap-error">{heatError}</Text>
-              <Pressable accessibilityRole="button" onPress={() => void load()} testID="heatmap-retry">
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void load()}
+                testID="heatmap-retry"
+                style={(state) => pressableStyle(state, { variant: "hairline", reduceMotion })}
+              >
                 <Text style={styles.retryTxt}>{t("Retry")}</Text>
               </Pressable>
             </View>
@@ -537,6 +549,7 @@ export default function Home() {
                 current === muscle ? null : muscle,
               );
             }}
+            affordance
           />
           ) : null}
         </View>
@@ -561,6 +574,7 @@ function WeekVolume({
   onRetry: () => void;
 }) {
   const { t, formatNumber } = useI18n();
+  const reduceMotion = useReducedMotion();
   if (loading) {
     return <View style={styles.skeletonBar} testID="home-stats-skeleton" accessibilityLabel={t("Loading home")} />;
   }
@@ -601,7 +615,12 @@ function WeekVolume({
     <View style={styles.errorBanner} accessibilityRole="alert">
       <Ionicons name="alert-circle" color={colors.live} size={16} />
       <Text style={styles.errorTxt} testID="week-error">{error ?? t("This week is unavailable")}</Text>
-      <Pressable accessibilityRole="button" onPress={onRetry} testID="week-retry" style={styles.retryBtn}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onRetry}
+        testID="week-retry"
+        style={(state) => [styles.retryBtn, pressableStyle(state, { variant: "hairline", reduceMotion })]}
+      >
         <Text style={styles.retryTxt}>{t("Retry")}</Text>
       </Pressable>
     </View>
@@ -620,6 +639,7 @@ function WeekCalendar({
   onRetry: () => void;
 }) {
   const { t, formatDate } = useI18n();
+  const reduceMotion = useReducedMotion();
   if (loading) {
     return <View style={styles.skeletonBar} testID="week-calendar-skeleton" accessibilityLabel={t("Loading home")} />;
   }
@@ -629,7 +649,12 @@ function WeekCalendar({
       <View style={styles.errorBanner} accessibilityRole="alert">
         <Ionicons name="alert-circle" color={colors.live} size={16} />
         <Text style={styles.errorTxt} testID="week-days-error">{error}</Text>
-        <Pressable accessibilityRole="button" onPress={onRetry} testID="week-days-retry" style={styles.retryBtn}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onRetry}
+          testID="week-days-retry"
+          style={(state) => [styles.retryBtn, pressableStyle(state, { variant: "hairline", reduceMotion })]}
+        >
           <Text style={styles.retryTxt}>{t("Retry")}</Text>
         </Pressable>
       </View>
@@ -653,7 +678,11 @@ function WeekCalendar({
             accessibilityLabel={`${t(labelKey, { day: name })}. ${t("Open this day")}`}
             testID={`week-day-${day.key}`}
             onPress={() => router.push(`/activity?day=${day.key}` as Href)}
-            style={[styles.weekDay, day.isToday && styles.weekDayToday]}
+            style={(state) => [
+              styles.weekDay,
+              day.isToday && styles.weekDayToday,
+              pressableStyle(state, { variant: "quiet", reduceMotion }),
+            ]}
           >
             <Text style={[styles.weekDayLabel, day.isToday && styles.weekDayLabelToday]}>
               {formatDate(day.date, { weekday: "narrow" })}
@@ -687,13 +716,14 @@ function HeaderButton({
   badge?: string | null;
   onPress: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       testID={testID}
       onPress={onPress}
-      style={styles.headerIcon}
+      style={(state) => [styles.headerIcon, pressableStyle(state, { variant: "quiet", reduceMotion })]}
     >
       <Ionicons name={icon} size={22} color={colors.text} />
       {badge ? (
@@ -716,8 +746,13 @@ function QuickAction({
   onPress: () => void;
   testID: string;
 }) {
+  const reduceMotion = useReducedMotion();
   return (
-    <Pressable testID={testID} onPress={onPress} style={styles.quickBtn}>
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      style={(state) => [styles.quickBtn, pressableStyle(state, { variant: "surface", reduceMotion })]}
+    >
       <Ionicons name={icon} size={20} color={colors.text} />
       <Text style={styles.quickLabel}>{label}</Text>
     </Pressable>

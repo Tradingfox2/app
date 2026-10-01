@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api";
+import { pressableStyle } from "@/src/affordance";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -148,7 +149,7 @@ export function DidYouKnow({ count = 7 }: { count?: number }) {
           accessibilityRole="button"
           accessibilityLabel={t("Previous tip")}
           hitSlop={8}
-          style={styles.navBtn}
+          style={(state) => [styles.navBtn, pressableStyle(state, { variant: "quiet", reduceMotion })]}
           onPress={() => {
             userTouched.current = true;
             goTo(index - 1);
@@ -167,9 +168,10 @@ export function DidYouKnow({ count = 7 }: { count?: number }) {
                 userTouched.current = true;
                 goTo(i);
               }}
-              style={[
+              style={(state) => [
                 styles.dot,
                 i === index && { backgroundColor: tint, width: 18 },
+                pressableStyle(state, { variant: "mark", reduceMotion }),
               ]}
             />
           ))}
@@ -178,7 +180,7 @@ export function DidYouKnow({ count = 7 }: { count?: number }) {
           accessibilityRole="button"
           accessibilityLabel={t("Next tip")}
           hitSlop={8}
-          style={styles.navBtn}
+          style={(state) => [styles.navBtn, pressableStyle(state, { variant: "quiet", reduceMotion })]}
           onPress={() => {
             userTouched.current = true;
             goTo(index + 1);
