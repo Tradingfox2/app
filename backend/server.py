@@ -30,6 +30,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 import media_storage
 import readiness
+import training_load
 from locales import DEFAULT_LOCALE, SUPPORTED_LOCALES, normalize_locale
 
 ROOT_DIR = Path(__file__).parent
@@ -726,9 +727,13 @@ async def finish_workout(workout_id: str, user: dict = Depends(current_user)):
         return clean(w)
     ended = now()
     duration = int((ended - w["started_at"]).total_seconds()) if w.get("started_at") else 0
+    finished_fields: dict = {"ended_at": ended, "duration_sec": duration}
+    load = training_load.session_load(w.get("perceived_effort"), duration)
+    if load is not None:
+        finished_fields["load_au"] = load
     updated = await db.workouts.find_one_and_update(
         {"id": workout_id, "ended_at": None},
-        {"$set": {"ended_at": ended, "duration_sec": duration}},
+        {"$set": finished_fields},
         projection={"_id": 0},
         return_document=True,
     )
@@ -1050,7 +1055,8 @@ async def readiness_today(user: dict = Depends(current_user)):
 
 async def dashboard_snapshot(uid: str) -> dict:
     """Shared by /dashboard and the AI coach (daily tips, coach tip)."""
-    week_ago = now() - timedelta(days=7)
+    as_of = now()
+    week_ago = as_of - timedelta(days=7)
     workouts_week = await db.workouts.count_documents({"user_id": uid, "started_at": {"$gte": week_ago}})
     latest_strain = await db.wearable_metrics.find_one(
         {"user_id": uid, "metric": "strain"}, {"_id": 0}, sort=[("recorded_at", -1)]
@@ -1091,6 +1097,24 @@ async def dashboard_snapshot(uid: str) -> dict:
             if slug:
                 muscles_week.add(slug)
     minutes_week = sum(int(w.get("duration_sec") or 0) for w in week_workouts) // 60
+    load_rows = [
+        w async for w in db.workouts.find(
+            {
+                "user_id": uid,
+                "ended_at": {"$type": "date"},
+                "started_at": {"$gte": as_of - timedelta(days=28)},
+            },
+            {
+                "_id": 0,
+                "started_at": 1,
+                "ended_at": 1,
+                "duration_sec": 1,
+                "perceived_effort": 1,
+                "load_au": 1,
+            },
+        )
+    ]
+    load_summary = training_load.summarize(load_rows, as_of)
 
     # Streak: consecutive calendar days (ending today or yesterday) with a workout.
     days_with_workout: set[str] = set()
@@ -1128,6 +1152,7 @@ async def dashboard_snapshot(uid: str) -> dict:
             "minutes_week": minutes_week,
             "muscles_week": sorted(muscles_week),
             "streak_days": streak,
+            **load_summary,
         },
         "active_workout": clean(active),
     }

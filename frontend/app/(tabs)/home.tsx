@@ -30,6 +30,8 @@ import {
   type WeekDayActivity,
 } from "@/src/activity-day";
 import {
+  loadRingMax,
+  readTrainingLoad,
   readTrainingTotals,
   readWorkoutCount,
 } from "@/src/training-week";
@@ -41,25 +43,31 @@ function unreadLabel(count: number): string | null {
 
 function Ring({
   value,
+  figure,
   max,
   color,
   label,
   unit,
+  testID,
 }: {
-  value: number;
+  value: number | null;
+  figure?: string;
   max: number;
   color: string;
   label: string;
   unit?: string;
+  testID?: string;
 }) {
   const size = 96;
   const stroke = 8;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(1, value / max));
+  const empty = value === null;
+  const pct = empty || max <= 0 ? 0 : Math.max(0, Math.min(1, value / max));
   const offset = c * (1 - pct);
+  const shown = figure ?? (empty ? "—" : String(Math.round(value)));
   return (
-    <View style={{ alignItems: "center" }}>
+    <View style={{ alignItems: "center" }} testID={testID}>
       <Svg width={size} height={size}>
         <Circle
           cx={size / 2}
@@ -69,18 +77,20 @@ function Ring({
           strokeWidth={stroke}
           fill="none"
         />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={color}
-          strokeWidth={stroke}
-          fill="none"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
+        {!empty ? (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={color}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        ) : null}
       </Svg>
       <View
         style={{
@@ -93,7 +103,7 @@ function Ring({
           justifyContent: "center",
         }}
       >
-        <Text style={type.hero}>{Math.round(value)}</Text>
+        <Text style={shown.length > 3 ? { color: colors.hero, fontSize: 18, fontWeight: "800" } : type.hero}>{shown}</Text>
         {unit && (
           <Text style={{ color: colors.textMuted, fontSize: 10 }}>{unit}</Text>
         )}
@@ -178,6 +188,9 @@ export default function Home() {
   }, [load]));
 
   const strain = data?.strain?.value ?? 0;
+  const trainingLoad = readTrainingLoad(data);
+  const loadWeek = trainingLoad?.week ?? null;
+  const showSessionLoad = data?.strain == null;
   const recovery = data?.recovery?.value ?? 0;
   const sleep = data?.sleep?.value ?? 0;
   const hrv = data?.hrv?.value ?? 0;
@@ -318,7 +331,18 @@ export default function Home() {
             <>
               <View style={styles.ringPlate}>
                 <View style={styles.rings}>
-                  <Ring value={strain} max={21} color={colors.blaze} label={t("STRAIN")} />
+                  {showSessionLoad ? (
+                    <Ring
+                      value={loadWeek}
+                      figure={loadWeek == null ? "—" : formatNumber(Math.round(loadWeek))}
+                      max={loadRingMax(trainingLoad)}
+                      color={colors.blaze}
+                      label={t("LOAD")}
+                      testID="ring-load"
+                    />
+                  ) : (
+                    <Ring value={strain} max={21} color={colors.blaze} label={t("STRAIN")} testID="ring-strain" />
+                  )}
                   <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
                   <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
                 </View>

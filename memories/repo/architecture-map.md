@@ -426,7 +426,6 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
   wearable_metrics write. No background location task.
 - **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
   bridge emits the browser watch id, which does not match its subscriber id.
-
 ## Interaction affordance (verified 2026-10-01, main `6422411`)
 
 - There was no shared press or hover helper. `frontend/src/affordance.ts`
@@ -451,3 +450,4 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 ## Added 2026-10-01 (readiness)
 
 - **Readiness — `backend/readiness.py`.** Sole owner of the 0–100 score. Weights when present: HRV vs the 14-day baseline 35, resting HR vs that baseline 20, sleep vs an 8h need 25, acute:chronic load 20. Missing inputs are dropped and the rest reweighted; confidence is the share of weight present. Unknown and non-positive inputs are omitted, never scored as 0. Until wearable `training_load` rows exist, load is Foster session-RPE (`perceived_effort × duration_sec / 60`) on finished workouts. `GET /readiness/today` returns the object; `home_today_for` also sets `readiness`, so Home does not need that route to paint. Rings stay Strain / Recovery / Sleep.
+- **Session load (2026-10-01):** Foster sRPE `load_au = perceived_effort × duration_sec / 60` is written by `finish_workout` when both inputs exist. Old rows are not backfilled; `training_load.load_for_read` computes them. `dashboard_snapshot` adds `training.load_week`, `load_28d_avg` (28-day sum / 4), and `acwr`. Home shows that week load in the Strain slot as LOAD / CHARGE when `strain` is null, and "—" when nothing has a computable load.

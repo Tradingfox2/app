@@ -62,6 +62,9 @@ test("home shows a skeleton, then today's plan, header badges, and the training-
   await expect(page.getByTestId("rings-card")).not.toContainText("14");
   releaseToday();
   await expect(page.getByTestId("today-card")).toContainText("WEEK 2");
+  await expect(page.getByTestId("ring-strain")).toContainText("STRAIN");
+  await expect(page.getByTestId("ring-strain")).toContainText("14");
+  await expect(page.getByTestId("ring-load")).toHaveCount(0);
   await expect(page.getByTestId("today-plan")).toContainText("PUSH");
   await expect(page.getByTestId("today-plan")).toContainText("1 exercises");
   await expect(page.getByTestId("home-dm-badge")).toHaveText("99+");
@@ -199,6 +202,56 @@ test("an empty training week shows rest days and does not invent totals", async 
   await expect(page.getByTestId("week-calendar").locator("[aria-label*='trained']")).toHaveCount(0);
   await expect(page.getByTestId("week-calendar").locator("[aria-label*='rest']")).toHaveCount(7);
   await expect(page.getByTestId("streak-badge")).toContainText("0");
+});
+
+async function openHome(page: Page, today: unknown, user = me) {
+  await signIn(page);
+  await page.route("**/api/**", async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    if (path === "/auth/me") return route.fulfill({ json: user });
+    if (path === "/home/today") return route.fulfill({ json: today });
+    if (path === "/muscle-heatmap") return route.fulfill({ json: { volumes: {}, max: 0 } });
+    if (path === "/dm/unread-count" || path === "/notifications/unread-count") return route.fulfill({ json: { count: 0 } });
+    if (path === "/tips/daily") return route.fulfill({ json: { date: "2026-10-01", tips: [] } });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/home");
+}
+
+test("without a strain metric the ring shows weekly session load", async ({ page }) => {
+  await openHome(page, {
+    ...todayBase,
+    strain: null,
+    training: { ...todayBase.training, load_week: 420, load_28d_avg: 300, acwr: 1.4 },
+  });
+  await expect(page.getByTestId("ring-load")).toContainText("LOAD");
+  await expect(page.getByTestId("ring-load")).toContainText("420");
+  await expect(page.getByTestId("ring-strain")).toHaveCount(0);
+});
+
+test("session load in French is CHARGE", async ({ page }) => {
+  await openHome(
+    page,
+    {
+      ...todayBase,
+      strain: null,
+      training: { ...todayBase.training, load_week: 420, load_28d_avg: 300, acwr: 1.4 },
+    },
+    { ...me, preferred_locale: "fr" },
+  );
+  await expect(page.getByTestId("ring-load")).toContainText("CHARGE");
+  await expect(page.getByTestId("ring-load")).toContainText("420");
+});
+
+test("no finished-session load stays blank instead of zero", async ({ page }) => {
+  await openHome(page, {
+    ...todayBase,
+    strain: null,
+    training: { ...todayBase.training, load_week: null, load_28d_avg: null, acwr: null },
+  });
+  await expect(page.getByTestId("ring-load")).toContainText("—");
+  await expect(page.getByTestId("ring-load")).toContainText("LOAD");
+  await expect(page.getByTestId("ring-load").getByText("0", { exact: true })).toHaveCount(0);
 });
 
 test("a failed training-day load keeps the week totals and retries into the calendar", async ({ page }) => {

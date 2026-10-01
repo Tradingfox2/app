@@ -44,6 +44,35 @@ export function readWorkoutCount(data: unknown): number | null {
   return wholeNumber((data as { workouts_this_week?: unknown }).workouts_this_week);
 }
 
+export type TrainingLoad = {
+  week: number | null;
+  avg28d: number | null;
+  acwr: number | null;
+};
+
+function optionalLoad(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  return finiteNumber(value);
+}
+
+/** Session-load block. Missing keys stay null and do not fail the week totals. */
+export function readTrainingLoad(data: unknown): TrainingLoad | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const training = (data as { training?: unknown }).training;
+  if (!training || typeof training !== "object" || Array.isArray(training)) return null;
+  const block = training as Record<string, unknown>;
+  return {
+    week: optionalLoad(block.load_week),
+    avg28d: optionalLoad(block.load_28d_avg),
+    acwr: optionalLoad(block.acwr),
+  };
+}
+
+/** Arc ceiling for the load ring: the larger of this week and the chronic week. */
+export function loadRingMax(load: TrainingLoad | null): number {
+  return Math.max(load?.week ?? 0, load?.avg28d ?? 0, 1);
+}
+
 export function readTrainingTotals(data: unknown): TrainingTotals | null {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const training = (data as { training?: unknown }).training;
