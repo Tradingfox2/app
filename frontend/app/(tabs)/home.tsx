@@ -119,7 +119,7 @@ export default function Home() {
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
   const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
-  const [workoutStamps, setWorkoutStamps] = useState<Array<{ started_at?: string | null }> | null>(null);
+  const [workoutStamps, setWorkoutStamps] = useState<{ started_at?: string | null }[] | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [calendarSettled, setCalendarSettled] = useState(false);
 
