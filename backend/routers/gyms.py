@@ -1,8 +1,10 @@
 """Gym QR check-ins and partner rewards.
 Moved from wearables.py: ensure_gyms, list_gyms, gym_checkin, my_visits.
 Paths, status codes and the original response keys stay the same. An every-10
-unlock writes `rewards` only when partner_status is active. plan is not billed.
+unlock writes `rewards` only when partner_status is active. The partner plan
+is set by the signed billing webhook, never by the success URL.
 """
+import logging
 import secrets
 from datetime import timedelta
 from typing import Optional
@@ -10,10 +12,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+import billing
 import notifications
+import pro_billing
 import ratelimit
+import server
 from routers.wearables import is_demo_user
 from server import clean, current_user, db, new_id, now, optional_user
+logger = logging.getLogger(__name__)
 router = APIRouter()
 REWARD_KINDS = ("free_session", "discount", "merch", "custom")
 REWARD_TTL = timedelta(days=30)
@@ -29,6 +35,10 @@ async def ensure_indexes(database) -> None:
     await database.rewards.create_index([("user_id", 1), ("status", 1)])
     await database.gym_visits.create_index([("gym_id", 1), ("checked_in_at", -1)])
     await database.gyms.create_index("owner_user_id")
+    await database.gyms.create_index(
+        "billing.stripe_subscription_id", unique=True,
+        partialFilterExpression={"billing.stripe_subscription_id": {"$type": "string"}},
+    )
 
 async def ensure_gyms(user: Optional[dict] = None):
     """Seed demo gyms only when the test account asks, and only if none exist."""
@@ -85,7 +95,7 @@ async def _expire_issued(query: dict) -> None:
 async def list_gyms(user: Optional[dict] = Depends(optional_user)):
     # Public list (QR flows); demo gyms are only seeded for the test account.
     await ensure_gyms(user)
-    return [clean(g) async for g in db.gyms.find({}, {"_id": 0, "owner_user_id": 0}).sort("name", 1)]
+    return [clean(g) async for g in db.gyms.find({}, {"_id": 0, "owner_user_id": 0, "billing": 0}).sort("name", 1)]
 
 @router.post("/gyms/checkin", status_code=201)
 async def gym_checkin(body: CheckinIn, user: dict = Depends(current_user)):
@@ -111,7 +121,7 @@ async def gym_checkin(body: CheckinIn, user: dict = Depends(current_user)):
     reward_every = gym.get("reward_every", 10)
     unlocked = total % reward_every == 0
     issued = await _issue_reward(user, gym, total) if unlocked else None
-    public = {key: value for key, value in gym.items() if key != "owner_user_id"}
+    public = {key: value for key, value in gym.items() if key not in {"owner_user_id", "billing"}}
     result = {
         "visit": clean(visit), "gym": clean(public), "total_visits": total,
         "reward_unlocked": unlocked,
@@ -150,6 +160,7 @@ async def my_gyms(user: dict = Depends(current_user)):
     gyms = [clean(g) async for g in db.gyms.find({"owner_user_id": user["id"]}, {"_id": 0}).sort("name", 1)]
     start, week = now().replace(hour=0, minute=0, second=0, microsecond=0), now() - timedelta(days=7)
     for gym in gyms:
+        gym.pop("billing", None)
         gym.setdefault("partner_status", "pending")
         gym.setdefault("plan", "free")
         gym.setdefault("reward", None)
@@ -183,3 +194,110 @@ async def redeem_reward(gym_id: str, body: RedeemIn, user: dict = Depends(curren
     if row.get("status") == "redeemed":
         raise HTTPException(409, "Already redeemed")
     raise HTTPException(409, "Code expired")
+
+@router.post("/gyms/{gym_id}/subscribe")
+async def subscribe_gym(gym_id: str, user: dict = Depends(current_user)):
+    """Open Stripe Checkout for the partner plan. The webhook is what grants it."""
+    gym = await db.gyms.find_one({"id": gym_id}, {"_id": 0})
+    if not gym:
+        raise HTTPException(404, "Gym not found")
+    if gym.get("owner_user_id") != user["id"]:
+        raise HTTPException(403, "Only the gym owner can subscribe")
+    if not billing.secret_key() or not billing.gym_partner_price_id():
+        raise HTTPException(503, "Payments are not set up yet")
+    if gym.get("plan") == "partner":
+        raise HTTPException(409, "This gym is already a partner")
+    await ratelimit.hit("checkout", user["id"])
+    back = f"{billing.app_url()}/gym/manage"
+    try:
+        session = await billing.create_gym_checkout(
+            gym=gym, user=user, price_id=billing.gym_partner_price_id(),
+            success_url=f"{back}?checkout=success", cancel_url=f"{back}?checkout=cancelled",
+        )
+    except billing.BillingError as exc:
+        logger.warning("Gym checkout failed: %s", exc)
+        raise HTTPException(502, "Could not open checkout. Try again in a moment.") from exc
+    return {"url": session["url"]}
+
+_PAUSE_STATUSES = frozenset({"canceled", "unpaid", "incomplete_expired"})
+
+def _event_subscription(kind: str | None, obj: dict) -> str | None:
+    if kind in {"invoice.paid", "invoice.payment_failed"}:
+        return pro_billing._invoice_subscription(obj)
+    if kind in {"customer.subscription.updated", "customer.subscription.deleted"}:
+        return pro_billing._id(obj.get("id"))
+    return pro_billing._id(obj.get("subscription"))
+
+async def is_partner_event(kind: str | None, obj: dict) -> bool:
+    if (obj.get("metadata") or {}).get("kind") == "gym_partner":
+        return True
+    sub_id = _event_subscription(kind, obj)
+    if not sub_id:
+        return False
+    # `server.db` at call time: community and Pro tests patch that name, and the
+    # import-time `db` binding is a different Motor client.
+    return bool(await server.db.gyms.find_one({"billing.stripe_subscription_id": sub_id}, {"_id": 1}))
+
+async def _partner_gym(kind: str | None, obj: dict) -> dict | None:
+    gym_id = (obj.get("metadata") or {}).get("gym_id")
+    if isinstance(gym_id, str) and gym_id:
+        gym = await server.db.gyms.find_one({"id": gym_id}, {"_id": 0})
+        if gym:
+            return gym
+    sub_id = _event_subscription(kind, obj)
+    return await server.db.gyms.find_one({"billing.stripe_subscription_id": sub_id}, {"_id": 0}) if sub_id else None
+
+def _money_fields(amount: object, currency: object, prefix: str = "") -> dict:
+    cents, code = pro_billing._money(amount, currency)
+    fields: dict = {}
+    if isinstance(cents, int):
+        fields[f"{prefix}amount_cents"] = cents
+    if code:
+        fields[f"{prefix}currency"] = code
+    return fields
+
+async def _write_gym(gym_id: str, fields: dict) -> dict | None:
+    return await server.db.gyms.find_one_and_update(
+        {"id": gym_id}, {"$set": fields}, projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+
+async def partner_billing_event(kind: str | None, obj: dict) -> dict | None:
+    """Apply one signed gym event. Amounts stay Stripe's minor unit and currency."""
+    gym = await _partner_gym(kind, obj)
+    if not gym:
+        return None
+    if kind == "checkout.session.completed":
+        if obj.get("mode") != "subscription" or obj.get("payment_status") not in {"paid", "no_payment_required"}:
+            return None
+        recorded = {
+            "stripe_subscription_id": pro_billing._id(obj.get("subscription")),
+            "stripe_customer_id": pro_billing._id(obj.get("customer")),
+            "status": "trialing" if obj.get("payment_status") == "no_payment_required" else "active",
+            **_money_fields(obj.get("amount_total"), obj.get("currency")),
+        }
+        return await _write_gym(gym["id"], {
+            "plan": "partner", "partner_status": "active",
+            "billing": {key: value for key, value in recorded.items() if value is not None},
+        })
+    if kind in {"invoice.paid", "invoice.payment_failed"}:
+        paid = obj.get("amount_due") if kind == "invoice.payment_failed" else obj.get("amount_paid")
+        fields = _money_fields(paid, obj.get("currency"), "billing.")
+        return await _write_gym(gym["id"], fields) if fields else gym
+    if kind not in {"customer.subscription.updated", "customer.subscription.deleted"}:
+        return None
+    status = "canceled" if kind == "customer.subscription.deleted" else (obj.get("status") or "")
+    if status == "past_due":
+        return None
+    items = ((obj.get("items") or {}).get("data") or [])
+    price = (items[0].get("price") if items else None) or {}
+    common: dict = {**_money_fields(price.get("unit_amount"), price.get("currency") or obj.get("currency"), "billing.")}
+    sub_id, customer = pro_billing._id(obj.get("id")), pro_billing._id(obj.get("customer"))
+    if sub_id:
+        common["billing.stripe_subscription_id"] = sub_id
+    if customer:
+        common["billing.stripe_customer_id"] = customer
+    if status in _PAUSE_STATUSES:
+        return await _write_gym(gym["id"], {"plan": "free", "partner_status": "paused", "billing.status": status, **common})
+    if status in {"active", "trialing"}:
+        return await _write_gym(gym["id"], {"plan": "partner", "partner_status": "active", "billing.status": status, **common})
+    return None

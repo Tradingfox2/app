@@ -73,6 +73,7 @@ export type OwnedGym = {
   reward?: { title: string; kind: GymRewardKind; note?: string } | null;
   members_today: number;
   visits_week: number;
+  community_id?: string | null;
 };
 
 export type ModerationReport = {
@@ -1458,6 +1459,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ code }),
     }),
+  gymSubscribe: (gymId: string) =>
+    request<{ url: string }>(`/gyms/${encodeURIComponent(gymId)}/subscribe`, { method: "POST" }),
 
   tickets: (params?: { status?: TicketStatus; limit?: number }) => {
     const qs = new URLSearchParams();

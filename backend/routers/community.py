@@ -16,6 +16,7 @@ from server import clean, current_user, db, new_id, now, optional_user
 from community_rankings import build_rankings
 import billing
 import pro_billing
+from routers import gyms
 import challenges
 import moderation
 import notifications
@@ -556,16 +557,14 @@ async def list_communities(
     return sorted(views, key=lambda item: (item["member_count"], item["created_at"]), reverse=True)
 
 
-@router.post("/communities", status_code=201)
-async def create_community(body: CommunityCreateIn, user: dict = Depends(current_user)):
-    if not _coach_is_approved(user):
-        raise HTTPException(403, "Approved coach status required")
+async def _insert_owned_community(owner_id: str, fields: dict) -> dict:
+    """Owner membership and the default channel. The caller handles a slug clash."""
     timestamp = now()
     community_id = new_id()
     community = {
         "id": community_id,
-        "owner_id": user["id"],
-        **body.model_dump(),
+        "owner_id": owner_id,
+        **fields,
         "cover_url": None,
         "avatar_url": None,
         "rules": [],
@@ -577,8 +576,8 @@ async def create_community(body: CommunityCreateIn, user: dict = Depends(current
     owner_membership = {
         "id": new_id(),
         "community_id": community_id,
-        "user_id": user["id"],
-        "owner_id": user["id"],
+        "user_id": owner_id,
+        "owner_id": owner_id,
         "role": "owner",
         "status": "active",
         "entitlement_source": "ownership",
@@ -590,7 +589,7 @@ async def create_community(body: CommunityCreateIn, user: dict = Depends(current
         "community_id": community_id,
         "name": "general",
         "description": "",
-        "created_by": user["id"],
+        "created_by": owner_id,
         "is_default": True,
         "status": "active",
         "created_at": timestamp,
@@ -599,10 +598,63 @@ async def create_community(body: CommunityCreateIn, user: dict = Depends(current
         await db.communities.insert_one(community)
         await db.community_members.insert_one(owner_membership)
         await db.channels.insert_one(channel)
-    except DuplicateKeyError as exc:
+    except DuplicateKeyError:
         await db.communities.delete_one({"id": community_id})
         await db.community_members.delete_many({"community_id": community_id})
         await db.channels.delete_many({"community_id": community_id})
+        raise
+    return community
+
+
+def _gym_club_slug(name: str, gym_id: str) -> str:
+    tail = re.sub(r"[^a-z0-9]+", "", gym_id.lower())[:8] or "gym"
+    head = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    head = head[: max(0, 47 - len(tail))].strip("-")
+    slug = f"{head}-{tail}" if head else tail
+    slug = slug[:48].strip("-")
+    return slug if len(slug) >= 3 else f"gym-{tail}"[:48]
+
+
+async def _ensure_gym_club(gym: dict) -> None:
+    """One community for this gym, owned by the gym owner. A downgrade leaves it in place."""
+    gym_id, owner_id = gym.get("id"), gym.get("owner_user_id")
+    if not gym_id or not owner_id:
+        return
+    found = await db.communities.find_one({"gym_id": gym_id}, {"_id": 0, "id": 1})
+    if found:
+        await db.gyms.update_one({"id": gym_id}, {"$set": {"community_id": found["id"]}})
+        return
+    name = (gym.get("name") or "Salle").strip()[:80]
+    if len(name) < 3:
+        name = f"{name} salle".strip()[:80]
+    community = None
+    for extra in ("", "b"):
+        try:
+            community = await _insert_owned_community(owner_id, {
+                "name": name, "slug": _gym_club_slug(name, f"{gym_id}{extra}"), "description": "",
+                "category": "gym", "is_public": True, "join_policy": "open", "price_cents": 0,
+                # Placeholder on a free club. The partner charge uses Stripe's currency.
+                "currency": "EUR", "gym_id": gym_id,
+            })
+            break
+        except DuplicateKeyError:
+            found = await db.communities.find_one({"gym_id": gym_id}, {"_id": 0, "id": 1})
+            if found:
+                community = found
+                break
+    if community is None:
+        logger.warning("Gym club was not created for %s", gym_id)
+        return
+    await db.gyms.update_one({"id": gym_id}, {"$set": {"community_id": community["id"]}})
+
+
+@router.post("/communities", status_code=201)
+async def create_community(body: CommunityCreateIn, user: dict = Depends(current_user)):
+    if not _coach_is_approved(user):
+        raise HTTPException(403, "Approved coach status required")
+    try:
+        community = await _insert_owned_community(user["id"], body.model_dump())
+    except DuplicateKeyError as exc:
         raise HTTPException(409, "Community slug already exists") from exc
     return await _community_view(community, user["id"])
 
@@ -918,9 +970,14 @@ async def stripe_webhook(request: Request):
         return {"received": True}
     kind = event.get("type")
     obj = (event.get("data") or {}).get("object") or {}
-    # Pro uses the same signed endpoint. Community events have no kind=pro metadata
+    # Gym partner is claimed first so its invoices never reach the Pro customer fallback.
+    # Pro still uses this endpoint. Community events have no kind=pro metadata
     # and no row in `subscriptions`, so they still take the membership path.
-    if kind == "checkout.session.completed" and (obj.get("metadata") or {}).get("kind") == "pro":
+    if await gyms.is_partner_event(kind, obj):
+        gym = await gyms.partner_billing_event(kind, obj)
+        if gym and gym.get("plan") == "partner" and not gym.get("community_id"):
+            await _ensure_gym_club(gym)
+    elif kind == "checkout.session.completed" and (obj.get("metadata") or {}).get("kind") == "pro":
         await pro_billing.checkout_completed(obj)
     elif kind == "checkout.session.completed":
         await _checkout_completed(obj)

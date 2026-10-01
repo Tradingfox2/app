@@ -16,6 +16,7 @@ Environment:
 - `STRIPE_WEBHOOK_SECRET`     whsec_… from the webhook endpoint in the dashboard
 - `STRIPE_PRICE_PRO_MONTHLY`  Price id for the Pro monthly plan
 - `STRIPE_PRICE_PRO_YEARLY`   Price id for the Pro yearly plan
+- `STRIPE_PRICE_GYM_PARTNER`  Price id for the gym partner plan
 - `PUBLIC_APP_URL`            where Stripe sends people back, e.g. https://app.ironflow.fit
 """
 from __future__ import annotations
@@ -156,6 +157,10 @@ def pro_price_id(plan: str) -> str:
     return os.environ.get(env, "")
 
 
+def gym_partner_price_id() -> str:
+    return os.environ.get("STRIPE_PRICE_GYM_PARTNER", "")
+
+
 async def create_customer(user: dict) -> dict:
     data = {"metadata[user_id]": user["id"]}
     if user.get("email"):
@@ -178,6 +183,26 @@ async def create_pro_checkout(*, customer_id: str, user_id: str, plan: str, pric
     }
     if plan == "pro_yearly":
         data["subscription_data[trial_period_days]"] = "7"
+    return await _call("POST", "/checkout/sessions", data)
+
+
+async def create_gym_checkout(*, gym: dict, user: dict, price_id: str, success_url: str, cancel_url: str) -> dict:
+    """Subscription Checkout for one gym. The Price id comes from the environment.
+
+    `customer_email` only: reusing the owner's Pro customer would let a gym
+    invoice land on that person's `subscriptions` row. Grants nothing by itself.
+    """
+    data = {
+        "mode": "subscription", "client_reference_id": user["id"],
+        "line_items[0][price]": price_id, "line_items[0][quantity]": "1",
+        "success_url": success_url, "cancel_url": cancel_url,
+        "metadata[kind]": "gym_partner", "metadata[gym_id]": gym["id"], "metadata[user_id]": user["id"],
+        "subscription_data[metadata][kind]": "gym_partner",
+        "subscription_data[metadata][gym_id]": gym["id"],
+        "subscription_data[metadata][user_id]": user["id"],
+    }
+    if user.get("email"):
+        data["customer_email"] = user["email"]
     return await _call("POST", "/checkout/sessions", data)
 
 

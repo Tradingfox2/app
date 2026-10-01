@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { api, type OwnedGym } from "@/src/api";
+import { openGymCheckout } from "@/src/checkout";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -11,10 +12,13 @@ import { useI18n } from "@/src/i18n";
 export default function ManageGymScreen() {
   const { t, formatNumber } = useI18n();
   const router = useRouter();
+  const params = useLocalSearchParams<{ checkout?: string }>();
+  const checkout = Array.isArray(params.checkout) ? params.checkout[0] : params.checkout;
   const [gyms, setGyms] = useState<OwnedGym[] | null>(null);
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  const busy = useRef(false);
   const load = useCallback(() => {
     api.myGyms().then(setGyms).catch((cause) => {
       setGyms([]);
@@ -22,6 +26,18 @@ export default function ManageGymScreen() {
     });
   }, [t]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  const subscribe = async (gymId: string) => {
+    if (busy.current) return;
+    setError(""); setNote("");
+    busy.current = true;
+    try {
+      await openGymCheckout(gymId);
+    } catch (cause) {
+      setError(t(cause instanceof Error ? cause.message : "Could not open checkout. Try again in a moment."));
+    } finally {
+      busy.current = false;
+    }
+  };
   const redeem = async (gymId: string) => {
     setError(""); setNote("");
     try {
@@ -42,6 +58,7 @@ export default function ManageGymScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
           {note ? <Text style={styles.note} testID="redeem-note">{note}</Text> : null}
+          {checkout === "success" && gyms.some((gym) => gym.plan !== "partner") ? <Text style={styles.note} testID="partner-checkout-pending">{t("Payment is waiting for confirmation")}</Text> : null}
           {gyms.length === 0 ? <Text style={styles.empty}>{t("You do not own a gym yet.")}</Text> : null}
           {gyms.map((gym) => (
             <View key={gym.id} style={styles.card} testID={`owned-gym-${gym.id}`}>
@@ -51,6 +68,7 @@ export default function ManageGymScreen() {
                 <View style={styles.metric}><Text style={styles.metricValue}>{formatNumber(gym.members_today)}</Text><Text style={styles.metricLabel}>{t("MEMBERS TODAY")}</Text></View>
                 <View style={styles.metric}><Text style={styles.metricValue}>{formatNumber(gym.visits_week)}</Text><Text style={styles.metricLabel}>{t("VISITS THIS WEEK")}</Text></View>
               </View>
+              {gym.plan !== "partner" ? <Pressable accessibilityRole="button" accessibilityLabel={t("BECOME A PARTNER")} testID={`gym-subscribe-${gym.id}`} onPress={() => void subscribe(gym.id)} style={styles.cta}><Text style={styles.ctaTxt}>{t("BECOME A PARTNER")}</Text></Pressable> : null}
               <TextInput value={codes[gym.id] || ""} onChangeText={(value) => setCodes((current) => ({ ...current, [gym.id]: value }))} autoCapitalize="characters" maxLength={32} placeholder={t("Reward code")} placeholderTextColor={colors.textDim} style={styles.input} testID={`redeem-code-${gym.id}`} />
               <Pressable accessibilityRole="button" accessibilityLabel={t("REDEEM")} testID={`redeem-${gym.id}`} onPress={() => void redeem(gym.id)} style={styles.cta}><Text style={styles.ctaTxt}>{t("REDEEM")}</Text></Pressable>
             </View>
