@@ -292,21 +292,33 @@ test("channel publication fails safely and persists only after server approval",
 });
 
 test("paid plan selection does not silently activate a subscription", async ({ page }) => {
-  let attempts = 0;
+  const hits: string[] = [];
   await fixtures(page, async (route, path) => {
     if (path === "/subscriptions/current") {
       await route.fulfill({ json: { plan: "free", status: "active" } }); return true;
     }
-    if (path === "/subscriptions") {
-      attempts += 1;
-      await route.fulfill({ status: 402, json: { detail: "Verified billing required" } }); return true;
+    if (path === "/subscriptions/plans" || path === "/subscriptions" || path === "/subscriptions/checkout") {
+      hits.push(`${route.request().method()} ${path}`);
+      if (path === "/subscriptions/plans") {
+        await route.fulfill({ json: { plans: [
+          { plan: "pro_monthly", amount_cents: 1200, currency: "usd", interval: "month" },
+          { plan: "pro_yearly", amount_cents: 9900, currency: "usd", interval: "year" },
+        ] } });
+        return true;
+      }
+      await route.fulfill({ status: 402, json: { detail: "Verified billing required" } });
+      return true;
     }
     return false;
   });
   await page.goto("/profile");
   await page.getByTestId("open-settings").click();
-  await page.getByTestId("plan-pro-btn").click();
-  await expect(page.getByTestId("settings-screen").getByRole("alert")).toHaveText("Plan changes require verified billing. No payment was taken.");
   await expect(page.getByTestId("plan-free-btn").getByText("CURRENT", { exact: true })).toBeVisible();
-  expect(attempts).toBe(1);
+  expect(hits).toEqual([]);
+  await page.getByTestId("plan-pro-btn").click();
+  await expect(page.getByTestId("plan-pro-monthly")).toContainText("$12.00");
+  await expect(page.getByTestId("plan-pro-yearly")).toContainText("$99.00");
+  await expect(page.getByTestId("plan-pro-yearly")).toContainText("7-day free trial");
+  expect(hits).toEqual(["GET /subscriptions/plans"]);
+  await expect(page.getByTestId("plan-free-btn").getByText("CURRENT", { exact: true })).toBeVisible();
 });

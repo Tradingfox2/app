@@ -428,6 +428,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 - **2026-10-01 — staff accounting:** `backend/accounting.py` owns `GET /admin/accounting/summary` (`accounting.read`, admin staff only). It reads `community_checkouts`, `billing_events`, `subscriptions`, `partner_ledger`, `referrals`, and `commissions` when that collection exists. Totals are `{amount_cents, currency}` in the stored currency, with no conversion and no zero filled in for a missing or empty window. A failed read does not blank the report. Opening it writes `audit_log` action `accounting.viewed`. The console tab mounts `AccountingPanel` only after it is chosen.
 - **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
   bridge emits the browser watch id, which does not match its subscriber id.
+
 ## Interaction affordance (verified 2026-10-01, main `6422411`)
 
 - There was no shared press or hover helper. `frontend/src/affordance.ts`
@@ -462,3 +463,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 ## Added 2026-10-01 (deploy health and shared Motor client)
 
 - **Deploy:** `backend/db.py` owns the tz-aware Motor client (`MONGO_URL`, `DB_NAME` default `ironflow`); `server.py` re-exports `client` and `db`, and existing routes still use that `db`. `GET /api/health` pings Mongo (503 when the ping fails) and reports `ai_configured` from `ai.provider_configured` with no network call — `LLM_PROVIDER=none` and `auto` with no keys are not configured; explicit `ollama` is. `GET /api/` is unchanged. `staff_roles.py` holds `STAFF_ROLES` so `seed_scripts/grant_staff.py` imports `db` and the role table without loading `staff` (that import cycled `staff` → `server` → `routers/admin.py` `staff.require`). Python 3.12 (`backend/.python-version`, `backend/Dockerfile`). `boto3` stays because `media_storage.store` imports it when `MEDIA_S3_BUCKET` is set. Render: `render.yaml` services `api` and `centrifugo` (`deploy/centrifugo`), env groups `ironflow-backend` and `ironflow-integrations`. Lab files still use `storage.py` plus `EMERGENT_LLM_KEY`.
+
+## Pro subscription (2026-10-01)
+
+- **Stripe Billing, web checkout.** `POST /api/subscriptions/checkout` opens a subscription Checkout for `pro_monthly` or `pro_yearly` using `STRIPE_PRICE_PRO_MONTHLY` and `STRIPE_PRICE_PRO_YEARLY`. Yearly has a 7-day trial, automatic tax, and promotion codes. The Customer id is `users.stripe_customer_id`. Only the signed webhook (`metadata.kind = pro`, plus subscription and invoice events) writes `subscriptions`; the success URL grants nothing. Amounts are `{amount_cents, currency}` in Stripe's minor unit, so JPY is not scaled and EUR is not assumed. `GET /subscriptions/current` is still `{plan, status}` when there is no live row, and adds `currency`, `amount_cents`, and `current_period_end` when there is. `POST /api/subscriptions` still cannot mint a paid plan. `require_pro` gates the existing `POST /biomarkers`, `POST /labs/upload`, and wearable sync routes. No Connect, Mobile Money, or XAF.

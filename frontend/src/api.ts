@@ -217,6 +217,13 @@ export type SupportTicketList = {
 
 export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
 
+export type ProPlanPrice = {
+  plan: "pro_monthly" | "pro_yearly";
+  amount_cents: number;
+  currency: string;
+  interval: string;
+};
+
 /** Member support tickets. Bearer auth, same `/api` prefix as the rest of the client. */
 export const TICKET_CATEGORIES = ["billing", "account", "bug", "feature", "other"] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
@@ -1303,6 +1310,10 @@ export const api = {
   currentSub: () => request<any>("/subscriptions/current"),
   setSub: (plan: string) =>
     request<any>("/subscriptions", { method: "POST", body: JSON.stringify({ plan }) }),
+  subscriptionPlans: () => request<{ plans: ProPlanPrice[] }>("/subscriptions/plans"),
+  subscriptionCheckout: (plan: "pro_monthly" | "pro_yearly") =>
+    request<{ url: string }>("/subscriptions/checkout", { method: "POST", body: JSON.stringify({ plan }) }),
+  subscriptionPortal: () => request<{ url: string }>("/subscriptions/portal", { method: "POST" }),
   referral: () => request<any>("/referrals/mine"),
 
   progression: (exerciseId: string) =>
