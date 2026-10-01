@@ -869,6 +869,9 @@ export const api = {
       body: JSON.stringify({ exercise_slugs }),
     }),
   finishWorkout: (id: string) => request<any>(`/workouts/${id}/finish`, { method: "POST" }),
+  recordWorkout: (body: Record<string, unknown>) =>
+    request<any>("/workouts/recorded", { method: "POST", body: JSON.stringify(body) }),
+  workoutRoute: (id: string) => request<{ workout_id: string; segments: unknown[] }>(`/workouts/${id}/route`),
   repeatWorkout: (id: string) => request<any>(`/workouts/${id}/repeat`, { method: "POST" }),
   listSets: (workoutId: string) => request<any[]>(`/workouts/${workoutId}/sets`),
   addSet: (workoutId: string, payload: any) =>

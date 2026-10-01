@@ -13,7 +13,9 @@
       "bundleIdentifier": "com.emergent.workoutstack.amt12d",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan gym QR codes to log your visits",
-        "NSPhotoLibraryUsageDescription": "Upload photos of your blood panels"
+        "NSPhotoLibraryUsageDescription": "Upload photos of your blood panels",
+        "NSLocationWhenInUseUsageDescription": "Record the route, distance, and pace of a walk, run, or ride while this screen is open.",
+        "NSMotionUsageDescription": "Count steps during a walk, run, or hike while the recording is running."
       }
     },
     "android": {
@@ -25,7 +27,10 @@
       "package": "com.emergent.workoutstack.amt12d",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACTIVITY_RECOGNITION"
       ]
     },
     "web": {
@@ -42,6 +47,12 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000000"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Record the route, distance, and pace of a walk, run, or ride while this screen is open."
         }
       ],
       "expo-localization",

@@ -4,9 +4,11 @@
  * Logged training time comes from a finished workout's `duration_sec`,
  * split across the local hours it actually occupied. Tonnage and distance
  * come from that day's sets (`weight_kg × reps`, `distance_m`) when those
- * fields are present. Steps and all-day calories come only from a
- * wearable_metrics row for that local day (`import_day` when the importer
- * set it).
+ * fields are present. A finished phone recording adds its own
+ * `activity.distance_m` (GPS, computed on the server). Steps and all-day
+ * calories come only from a wearable_metrics row for that local day
+ * (`import_day` when the importer set it). The recorder does not write those
+ * rows.
  *
  * Missing measurements stay null. Nothing here estimates energy, steps,
  * distance, or a Move goal.
@@ -18,6 +20,8 @@ export type ActivityWorkout = {
   started_at?: unknown;
   ended_at?: unknown;
   duration_sec?: unknown;
+  /** Phone recorder summary. Distance lives here, not on a set. */
+  activity?: unknown;
 };
 
 export type HourBar = {
@@ -184,6 +188,29 @@ export function workoutIdsOnDay(
     ids.push(workout.id);
   }
   return ids;
+}
+
+/**
+ * GPS distance from finished recordings that started on this local day.
+ * A missing or non-positive distance is not a measurement. These rows are
+ * shaped like sets so they can be added with `rollupSets`.
+ */
+export function recordedDistanceRows(
+  workouts: readonly (ActivityWorkout | null | undefined)[],
+  dayKey: string,
+): { distance_m: number }[] {
+  const rows: { distance_m: number }[] = [];
+  for (const workout of workouts) {
+    if (!workout || !isFinished(workout)) continue;
+    const started = parseStarted(workout.started_at);
+    if (!started || localDayKey(started) !== dayKey) continue;
+    const activity = workout.activity;
+    if (!activity || typeof activity !== "object") continue;
+    const meters = finiteNumber((activity as Record<string, unknown>).distance_m);
+    if (meters === null || meters <= 0) continue;
+    rows.push({ distance_m: meters });
+  }
+  return rows;
 }
 
 export function rollupSets(sets: readonly unknown[]): SetRollup {

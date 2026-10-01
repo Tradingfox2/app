@@ -312,6 +312,12 @@ async def lifespan(app: FastAPI):
     await db.muscles.create_index("slug", unique=True)
     await db.workouts.create_index([("user_id", 1), ("started_at", -1)])
     await db.workouts.create_index([("user_id", 1), ("ended_at", -1)])
+    await db.workouts.create_index(
+        [("user_id", 1), ("activity.client_id", 1)],
+        unique=True,
+        partialFilterExpression={"activity.client_id": {"$type": "string"}},
+    )
+    await db.workout_routes.create_index("workout_id", unique=True)
     await db.workout_sets.create_index([("workout_id", 1), ("set_index", 1)])
     await db.workout_sets.create_index([("exercise_id", 1), ("workout_id", 1)])
     await db.biomarkers.create_index([("user_id", 1), ("measured_at", -1)])
@@ -1292,6 +1298,7 @@ async def progression(exercise_id: str, user: dict = Depends(current_user)):
 # Feature routers (import late: they import shared helpers from this module)  #
 import analytics  # noqa: E402
 from routers.labs import router as labs_router  # noqa: E402
+from routers.recordings import router as recordings_router  # noqa: E402
 from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import next_planned_session, router as program_router  # noqa: E402
@@ -1324,6 +1331,7 @@ api.include_router(admin_router)
 api.include_router(tickets_router)
 api.include_router(analytics_router)
 api.include_router(labs_router)
+api.include_router(recordings_router)
 api.include_router(notifications_router)
 api.include_router(search_router)
 api.include_router(wearables_router)

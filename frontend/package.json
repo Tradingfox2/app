@@ -11,7 +11,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test:community": "playwright test community.spec.ts",
-    "test:activity-day": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/activity-day.test.ts"
+    "test:activity-day": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/activity-day.test.ts",
+    "test:recorder": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/recorder-math.test.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "6.1.2",
@@ -31,12 +32,15 @@
     "expo-haptics": "15.0.8",
     "expo-image": "3.0.11",
     "expo-image-picker": "~17.0.11",
+    "expo-keep-awake": "~15.0.8",
     "expo-linear-gradient": "15.0.8",
     "expo-linking": "8.0.12",
     "expo-localization": "~17.0.9",
+    "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.17",
     "expo-router": "6.0.24",
     "expo-secure-store": "15.0.8",
+    "expo-sensors": "~15.0.8",
     "expo-splash-screen": "31.0.13",
     "expo-status-bar": "3.0.9",
     "expo-symbols": "1.0.8",

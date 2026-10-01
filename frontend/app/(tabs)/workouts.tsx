@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
@@ -234,7 +234,13 @@ export default function Workouts() {
             <Pressable
               testID={`workout-${item.id}`}
               style={styles.sessionCard}
-              onPress={() => router.push(`/workout/${item.id}`)}
+              onPress={() => {
+                if (item.activity && typeof item.activity === "object") {
+                  router.push(`/record/${item.id}` as Href);
+                  return;
+                }
+                router.push(`/workout/${item.id}` as Href);
+              }}
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.sessionTitle}>{item.title}</Text>

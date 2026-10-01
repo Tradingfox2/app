@@ -5,6 +5,16 @@
 
 ## Open
 
+### Node unit tests are not in the frontend CI job
+`.github/workflows/ci.yml` frontend job runs yarn, `tsc`, and eslint. It does
+not run `yarn test:activity-day` or `yarn test:recorder`. Playwright is a
+separate job. A green frontend check does not mean those node assertions ran.
+
+### The recorder does not estimate calories
+`supabase/migrations/001_init.sql` has `users.weight_kg`, but the Mongo user
+read at runtime has no reliable body weight in the app. `POST /workouts/recorded`
+does not write `wearable_metrics`, and the recorder screen has no calorie figure.
+
 ### Centrifugo is not deployed (deferred by the owner)
 `deploy/centrifugo/config.json` (v6) is the template. It was verified on
 2026-09-15 with a local v6.9.6 run: tokenless room subscribe was refused (103),
