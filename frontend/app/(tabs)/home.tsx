@@ -486,6 +486,16 @@ export default function Home() {
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={t("Open trends")}
+          testID="quick-analysis"
+          style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          onPress={() => router.push("/analysis" as Href)}
+        >
+          <Ionicons name="analytics-outline" size={18} color={colors.text} />
+          <Text style={styles.coachRowTxt}>{t("TRENDS")}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel={t("Record a walk, run, or ride")}
           testID="quick-record"
           style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
