@@ -70,6 +70,14 @@ reconcile when connected. Dormant until `CENTRIFUGO_URL` and
   the runtime; call sites carry a documented `as Href` cast.
 - Mentions are stored as `<@user_id>` tokens, never `@name`. Names are neither
   unique nor stable, and parsing them invites impersonation.
+- **Workout affordances (2026-10-01).** Session history is the Sessions segment
+  of `(tabs)/workouts.tsx`. The rest timer UI is the banner in `workout/[id].tsx`;
+  `src/rest-timer.ts` only schedules the notification. `/program` is not linked
+  from the Workouts tab. Hover and press for those screens live in
+  `src/press-feedback.ts` (`usePressFeedback`, `useFieldAffordance`). Shared
+  files such as `exercise-demo-modal.tsx` take an optional style and otherwise
+  keep today's look. Do not put chartreuse on anything except Start, a primary
+  fill, and the selected tab.
 
 ## Validation commands
 

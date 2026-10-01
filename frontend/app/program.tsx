@@ -20,6 +20,7 @@ import {
   ProgramDay,
   ProgramSchema,
 } from "@/src/program-schema";
+import { usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -48,11 +49,12 @@ function Chip({
   onPress: () => void;
   testID?: string;
 }) {
+  const press = usePressFeedback();
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
+      style={press("chip", [styles.chip, active && styles.chipActive])}
     >
       <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{label}</Text>
     </Pressable>
@@ -87,6 +89,7 @@ function DayCard({
   starting?: boolean;
 }) {
   const { t } = useI18n();
+  const press = usePressFeedback();
   return (
     <View style={styles.dayCard} testID={`day-card-${day.day_index}`}>
       <View style={styles.dayHead}>
@@ -110,7 +113,7 @@ function DayCard({
           accessibilityRole="button"
           accessibilityLabel={t("Start day {day} session", { day: day.day_index })}
           testID={`start-day-${day.day_index}`}
-          style={[styles.startDayBtn, starting && { opacity: 0.6 }]}
+          style={press("primary", [styles.startDayBtn, starting && { opacity: 0.6 }], { disabled: !!starting })}
         >
           {starting ? (
             <ActivityIndicator color={colors.brandOn} size="small" />
@@ -134,6 +137,7 @@ function goBack() {
 
 export default function ProgramScreen() {
   const { t } = useI18n();
+  const press = usePressFeedback();
   const params = useLocalSearchParams<{ workoutId?: string | string[] }>();
   const targetWorkoutId = Array.isArray(params.workoutId) ? params.workoutId[0] : params.workoutId;
   const [loading, setLoading] = useState(true);
@@ -287,7 +291,7 @@ export default function ProgramScreen() {
           onPress={goBack}
           accessibilityRole="button"
           accessibilityLabel={t("Back")}
-          style={styles.backBtn}
+          style={press("ghost", styles.backBtn)}
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
@@ -300,7 +304,7 @@ export default function ProgramScreen() {
               setProgramDoc(null);
               setAdjustResult(null);
             }}
-            style={styles.backBtn}
+            style={press("ghost", styles.backBtn)}
           >
             <Ionicons name="refresh" size={18} color={colors.textMuted} />
           </Pressable>
@@ -313,7 +317,7 @@ export default function ProgramScreen() {
         accessibilityRole="button"
         accessibilityLabel={t("Add from muscles")}
         onPress={() => router.push((targetWorkoutId ? `/muscles?workoutId=${targetWorkoutId}` : "/muscles") as Href)}
-        style={styles.musclesLink}
+        style={press("ghost", styles.musclesLink)}
       >
         <Ionicons name="body" size={16} color={colors.text} />
         <Text style={styles.musclesLinkTxt}>{t("Add from muscles")}</Text>
@@ -382,7 +386,7 @@ export default function ProgramScreen() {
                 testID="generate-btn"
                 onPress={generate}
                 disabled={generating}
-                style={[styles.cta, generating && { opacity: 0.6 }]}
+                style={press("primary", [styles.cta, generating && { opacity: 0.6 }], { disabled: generating })}
               >
                 {generating ? (
                   <>
@@ -445,7 +449,7 @@ export default function ProgramScreen() {
                 testID="adjust-btn"
                 onPress={adjustToday}
                 disabled={adjusting}
-                style={[styles.adjustBtn, adjusting && { opacity: 0.6 }]}
+                style={press("outline", [styles.adjustBtn, adjusting && { opacity: 0.6 }], { disabled: adjusting, preserveBorder: true })}
               >
                 {adjusting ? (
                   <ActivityIndicator color={colors.text} size="small" />
@@ -499,10 +503,10 @@ export default function ProgramScreen() {
         <Pressable style={styles.mergeBackdrop} onPress={() => { if (!mergeBusy) setMergePrompt(null); }}>
           <Pressable style={styles.mergeSheet} testID="merge-session-sheet" onPress={(event) => event.stopPropagation()}>
             <Text style={styles.headerTitle}>{t("Add these exercises to {title}?", { title: mergePrompt?.openTitle ?? "" })}</Text>
-            <Pressable accessibilityRole="button" testID="merge-into-open" disabled={mergeBusy} onPress={() => void confirmMerge()} style={styles.cta}>
+            <Pressable accessibilityRole="button" testID="merge-into-open" disabled={mergeBusy} onPress={() => void confirmMerge()} style={press("primary", [styles.cta, mergeBusy && { opacity: 0.6 }], { disabled: mergeBusy })}>
               <Text style={styles.ctaTxt}>{t("ADD TO OPEN SESSION")}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" testID="merge-new-session" disabled={mergeBusy} onPress={() => void startFreshDay()} style={styles.musclesLink}>
+            <Pressable accessibilityRole="button" testID="merge-new-session" disabled={mergeBusy} onPress={() => void startFreshDay()} style={press("ghost", [styles.musclesLink, mergeBusy && { opacity: 0.6 }], { disabled: mergeBusy })}>
               <Text style={styles.musclesLinkTxt}>{t("NEW SESSION")}</Text>
             </Pressable>
           </Pressable>
@@ -521,7 +525,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.md },
   musclesLink: {
     minHeight: 44,
     marginHorizontal: spacing.lg,
@@ -530,6 +534,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.xs,
+    borderRadius: radius.md,
   },
   musclesLinkTxt: { color: colors.text, fontWeight: "800" },
   mergeBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: spacing.xl },
