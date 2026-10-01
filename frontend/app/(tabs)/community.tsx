@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -101,19 +102,19 @@ export default function CommunityScreen() {
             <Text style={styles.eyebrow}>{t("TRAIN TOGETHER")}</Text>
             <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t("COMMUNITY")}</Text>
           </View>
-          <Pressable accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
+          <Affordance accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
             <HeaderMark name="messages" />
             {dmUnread ? <View style={styles.headerBadge} testID="dm-unread-badge"><Text style={styles.headerBadgeText}>{dmUnread > 99 ? "99+" : dmUnread}</Text></View> : null}
-          </Pressable>
-          <Pressable accessibilityLabel={t("Saved posts")} testID="open-saved" style={styles.headerAction} onPress={() => router.push("/saved")}>
+          </Affordance>
+          <Affordance accessibilityLabel={t("Saved posts")} testID="open-saved" style={styles.headerAction} onPress={() => router.push("/saved")}>
             <HeaderMark name="saved" />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}>
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}>
             <HeaderMark name="search" />
-          </Pressable>
-          <Pressable accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
+          </Affordance>
+          <Affordance accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
             <HeaderMark name={isCoach ? "dashboard" : "coach"} />
-          </Pressable>
+          </Affordance>
         </View>
 
         <View style={styles.signalBand}>
@@ -122,31 +123,31 @@ export default function CommunityScreen() {
             <Text style={styles.signalBody}>{t("Join focused training groups, learn from coaches, and keep the conversation moving between sessions.")}</Text>
           </View>
           <View style={styles.signalActions}>
-            {isCoach ? <Pressable style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/community/new")}>
+            {isCoach ? <Affordance signal="brand" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/community/new")}>
               <Ionicons name="add" size={17} color={colors.brandOn} />
               <Text style={styles.primaryActionText}>{t("CREATE")}</Text>
-            </Pressable> : clubFirst ? <>
-              <Pressable style={styles.primaryAction} testID="community-primary-cta" onPress={() => setTab("discover")}>
+            </Affordance> : clubFirst ? <>
+              <Affordance signal="brand" style={styles.primaryAction} testID="community-primary-cta" onPress={() => setTab("discover")}>
                 <Ionicons name="search" size={17} color={colors.brandOn} />
                 <Text style={styles.primaryActionText}>{t("FIND A CLUB")}</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
+              </Affordance>
+              <Affordance style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
                 <Text style={styles.secondaryActionText}>{t("START A CLUB")}</Text>
-              </Pressable>
-            </> : !loading ? <Pressable style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
+              </Affordance>
+            </> : !loading ? <Affordance signal="brand" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
               <Ionicons name="arrow-forward" size={17} color={colors.brandOn} />
               <Text style={styles.primaryActionText}>{t("BECOME A COACH")}</Text>
-            </Pressable> : null}
+            </Affordance> : null}
           </View>
         </View>
 
-        <LiveNowStrip inset />
+        <LiveNowStrip inset feedback />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {(["feed", "discover", "mine", "coaches", "rankings"] as Tab[]).map((item) => (
-            <Pressable key={item} accessibilityRole="tab" {...selectedControl(tab === item)} accessibilityLabel={t(item.toUpperCase())} testID={`community-tab-${item}`} style={[styles.tab, tab === item && styles.tabActive]} onPress={() => setTab(item)}>
+            <Affordance key={item} accessibilityRole="tab" {...selectedControl(tab === item)} accessibilityLabel={t(item.toUpperCase())} testID={`community-tab-${item}`} style={[styles.tab, tab === item && styles.tabActive]} onPress={() => setTab(item)}>
               <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{t(item.toUpperCase())}</Text>
-            </Pressable>
+            </Affordance>
           ))}
         </ScrollView>
 
@@ -155,34 +156,34 @@ export default function CommunityScreen() {
             <StoriesTray />
             <View style={styles.scopeRow}>
               {(["all", "friends", "mine"] as const).map(scope => (
-                <Pressable key={scope} accessibilityRole="button" {...selectedControl(feed.scope === scope)} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
+                <Affordance key={scope} accessibilityRole="button" {...selectedControl(feed.scope === scope)} testID={`feed-scope-${scope}`} onPress={() => feed.changeScope(scope)} style={[styles.scopeChip, feed.scope === scope && styles.scopeChipActive]}>
                   <Text style={[styles.scopeText, feed.scope === scope && styles.scopeTextActive]}>{t(scope === "all" ? "EVERYONE" : scope === "friends" ? "Friends" : "MY POSTS")}</Text>
-                </Pressable>
+                </Affordance>
               ))}
             </View>
             <Composer onPublished={feed.prepend} />
             {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
               <Ionicons name="trending-up" size={16} color={colors.text} style={{ alignSelf: "center" }} />
-              {trending.map(row => <Pressable key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>
+              {trending.map(row => <Affordance key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>
                 <Text style={styles.scopeText}>#{row.tag} · {formatNumber(row.posts)}</Text>
-              </Pressable>)}
+              </Affordance>)}
             </ScrollView> : null}
             {feed.loading ? <ActivityIndicator color={colors.text} style={styles.loader} /> : null}
-            {feed.error ? <View accessibilityRole="alert" style={styles.list}><Text style={styles.emptyText}>{feed.error}</Text><Pressable accessibilityRole="button" onPress={() => void feed.load()} style={styles.primaryAction}><Text style={styles.primaryActionText}>{t("Retry")}</Text></Pressable></View> : null}
+            {feed.error ? <View accessibilityRole="alert" style={styles.list}><Text style={styles.emptyText}>{feed.error}</Text><Affordance signal="brand" accessibilityRole="button" onPress={() => void feed.load()} style={styles.primaryAction}><Text style={styles.primaryActionText}>{t("Retry")}</Text></Affordance></View> : null}
             {!feed.loading && !feed.error && feed.posts.length === 0 ? <Empty icon="newspaper-outline" text={t(feed.scope === "friends" ? "Follow athletes and coaches to build your feed" : "No posts yet. Share your first session.")} /> : null}
             {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={feed.prepend} />)}
-            {feed.hasMore ? <Pressable accessibilityRole="button" testID="feed-load-more" disabled={feed.loadingMore} onPress={() => void feed.loadMore()} style={[styles.loadMore, feed.loadingMore && { opacity: 0.5 }]}>
+            {feed.hasMore ? <Affordance accessibilityRole="button" testID="feed-load-more" disabled={feed.loadingMore} onPress={() => void feed.loadMore()} style={[styles.loadMore, feed.loadingMore && { opacity: 0.5 }]}>
               {feed.loadingMore ? <ActivityIndicator color={colors.text} /> : <Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text>}
-            </Pressable> : null}
+            </Affordance> : null}
           </View>
         ) : null}
 
         {loading ? <ActivityIndicator color={colors.text} style={styles.loader} /> : null}
         {error ? <View accessibilityRole="alert" style={styles.list}>
           <Text style={styles.emptyText}>{error}</Text>
-          <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.primaryAction}>
+          <Affordance signal="brand" accessibilityRole="button" onPress={() => void load()} style={styles.primaryAction}>
             <Text style={styles.primaryActionText}>{t("Retry")}</Text>
-          </Pressable>
+          </Affordance>
         </View> : null}
 
         {!loading && !error && (tab === "discover" || tab === "mine") ? (
@@ -193,12 +194,12 @@ export default function CommunityScreen() {
             </View>
             {tab === "discover" ? <Text style={styles.rankingNote}>{t("New members in the last 14 days.")}</Text> : null}
             {tab === "discover" ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg }} testID="category-filter">
-              {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Pressable key={item ?? "all"} accessibilityRole="button" {...selectedControl(category === item)} testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
+              {([null, ...COMMUNITY_CATEGORIES] as (CommunityCategory | null)[]).map(item => <Affordance key={item ?? "all"} accessibilityRole="button" {...selectedControl(category === item)} testID={`category-${item ?? "all"}`} onPress={() => { setCategory(item); setLoading(true); }} style={[styles.scopeChip, category === item && styles.scopeChipActive]}>
                 <Text style={[styles.scopeText, category === item && styles.scopeTextActive]}>{t(item ? item.replace("_", " ").toUpperCase() : "ALL")}</Text>
-              </Pressable>)}
+              </Affordance>)}
             </ScrollView> : null}
             {(tab === "discover" ? communities : mine).map((community) => (
-              <Pressable key={community.id} testID={`community-${community.id}`} style={styles.communityRow} onPress={() => openCommunity(community)}>
+              <Affordance key={community.id} testID={`community-${community.id}`} style={styles.communityRow} onPress={() => openCommunity(community)}>
                 <View style={styles.communityCopy}>
                   <View style={styles.nameLine}>
                     <Text numberOfLines={1} style={styles.communityName}>{community.name}</Text>
@@ -214,15 +215,15 @@ export default function CommunityScreen() {
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textDim} />
-              </Pressable>
+              </Affordance>
             ))}
             {(tab === "discover" ? communities : mine).length === 0 ? <Empty icon="people-outline" text={t(tab === "discover" ? "No communities yet" : "You have not joined a community yet")} /> : null}
-            {tab === "discover" && moreCommunities ? <Pressable accessibilityRole="button" testID="communities-more" onPress={() => void loadMoreCommunities()} style={styles.loadMore}><Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text></Pressable> : null}
+            {tab === "discover" && moreCommunities ? <Affordance accessibilityRole="button" testID="communities-more" onPress={() => void loadMoreCommunities()} style={styles.loadMore}><Text style={styles.loadMoreText}>{t("LOAD MORE")}</Text></Affordance> : null}
             {tab === "mine" && archived.length ? <>
               <View style={[styles.sectionHead, { marginTop: spacing.xl }]}><Text style={styles.sectionTitle}>{t("ARCHIVED BY YOU")}</Text></View>
               {archived.map(row => <View key={row.id} style={styles.rankingRow} testID={`archived-${row.id}`}>
                 <Text numberOfLines={1} style={styles.rankingName}>{row.name}</Text>
-                <Pressable accessibilityRole="button" testID={`restore-${row.id}`} onPress={() => void restore(row)} style={styles.scopeChip}><Text style={styles.scopeText}>{t("RESTORE")}</Text></Pressable>
+                <Affordance accessibilityRole="button" testID={`restore-${row.id}`} onPress={() => void restore(row)} style={styles.scopeChip}><Text style={styles.scopeText}>{t("RESTORE")}</Text></Affordance>
               </View>)}
             </> : null}
           </View>
@@ -233,14 +234,14 @@ export default function CommunityScreen() {
             <View style={styles.sectionHead}><Text style={styles.sectionTitle}>{t("TOP COACHES")}</Text><Text style={styles.count}>{formatNumber(coaches.length)}</Text></View>
             <Text style={styles.rankingNote} testID="coaches-basis">{t("Athletes in active public clubs. The coach is not counted.")}</Text>
             {coaches.map((coach) => (
-              <Pressable key={coach.id} accessibilityRole="button" testID={`coach-${coach.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: coach.id } })} style={styles.coachRow}>
+              <Affordance key={coach.id} accessibilityRole="button" testID={`coach-${coach.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: coach.id } })} style={styles.coachRow}>
                 <Avatar user={coach} size={44} />
                 <View style={styles.communityCopy}>
                   <Text style={styles.communityName}>{coach.full_name || t("Coach")}</Text>
                   <Text style={styles.meta}>{formatNumber(coach.member_count)} {t("members")} · {formatNumber(coach.community_count)} {t("communities")}</Text>
                 </View>
                 <Ionicons name="checkmark-circle" size={19} color={colors.text} />
-              </Pressable>
+              </Affordance>
             ))}
             {coaches.length === 0 ? <Empty icon="ribbon-outline" text={t("No approved coaches yet")} /> : null}
           </View>
@@ -251,17 +252,17 @@ export default function CommunityScreen() {
             <Text style={styles.rankingNote}>{t("Communities and coaches: active memberships. Activity: last 30 days, opt-in only.")}</Text>
             <Text style={styles.sectionTitle}>{t("TOP COMMUNITIES")}</Text>
             {(rankings?.communities || []).map((community, index) => (
-              <Pressable key={community.id} style={styles.rankingRow} onPress={() => openCommunity(community)}>
+              <Affordance key={community.id} style={styles.rankingRow} onPress={() => openCommunity(community)}>
                 <Text style={styles.rankingNumber}>{index + 1}</Text><Text numberOfLines={1} style={styles.rankingName}>{community.name}</Text><Text style={styles.rankingValue}>{formatNumber(community.member_count)}</Text>
-              </Pressable>
+              </Affordance>
             ))}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP COACHES")}</Text>
             {(rankings?.coaches || []).map((row, index) => {
               const personId = row.coach?.id;
               return (
-                <Pressable key={personId || `coach-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !personId }} accessibilityLabel={personId ? row.coach?.full_name || t("Coach") : t("Coach profile unavailable")} disabled={!personId} testID={personId ? `ranking-coach-${personId}` : `ranking-coach-missing-${index}`} onPress={() => { if (personId) router.push({ pathname: "/user/[id]", params: { id: personId } }); }} style={[styles.rankingRow, !personId && styles.rankingDisabled]}>
+                <Affordance key={personId || `coach-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !personId }} accessibilityLabel={personId ? row.coach?.full_name || t("Coach") : t("Coach profile unavailable")} disabled={!personId} testID={personId ? `ranking-coach-${personId}` : `ranking-coach-missing-${index}`} onPress={() => { if (personId) router.push({ pathname: "/user/[id]", params: { id: personId } }); }} style={[styles.rankingRow, !personId && styles.rankingDisabled]}>
                   <Text style={styles.rankingNumber}>{index + 1}</Text><Text numberOfLines={1} style={styles.rankingName}>{row.coach?.full_name || t("Coach")}</Text><Text style={styles.rankingValue}>{formatNumber(row.member_count)}</Text>
-                </Pressable>
+                </Affordance>
               );
             })}
             <Text style={[styles.sectionTitle, styles.coachRankingTitle]}>{t("TOP USERS")}</Text>
@@ -269,11 +270,11 @@ export default function CommunityScreen() {
             {(rankings?.users || []).map((row, index) => {
               const personId = row.id;
               return (
-                <Pressable key={personId || `user-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !personId }} accessibilityLabel={personId ? row.full_name || t("Member") : t("Member profile unavailable")} disabled={!personId} testID={personId ? `ranking-user-${personId}` : `ranking-user-missing-${index}`} onPress={() => { if (personId) router.push({ pathname: "/user/[id]", params: { id: personId } }); }} style={[styles.rankingRow, !personId && styles.rankingDisabled]}>
+                <Affordance key={personId || `user-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !personId }} accessibilityLabel={personId ? row.full_name || t("Member") : t("Member profile unavailable")} disabled={!personId} testID={personId ? `ranking-user-${personId}` : `ranking-user-missing-${index}`} onPress={() => { if (personId) router.push({ pathname: "/user/[id]", params: { id: personId } }); }} style={[styles.rankingRow, !personId && styles.rankingDisabled]}>
                   <Text style={styles.rankingNumber}>{index + 1}</Text>
                   <Text numberOfLines={1} style={styles.rankingName}>{row.full_name || t("Member")}</Text>
                   <Text style={styles.rankingValue}>{t("{count} active days", { count: formatNumber(row.active_days) })}</Text>
-                </Pressable>
+                </Affordance>
               );
             })}
             {!rankings?.users?.length ? <Text style={styles.rankingNote}>{t("No opted-in activity yet")}</Text> : null}
@@ -281,11 +282,11 @@ export default function CommunityScreen() {
             {(rankings?.channels || []).map((row, index) => {
               const allowed = !!row.id && mine.some(community => community.id === row.community_id);
               return (
-                <Pressable key={row.id || `channel-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !allowed }} accessibilityLabel={t("Open channel {name}", { name: row.name })} disabled={!allowed} testID={row.id ? `ranking-channel-${row.id}` : `ranking-channel-missing-${index}`} onPress={() => { if (allowed) router.push({ pathname: "/channel/[id]", params: { id: row.id } }); }} style={[styles.rankingRow, !allowed && styles.rankingDisabled]}>
+                <Affordance key={row.id || `channel-${index}`} accessibilityRole="button" accessibilityState={{ disabled: !allowed }} accessibilityLabel={t("Open channel {name}", { name: row.name })} disabled={!allowed} testID={row.id ? `ranking-channel-${row.id}` : `ranking-channel-missing-${index}`} onPress={() => { if (allowed) router.push({ pathname: "/channel/[id]", params: { id: row.id } }); }} style={[styles.rankingRow, !allowed && styles.rankingDisabled]}>
                   <Text style={styles.rankingNumber}>{index + 1}</Text>
                   <View style={styles.communityCopy}><Text style={styles.communityName}># {row.name}</Text><Text style={styles.meta}>{row.community_name}</Text></View>
                   <Text style={styles.rankingValue}>{t("{count} contributors", { count: formatNumber(row.contributors) })}</Text>
-                </Pressable>
+                </Affordance>
               );
             })}
             {!rankings?.channels?.length ? <Text style={styles.rankingNote}>{t("No opted-in activity yet")}</Text> : null}

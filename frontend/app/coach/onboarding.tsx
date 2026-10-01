@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -15,7 +16,7 @@ export default function CoachOnboarding() {
   useEffect(() => { void api.coachApplication().then(setApplication).catch(() => null); }, []);
   const submit = async () => { if (bio.trim().length < 40 || !specialties.trim() || saving) return; setSaving(true); setError(""); try { setApplication(await api.applyToCoach(bio.trim(), specialties.split(",").map(v => v.trim()).filter(Boolean), credentials.split("\n").map(v => v.trim()).filter(Boolean))); } catch (cause) { setError(cause instanceof Error ? cause.message : t("Could not submit application")); } finally { setSaving(false); } };
   const decided = application?.status === "pending" || application?.status === "approved";
-  return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text style={styles.headerTitle}>{t("COACH ONBOARDING")}</Text></View><ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+  return <SafeAreaView style={styles.safe}><View style={styles.header}><Affordance onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance><Text style={styles.headerTitle}>{t("COACH ONBOARDING")}</Text></View><ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
     <View style={styles.badge}><Ionicons name="ribbon" size={24} color={colors.text} /><Text style={styles.badgeText}>{t("COACH PARTNER")}</Text></View>
     <Text style={styles.title}>{decided ? t("Your application is in motion.") : t("Turn expertise into a community.")}</Text>
     <Text style={styles.body}>{decided ? t(`Status: ${application?.status}`) : t("Tell us how you coach. Approval protects members and unlocks community creation, paid memberships, and partner analytics.")}</Text>
@@ -23,7 +24,7 @@ export default function CoachOnboarding() {
       <Text style={styles.label}>{t("COACHING BIO")}</Text><TextInput multiline value={bio} onChangeText={setBio} placeholder={t("Describe your coaching approach, audience, and experience...")} placeholderTextColor={colors.textDim} style={[styles.input, styles.bio]} />
       <Text style={styles.label}>{t("SPECIALTIES")}</Text><TextInput value={specialties} onChangeText={setSpecialties} placeholder={t("Strength, mobility, endurance")} placeholderTextColor={colors.textDim} style={styles.input} />
       <Text style={styles.label}>{t("CREDENTIALS · ONE PER LINE")}</Text><TextInput multiline value={credentials} onChangeText={setCredentials} placeholder={t("Certification or relevant experience")} placeholderTextColor={colors.textDim} style={[styles.input, styles.credentials]} />
-      {error ? <Text style={styles.error}>{error}</Text> : null}<Pressable disabled={saving || bio.trim().length < 40 || !specialties.trim()} onPress={submit} style={[styles.submit, (saving || bio.trim().length < 40 || !specialties.trim()) && styles.disabled]}><Text style={styles.submitText}>{t(saving ? "SUBMITTING..." : "SUBMIT FOR REVIEW")}</Text></Pressable>
+      {error ? <Text style={styles.error}>{error}</Text> : null}<Affordance signal="brand" disabled={saving || bio.trim().length < 40 || !specialties.trim()} onPress={submit} style={[styles.submit, (saving || bio.trim().length < 40 || !specialties.trim()) && styles.disabled]}><Text style={styles.submitText}>{t(saving ? "SUBMITTING..." : "SUBMIT FOR REVIEW")}</Text></Affordance>
     </>}
   </ScrollView></SafeAreaView>;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -56,18 +57,18 @@ export default function Connections() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text numberOfLines={1} style={styles.headerTitle}>{params.name || t("PROFILE")}</Text>
     </View>
     <Text style={{ color: colors.textDim, fontSize: 12, lineHeight: 16, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>{t("Followers and Following are people lists. The Friends feed is separate.")}</Text>
     <View style={styles.tabs}>
       {(["followers", "following"] as Tab[]).map(item => (
-        <Pressable key={item} accessibilityRole="button" testID={`connections-tab-${item}`} onPress={() => { setTab(item); setLoading(true); }} style={[styles.tab, tab === item && styles.tabOn]}>
+        <Affordance key={item} accessibilityRole="button" testID={`connections-tab-${item}`} onPress={() => { setTab(item); setLoading(true); }} style={[styles.tab, tab === item && styles.tabOn]}>
           <Text style={[styles.tabText, tab === item && styles.tabTextOn]}>{t(item.toUpperCase())}</Text>
-        </Pressable>
+        </Affordance>
       ))}
     </View>
-    {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load(tab)} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+    {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" onPress={() => void load(tab)} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Affordance></View> : null}
     {loading && !error ? <ActivityIndicator color={colors.text} /> : null}
     <FlatList
       data={rows}
@@ -75,13 +76,13 @@ export default function Connections() {
       contentContainerStyle={styles.list}
       ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="people-outline" size={32} color={colors.textDim} /><Text style={styles.emptyText}>{t(tab === "followers" ? "No followers yet." : "Not following anyone yet.")}</Text></View> : null}
       renderItem={({ item }) => <View style={styles.row} testID={`connection-${item.id}`}>
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.id } })} style={styles.person}>
+        <Affordance accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.id } })} style={styles.person}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(item.full_name || "?").charAt(0).toUpperCase()}</Text></View>
           <Text numberOfLines={1} style={styles.name}>{item.full_name || t("Member")}</Text>
-        </Pressable>
-        {item.id !== user?.id ? <Pressable accessibilityRole="button" testID={`follow-${item.id}`} onPress={() => void toggleFollow(item)} style={[styles.follow, item.followed_by_me && styles.followOn]}>
+        </Affordance>
+        {item.id !== user?.id ? <Affordance signal={item.followed_by_me ? "raise" : "brand"} accessibilityRole="button" testID={`follow-${item.id}`} onPress={() => void toggleFollow(item)} style={[styles.follow, item.followed_by_me && styles.followOn]}>
           <Text style={[styles.followText, item.followed_by_me && styles.followTextOn]}>{t(item.followed_by_me ? "FOLLOWING" : "FOLLOW")}</Text>
-        </Pressable> : null}
+        </Affordance> : null}
       </View>}
     />
   </SafeAreaView>;

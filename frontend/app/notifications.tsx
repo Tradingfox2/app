@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Modal, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -144,26 +145,26 @@ export default function NotificationsScreen() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <View style={{ flex: 1 }}><Text style={styles.headerTitle}>{t("NOTIFICATIONS")}</Text>{unread ? <Text style={styles.live}>{t("{count} unread").replace("{count}", String(unread))}</Text> : null}</View>
-      {unread ? <Pressable accessibilityRole="button" testID="mark-all-read" onPress={() => void markAll()} style={styles.icon}><Ionicons name="checkmark-done" size={20} color={colors.text} /></Pressable> : null}
-      {rows.some(row => row.read_at) ? <Pressable accessibilityRole="button" accessibilityLabel={t("Clear read notifications")} testID="clear-read" onPress={() => void clearRead()} style={styles.icon}><Ionicons name="trash-bin-outline" size={19} color={colors.textMuted} /></Pressable> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Notification settings")} testID="notification-settings" onPress={() => router.push("/notification-settings")} style={styles.icon}><Ionicons name="options-outline" size={20} color={colors.textMuted} /></Pressable>
+      {unread ? <Affordance accessibilityRole="button" testID="mark-all-read" onPress={() => void markAll()} style={styles.icon}><Ionicons name="checkmark-done" size={20} color={colors.text} /></Affordance> : null}
+      {rows.some(row => row.read_at) ? <Affordance accessibilityRole="button" accessibilityLabel={t("Clear read notifications")} testID="clear-read" onPress={() => void clearRead()} style={styles.icon}><Ionicons name="trash-bin-outline" size={19} color={colors.textMuted} /></Affordance> : null}
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Notification settings")} testID="notification-settings" onPress={() => router.push("/notification-settings")} style={styles.icon}><Ionicons name="options-outline" size={20} color={colors.textMuted} /></Affordance>
     </View>
     <View style={styles.tabs}>
       {([["all", t("ALL")], ["unread", t("UNREAD")]] as const).map(([key, label]) => {
         const on = (key === "unread") === unreadOnly;
-        return <Pressable key={key} accessibilityRole="button" testID={`notifications-tab-${key}`} onPress={() => { setUnreadOnly(key === "unread"); setLoading(true); }} style={[styles.tab, on && styles.tabOn]}><Text style={[styles.tabText, on && styles.tabTextOn]}>{label}</Text></Pressable>;
+        return <Affordance key={key} accessibilityRole="button" testID={`notifications-tab-${key}`} onPress={() => { setUnreadOnly(key === "unread"); setLoading(true); }} style={[styles.tab, on && styles.tabOn]}><Text style={[styles.tabText, on && styles.tabTextOn]}>{label}</Text></Affordance>;
       })}
     </View>
-    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load(unreadOnly)} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" onPress={() => void load(unreadOnly)} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Affordance></View> : null}
     {loading ? <ActivityIndicator accessibilityLabel={t("Loading...")} color={colors.text} /> : null}
     <FlatList
       data={rows}
       keyExtractor={item => item.id}
       contentContainerStyle={styles.list}
       ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="notifications-off-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{unreadOnly ? t("Nothing unread.") : t("No notifications yet.")}</Text></View> : null}
-      renderItem={({ item }) => <Pressable accessibilityRole="button" testID={`notification-${item.id}`} onPress={() => void open(item)} style={[styles.row, !item.read_at && styles.rowUnread]}>
+      renderItem={({ item }) => <Affordance accessibilityRole="button" testID={`notification-${item.id}`} onPress={() => void open(item)} style={[styles.row, !item.read_at && styles.rowUnread]}>
         <Ionicons name={ICONS[item.type] ?? "notifications-outline"} size={18} color={item.read_at ? colors.textDim : colors.text} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{summarise(item, t)}</Text>
@@ -171,20 +172,20 @@ export default function NotificationsScreen() {
           <Text style={styles.time}>{formatDate(item.created_at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
         </View>
         {!item.read_at ? <View testID={`unread-dot-${item.id}`} style={styles.dot} /> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Delete notification")} testID={`delete-notification-${item.id}`} onPress={() => void remove(item)} style={styles.icon}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable>
-      </Pressable>}
-      ListFooterComponent={hasMore ? <Pressable accessibilityRole="button" testID="notifications-more" onPress={() => void more()} style={[styles.icon, { alignSelf: "center", width: "auto" }]}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Pressable> : null}
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Delete notification")} testID={`delete-notification-${item.id}`} onPress={() => void remove(item)} style={styles.icon}><Ionicons name="close" size={16} color={colors.textDim} /></Affordance>
+      </Affordance>}
+      ListFooterComponent={hasMore ? <Affordance accessibilityRole="button" testID="notifications-more" onPress={() => void more()} style={[styles.icon, { alignSelf: "center", width: "auto" }]}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Affordance> : null}
     />
     <Modal visible={!!sheet} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
-      <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
-        <Pressable style={styles.sheet} testID="notification-sheet" onPress={(event) => event.stopPropagation()}>
+      <Affordance signal="none" style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
+        <Affordance signal="none" style={styles.sheet} testID="notification-sheet" onPress={(event) => event.stopPropagation()}>
           <Text style={styles.title} testID="notification-sheet-title">{sheet ? summarise(sheet, t) : ""}</Text>
           {sheet?.body ? <Text style={styles.body} testID="notification-sheet-body">{sheet.body}</Text> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={t("CLOSE")} testID="notification-sheet-close" onPress={() => setSheet(null)} style={styles.sheetClose}>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("CLOSE")} testID="notification-sheet-close" onPress={() => setSheet(null)} style={styles.sheetClose}>
             <Text style={styles.retry}>{t("CLOSE")}</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
+          </Affordance>
+        </Affordance>
+      </Affordance>
     </Modal>
   </SafeAreaView>;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
@@ -33,25 +34,25 @@ export default function FriendsFeed() {
 
   return <SafeAreaView style={styles.safe} testID="friends-screen">
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title} accessibilityLabel={t("Friends feed")}>{t("FRIENDS")}</Text>
     </View>
     <ScrollView contentContainerStyle={styles.body}>
       <Text style={styles.hint}>{t("Posts from people you follow. Not your Following list. A friends-only post stays off the public feed.")}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tray} testID="friends-stories">
-        <Pressable accessibilityRole="button" testID="friends-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
+        <Affordance accessibilityRole="button" testID="friends-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
           <Ionicons name="add" size={18} color={colors.text} />
           <Text style={styles.addText}>{t("YOUR STORY")}</Text>
-        </Pressable>
+        </Affordance>
         {groups.map(group => {
           const authorId = group.author?.id;
           if (!authorId) return null;
           const latest = group.stories[group.stories.length - 1];
-          return <Pressable key={authorId} accessibilityRole="button" testID={`friends-story-${authorId}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId, kind: "stories" } })} style={styles.bubble}>
+          return <Affordance key={authorId} accessibilityRole="button" testID={`friends-story-${authorId}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId, kind: "stories" } })} style={styles.bubble}>
             <Avatar user={group.author} size={52} />
             <Text style={styles.bubbleName} numberOfLines={1}>{group.author?.full_name || t("Member")}</Text>
             {latest?.workout_summary?.title ? <Text style={styles.bubbleMeta} numberOfLines={1}>{latest.workout_summary.title}</Text> : null}
-          </Pressable>;
+          </Affordance>;
         })}
       </ScrollView>
       {storyError ? <Text accessibilityRole="alert" style={styles.error}>{storyError}</Text> : null}
@@ -62,7 +63,7 @@ export default function FriendsFeed() {
         {feed.error ? <Text accessibilityRole="alert" style={styles.error}>{feed.error}</Text> : null}
         {!feed.loading && !feed.error && feed.posts.length === 0 ? <Text style={styles.hint}>{t("Follow athletes and coaches to build your feed")}</Text> : null}
         {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={created => feed.prepend(created)} />)}
-        {feed.hasMore ? <Pressable accessibilityRole="button" onPress={() => void feed.loadMore()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Pressable> : null}
+        {feed.hasMore ? <Affordance accessibilityRole="button" onPress={() => void feed.loadMore()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Affordance> : null}
       </View>
     </ScrollView>
   </SafeAreaView>;

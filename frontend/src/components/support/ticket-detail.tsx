@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { useFocusEffect } from "expo-router";
 import { api, type Ticket, type TicketMessage } from "@/src/api";
 import { track } from "@/src/analytics";
@@ -104,9 +105,9 @@ export function SupportTicketDetail({
         {error ? (
           <View accessibilityRole="alert" style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
             <Text testID="support-detail-error" style={supportStyles.error}>{error}</Text>
-            <Pressable accessibilityRole="button" testID="support-detail-retry" onPress={() => { setLoading(true); setError(""); void load(); }}>
+            <Affordance accessibilityRole="button" testID="support-detail-retry" onPress={() => { setLoading(true); setError(""); void load(); }}>
               <Text style={supportStyles.retry}>{t("Retry")}</Text>
-            </Pressable>
+            </Affordance>
           </View>
         ) : null}
         {loading && !ticket ? <ActivityIndicator testID="support-detail-loading" accessibilityLabel={t("Loading...")} color={colors.text} style={{ marginTop: spacing.lg }} /> : null}
@@ -162,7 +163,7 @@ export function SupportTicketDetail({
             ) : null}
             {replyError ? <Text accessibilityRole="alert" testID="support-reply-error" style={supportStyles.error}>{replyError}</Text> : null}
             {replySent ? <Text testID="support-reply-success" style={supportStyles.success}>{t("Reply sent.")}</Text> : null}
-            <Pressable
+            <Affordance signal="brand"
               accessibilityRole="button"
               testID="support-reply-submit"
               disabled={!canSend}
@@ -170,7 +171,7 @@ export function SupportTicketDetail({
               style={[supportStyles.submit, { marginTop: 0 }, !canSend && supportStyles.disabled]}
             >
               <Text style={supportStyles.submitText}>{t(sending ? "SENDING…" : "SEND REPLY")}</Text>
-            </Pressable>
+            </Affordance>
           </View>
         ) : null}
       </KeyboardAvoidingView>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -15,7 +16,7 @@ export default function PartnerDashboardScreen() {
   const [data, setData] = useState<PartnerDashboard | null>(null); const [error, setError] = useState("");
   const load = useCallback(() => { void api.partnerDashboard().then(setData).catch(cause => setError(cause instanceof Error ? cause.message : t("Could not load dashboard"))); }, [t]);
   useEffect(load, [load]);
-  return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text style={styles.headerTitle}>{t("PARTNER DASHBOARD")}</Text><Pressable onPress={() => router.push("/community/new")} style={styles.icon}><Ionicons name="add" size={22} color={colors.text} /></Pressable></View>
+  return <SafeAreaView style={styles.safe}><View style={styles.header}><Affordance onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance><Text style={styles.headerTitle}>{t("PARTNER DASHBOARD")}</Text><Affordance onPress={() => router.push("/community/new")} style={styles.icon}><Ionicons name="add" size={22} color={colors.text} /></Affordance></View>
     {!data && !error ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xxxl }} /> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}
     {data ? <ScrollView contentContainerStyle={styles.scroll}><Text style={styles.eyebrow}>{t("NETWORK PULSE")}</Text><Text style={styles.title}>{t("Your coaching business")}</Text>
@@ -25,7 +26,7 @@ export default function PartnerDashboardScreen() {
         <MetricGlossary testID="partner-metric-communities" value={formatNumber(data.community_count)} label={t("COMMUNITIES")} glossary={t(METRIC_GLOSSARY.community_count)} style={styles.metric} valueStyle={styles.metricValue} labelStyle={styles.metricLabel} />
       </View>
       <View style={styles.moneyBand}><View><Text style={styles.moneyLabel}>{t("AVAILABLE BALANCE")}</Text><Text style={styles.money}>{data.balances.length ? data.balances.map(row => new Intl.NumberFormat(localeTag, { style: "currency", currency: row._id }).format(row.net_cents / 100)).join(" · ") : "—"}</Text></View><View style={styles.payout}><Ionicons name="wallet-outline" size={17} color={colors.warning} /><Text style={styles.payoutText}>{t(data.payout_status.toUpperCase())}</Text></View></View>
-      <Text style={styles.section}>{t("YOUR COMMUNITIES")}</Text>{data.communities.map(item => <Pressable key={item.id} onPress={() => router.push({ pathname: "/community/[id]", params: { id: item.id } })} style={styles.row}><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{formatNumber(item.member_count)} {t("members")} · {t(joinPolicyPhrase(item.join_policy))}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Pressable>)}
+      <Text style={styles.section}>{t("YOUR COMMUNITIES")}</Text>{data.communities.map(item => <Affordance key={item.id} onPress={() => router.push({ pathname: "/community/[id]", params: { id: item.id } })} style={styles.row}><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{formatNumber(item.member_count)} {t("members")} · {t(joinPolicyPhrase(item.join_policy))}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Affordance>)}
     </ScrollView> : null}
   </SafeAreaView>;
 }

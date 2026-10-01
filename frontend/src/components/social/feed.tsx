@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
@@ -175,56 +176,56 @@ export function Composer({ onPublished, communityId, personal }: { onPublished: 
       {poll ? <View style={styles.pollEditor} testID="poll-editor">
         {poll.options.map((option, index) => <View key={index} style={styles.pollOptionRow}>
           <TextInput value={option} maxLength={80} onChangeText={value => setPoll({ ...poll, options: poll.options.map((item, i) => i === index ? value : item) })} placeholder={t("Option {n}").replace("{n}", String(index + 1))} placeholderTextColor={colors.textDim} style={styles.pollOptionInput} testID={`poll-option-${index}`} />
-          {poll.options.length > 2 ? <Pressable accessibilityRole="button" accessibilityLabel={t("Remove option")} onPress={() => setPoll({ ...poll, options: poll.options.filter((_, i) => i !== index) })} style={styles.iconButton}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable> : null}
+          {poll.options.length > 2 ? <Affordance accessibilityRole="button" accessibilityLabel={t("Remove option")} onPress={() => setPoll({ ...poll, options: poll.options.filter((_, i) => i !== index) })} style={styles.iconButton}><Ionicons name="close" size={16} color={colors.textDim} /></Affordance> : null}
         </View>)}
-        {poll.options.length < 4 ? <Pressable accessibilityRole="button" onPress={() => setPoll({ ...poll, options: [...poll.options, ""] })} testID="poll-add-option"><Text style={styles.link}>{t("+ Add option")}</Text></Pressable> : null}
-        <View style={styles.chips}>{POLL_DURATIONS.map(([hours, label]) => <Pressable key={hours} accessibilityRole="button" onPress={() => setPoll({ ...poll, hours })} style={[styles.chip, poll.hours === hours && styles.chipOn]} testID={`poll-duration-${hours}`}><Text style={[styles.chipText, poll.hours === hours && styles.chipTextOn]}>{t(label)}</Text></Pressable>)}</View>
+        {poll.options.length < 4 ? <Affordance accessibilityRole="button" onPress={() => setPoll({ ...poll, options: [...poll.options, ""] })} testID="poll-add-option"><Text style={styles.link}>{t("+ Add option")}</Text></Affordance> : null}
+        <View style={styles.chips}>{POLL_DURATIONS.map(([hours, label]) => <Affordance key={hours} accessibilityRole="button" onPress={() => setPoll({ ...poll, hours })} style={[styles.chip, poll.hours === hours && styles.chipOn]} testID={`poll-duration-${hours}`}><Text style={[styles.chipText, poll.hours === hours && styles.chipTextOn]}>{t(label)}</Text></Affordance>)}</View>
       </View> : null}
-      {media.length ? <View style={styles.thumbs}>{media.map(item => <View key={item.id} style={styles.thumbWrap}>{item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={22} color={colors.text} /></View>}<Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setMedia(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={12} color={colors.text} /></Pressable></View>)}</View> : null}
+      {media.length ? <View style={styles.thumbs}>{media.map(item => <View key={item.id} style={styles.thumbWrap}>{item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={22} color={colors.text} /></View>}<Affordance accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setMedia(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={12} color={colors.text} /></Affordance></View>)}</View> : null}
       {personal ? <View testID="personal-audience">
         <View style={styles.chips}>
           {PERSONAL_AUDIENCES.map(option => (
-            <Pressable key={option} accessibilityRole="button" onPress={() => setPersonalAudience(option)} style={[styles.chip, personalAudience === option && styles.chipOn]} testID={audienceTestId("composer-audience", option)}>
+            <Affordance key={option} accessibilityRole="button" onPress={() => setPersonalAudience(option)} style={[styles.chip, personalAudience === option && styles.chipOn]} testID={audienceTestId("composer-audience", option)}>
               <Text style={[styles.chipText, personalAudience === option && styles.chipTextOn]}>{t(audienceLabel(option))}</Text>
-            </Pressable>
+            </Affordance>
           ))}
         </View>
         <Text testID="personal-audience-hint" style={styles.audienceHint}>{t(audienceHint(personalAudience))}</Text>
       </View> : null}
       {picking && !communityId && !personal ? <View style={styles.chips} testID="audience-picker">
-        <Pressable accessibilityRole="button" onPress={() => { setAudience(null); setPicking(false); }} style={[styles.chip, !audience && styles.chipOn]} testID="audience-public"><Text style={[styles.chipText, !audience && styles.chipTextOn]}>{t("Public")}</Text></Pressable>
-        {mine === null ? <ActivityIndicator color={colors.text} /> : mine.map(row => <Pressable key={row.id} accessibilityRole="button" onPress={() => { setAudience(row.id); setPicking(false); }} style={[styles.chip, audience === row.id && styles.chipOn]} testID={`audience-${row.id}`}><Text style={[styles.chipText, audience === row.id && styles.chipTextOn]}>{row.name}</Text></Pressable>)}
+        <Affordance accessibilityRole="button" onPress={() => { setAudience(null); setPicking(false); }} style={[styles.chip, !audience && styles.chipOn]} testID="audience-public"><Text style={[styles.chipText, !audience && styles.chipTextOn]}>{t("Public")}</Text></Affordance>
+        {mine === null ? <ActivityIndicator color={colors.text} /> : mine.map(row => <Affordance key={row.id} accessibilityRole="button" onPress={() => { setAudience(row.id); setPicking(false); }} style={[styles.chip, audience === row.id && styles.chipOn]} testID={`audience-${row.id}`}><Text style={[styles.chipText, audience === row.id && styles.chipTextOn]}>{row.name}</Text></Affordance>)}
       </View> : null}
       {communityId && pickingWorkout ? <View style={styles.chips} testID="composer-workouts">
         {workouts === null ? <ActivityIndicator color={colors.text} /> : workouts.length === 0 ? <Text style={styles.time}>{t("Finish a workout to share it on the wall.")}</Text> : workouts.map(workout => {
           const on = workout.id === workoutId;
-          return <Pressable key={workout.id} accessibilityRole="button" testID={`composer-workout-${workout.id}`} onPress={() => { setWorkoutId(workout.id); setPickingWorkout(false); }} style={[styles.chip, on && styles.chipOn]}>
+          return <Affordance key={workout.id} accessibilityRole="button" testID={`composer-workout-${workout.id}`} onPress={() => { setWorkoutId(workout.id); setPickingWorkout(false); }} style={[styles.chip, on && styles.chipOn]}>
             <Text style={[styles.chipText, on && styles.chipTextOn]}>{workout.title}</Text>
-          </Pressable>;
+          </Affordance>;
         })}
       </View> : null}
       {hasWorkout ? <View style={styles.chips} testID="composer-workout-selected">
         <Text style={styles.chipTextOn}>{workouts?.find(row => row.id === workoutId)?.title || t("Workout")}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Remove workout")} testID="composer-workout-remove" onPress={() => setWorkoutId(null)} style={styles.iconButton}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Remove workout")} testID="composer-workout-remove" onPress={() => setWorkoutId(null)} style={styles.iconButton}><Ionicons name="close" size={14} color={colors.textDim} /></Affordance>
       </View> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       <View style={styles.composerRow}>
-        {communityId ? <Pressable accessibilityRole="button" accessibilityLabel={t("Attach workout")} testID="composer-attach-workout" disabled={!!busy} onPress={openWorkouts} style={[styles.iconButton, !!busy && styles.disabled]}>
+        {communityId ? <Affordance accessibilityRole="button" accessibilityLabel={t("Attach workout")} testID="composer-attach-workout" disabled={!!busy} onPress={openWorkouts} style={[styles.iconButton, !!busy && styles.disabled]}>
           <Ionicons name={workoutId ? "barbell" : "barbell-outline"} size={20} color={colors.text} />
-        </Pressable> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Add photo or video")} disabled={!!busy || media.length >= MAX_ATTACHMENTS} onPress={() => void pick()} style={[styles.iconButton, (!!busy || media.length >= MAX_ATTACHMENTS) && styles.disabled]}>
+        </Affordance> : null}
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Add photo or video")} disabled={!!busy || media.length >= MAX_ATTACHMENTS} onPress={() => void pick()} style={[styles.iconButton, (!!busy || media.length >= MAX_ATTACHMENTS) && styles.disabled]}>
           {busy === "upload" ? <ActivityIndicator color={colors.text} /> : <Ionicons name="image-outline" size={20} color={colors.text} />}
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t(poll ? "Remove poll" : "Add poll")} testID="composer-poll" onPress={() => setPoll(poll ? null : { options: ["", ""], hours: 24 })} style={styles.iconButton}>
+        </Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t(poll ? "Remove poll" : "Add poll")} testID="composer-poll" onPress={() => setPoll(poll ? null : { options: ["", ""], hours: 24 })} style={styles.iconButton}>
           <Ionicons name={poll ? "stats-chart" : "stats-chart-outline"} size={19} color={colors.text} />
-        </Pressable>
-        {!communityId && !personal ? <Pressable accessibilityRole="button" accessibilityLabel={t("Choose audience")} testID="composer-audience" onPress={() => void openAudience()} style={styles.audience}>
+        </Affordance>
+        {!communityId && !personal ? <Affordance accessibilityRole="button" accessibilityLabel={t("Choose audience")} testID="composer-audience" onPress={() => void openAudience()} style={styles.audience}>
           <Ionicons name={audience ? "people" : "globe-outline"} size={14} color={colors.textMuted} /><Text style={styles.audienceText} numberOfLines={1}>{audienceName}</Text>
-        </Pressable> : null}
+        </Affordance> : null}
         <Text style={styles.counter}>{text.length ? `${text.length}/4000` : ""}</Text>
-        <Pressable accessibilityRole="button" testID="feed-publish" disabled={!canPublish} onPress={() => void publish()} style={[styles.publish, !canPublish && styles.disabled]}>
+        <Affordance signal="brand" accessibilityRole="button" testID="feed-publish" disabled={!canPublish} onPress={() => void publish()} style={[styles.publish, !canPublish && styles.disabled]}>
           {busy === "publish" ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.publishText}>{t("POST")}</Text>}
-        </Pressable>
+        </Affordance>
       </View>
     </View>
   );
@@ -327,19 +328,19 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen,
     <View style={styles.card} testID={`post-${post.id}`}>
       {plainRepost ? <Text style={styles.repostLabel}><Ionicons name="repeat" size={12} color={colors.textMuted} /> {t("{name} reposted", { name: post.author?.full_name || t("Member") })}</Text> : null}
       <View style={styles.head}>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.author?.full_name || t("Member")} onPress={() => shown.author && router.push({ pathname: "/user/[id]", params: { id: shown.author.id } })}><Avatar user={shown.author} /></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Open post")} testID={`post-open-${shown.id}`} onPress={openPost} style={{ flex: 1 }}>
+        <Affordance accessibilityRole="button" accessibilityLabel={shown.author?.full_name || t("Member")} onPress={() => shown.author && router.push({ pathname: "/user/[id]", params: { id: shown.author.id } })}><Avatar user={shown.author} /></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Open post")} testID={`post-open-${shown.id}`} onPress={openPost} style={{ flex: 1 }}>
           <Text style={styles.author}>{shown.author?.full_name || t("Member")}</Text>
           <Text style={styles.time}>{formatDate(shown.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{shown.edited_at ? ` · ${t("edited")}` : ""}{audienceMark ? ` · ${t(audienceMark)}` : ""}{shown.community_id ? ` · ${t("Community")}` : ""}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("More options")} testID={`post-menu-${post.id}`} onPress={() => setMenu(true)} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={18} color={colors.textDim} /></Pressable>
+        </Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("More options")} testID={`post-menu-${post.id}`} onPress={() => setMenu(true)} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={18} color={colors.textDim} /></Affordance>
       </View>
       {post.original?.unavailable ? <Text style={styles.unavailable}>{t("This post is no longer available.")}</Text> : null}
       {editing !== null ? <View style={styles.editBox} testID={`post-edit-${post.id}`}>
         <MentionInput value={editing} onChangeText={setEditing} multiline maxLength={4000} style={styles.editInput} testID="post-edit-input" />
         <View style={styles.editRow}>
-          <Pressable accessibilityRole="button" onPress={() => setEditing(null)}><Text style={styles.linkMuted}>{t("Cancel")}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} testID="post-edit-save" disabled={busy || !editing.trim()} onPress={() => void saveEdit()}><Text style={[styles.link, (busy || !editing.trim()) && styles.disabled]}>{t(SAVE_LABEL)}</Text></Pressable>
+          <Affordance accessibilityRole="button" onPress={() => setEditing(null)}><Text style={styles.linkMuted}>{t("Cancel")}</Text></Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} testID="post-edit-save" disabled={busy || !editing.trim()} onPress={() => void saveEdit()}><Text style={[styles.link, (busy || !editing.trim()) && styles.disabled]}>{t(SAVE_LABEL)}</Text></Affordance>
         </View>
       </View> : shown.content ? <RichText content={shown.content} mentions={shown.mentions} style={styles.content} /> : null}
       {shown.poll ? <PollBlock poll={shown.poll} disabled={busy} onVote={index => void vote(index)} /> : null}
@@ -349,18 +350,18 @@ export function PostCard({ post, onChange, onRemoved, onReposted, initiallyOpen,
       {quoted ? <QuotedPost post={quoted} /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.liked_by_me ? t("Unlike") : t("Like")} accessibilityState={{ selected: !!shown.liked_by_me }} disabled={busy} onPress={() => void toggleLike()} style={styles.action}><Ionicons name={shown.liked_by_me ? "heart" : "heart-outline"} size={20} color={shown.liked_by_me ? colors.text : colors.textMuted} /><Text style={[styles.actionText, shown.liked_by_me && styles.actionActive]}>{formatNumber(shown.like_count)}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Comments")} onPress={() => setOpen(value => !value)} style={styles.action}><Ionicons name="chatbubble-outline" size={19} color={colors.textMuted} /><Text style={styles.actionText}>{formatNumber(shown.comment_count)}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.reposted_by_me ? t("Undo repost") : t("Repost")} accessibilityState={{ selected: !!shown.reposted_by_me }} disabled={busy} onPress={() => void toggleRepost()} style={styles.action}><Ionicons name="repeat" size={21} color={shown.reposted_by_me ? colors.text : colors.textMuted} /><Text style={[styles.actionText, shown.reposted_by_me && styles.actionActive]}>{formatNumber(shown.repost_count)}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Quote")} testID={`post-quote-${post.id}`} disabled={busy} onPress={() => setQuoting(quoting === null ? "" : null)} style={styles.action}><Ionicons name="chatbox-ellipses-outline" size={19} color={quoting !== null ? colors.text : colors.textMuted} /></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={shown.liked_by_me ? t("Unlike") : t("Like")} accessibilityState={{ selected: !!shown.liked_by_me }} disabled={busy} onPress={() => void toggleLike()} style={styles.action}><Ionicons name={shown.liked_by_me ? "heart" : "heart-outline"} size={20} color={shown.liked_by_me ? colors.text : colors.textMuted} /><Text style={[styles.actionText, shown.liked_by_me && styles.actionActive]}>{formatNumber(shown.like_count)}</Text></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Comments")} onPress={() => setOpen(value => !value)} style={styles.action}><Ionicons name="chatbubble-outline" size={19} color={colors.textMuted} /><Text style={styles.actionText}>{formatNumber(shown.comment_count)}</Text></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={shown.reposted_by_me ? t("Undo repost") : t("Repost")} accessibilityState={{ selected: !!shown.reposted_by_me }} disabled={busy} onPress={() => void toggleRepost()} style={styles.action}><Ionicons name="repeat" size={21} color={shown.reposted_by_me ? colors.text : colors.textMuted} /><Text style={[styles.actionText, shown.reposted_by_me && styles.actionActive]}>{formatNumber(shown.repost_count)}</Text></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Quote")} testID={`post-quote-${post.id}`} disabled={busy} onPress={() => setQuoting(quoting === null ? "" : null)} style={styles.action}><Ionicons name="chatbox-ellipses-outline" size={19} color={quoting !== null ? colors.text : colors.textMuted} /></Affordance>
         <View style={{ flex: 1 }} />
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} accessibilityState={{ expanded: shareTargets || shareOpen }} testID={`post-share-${shown.id}`} onPress={() => setShareOpen(open => !open)} style={styles.action}><Ionicons name="share-outline" size={19} color={shareTargets || shareOpen ? colors.text : colors.textMuted} /></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={shown.saved_by_me ? t("Remove from saved") : t("Save post")} testID={`post-save-${post.id}`} disabled={busy} onPress={() => void toggleSave()} style={styles.action}><Ionicons name={shown.saved_by_me ? "bookmark" : "bookmark-outline"} size={19} color={shown.saved_by_me ? colors.text : colors.textMuted} /></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Share")} accessibilityState={{ expanded: shareTargets || shareOpen }} testID={`post-share-${shown.id}`} onPress={() => setShareOpen(open => !open)} style={styles.action}><Ionicons name="share-outline" size={19} color={shareTargets || shareOpen ? colors.text : colors.textMuted} /></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={shown.saved_by_me ? t("Remove from saved") : t("Save post")} testID={`post-save-${post.id}`} disabled={busy} onPress={() => void toggleSave()} style={styles.action}><Ionicons name={shown.saved_by_me ? "bookmark" : "bookmark-outline"} size={19} color={shown.saved_by_me ? colors.text : colors.textMuted} /></Affordance>
       </View>
       {shareTargets || shareOpen ? <ShareBar postId={shown.id} title={shown.author?.full_name || "IronFlow"} message={shown.content} /> : null}
       {quoting !== null ? <View style={styles.commentRow} testID={`quote-box-${post.id}`}>
         <MentionInput value={quoting} onChangeText={setQuoting} maxLength={4000} placeholder={t("Add your take...")} placeholderTextColor={colors.textDim} style={styles.commentInput} testID="quote-input" />
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Post quote")} testID="quote-send" disabled={busy || !quoting.trim()} onPress={() => void sendQuote()} style={[styles.iconButton, (busy || !quoting.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.text} /></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Post quote")} testID="quote-send" disabled={busy || !quoting.trim()} onPress={() => void sendQuote()} style={[styles.iconButton, (busy || !quoting.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.text} /></Affordance>
       </View> : null}
       {open ? <CommentThread post={shown} onCountChange={delta => apply({ comment_count: Math.max(0, shown.comment_count + delta) })} onReport={setReporting} /> : null}
       <ActionSheet visible={menu} actions={actions} onClose={() => setMenu(false)} testID={`post-sheet-${post.id}`} />
@@ -384,7 +385,7 @@ function PollBlock({ poll, disabled, onVote }: { poll: Poll; disabled: boolean; 
           <Text style={[styles.pollLabel, mine && styles.actionActive]}>{option}{mine ? " ✓" : ""}</Text>
           <Text style={styles.pollPct}>{Math.round(share * 100)}%</Text>
         </View>
-        : <Pressable key={index} accessibilityRole="button" disabled={disabled || poll.closed} onPress={() => onVote(index)} style={styles.pollOption} testID={`poll-vote-${index}`}><Text style={styles.pollOptionText}>{option}</Text></Pressable>;
+        : <Affordance key={index} accessibilityRole="button" disabled={disabled || poll.closed} onPress={() => onVote(index)} style={styles.pollOption} testID={`poll-vote-${index}`}><Text style={styles.pollOptionText}>{option}</Text></Affordance>;
     })}
     <Text style={styles.time}>{poll.total === 1 ? t("1 vote") : t("{count} votes").replace("{count}", String(poll.total))} · {poll.closed ? t("Final results") : t("Ends {date}").replace("{date}", formatDate(poll.closes_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</Text>
   </View>;
@@ -393,25 +394,25 @@ function PollBlock({ poll, disabled, onVote }: { poll: Poll; disabled: boolean; 
 function LinkCard({ preview }: { preview: LinkPreview }) {
   // A preview image that will not load leaves no empty grey slot behind.
   const [imageFailed, setImageFailed] = useState(false);
-  return <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(preview.url)} style={styles.linkCard} testID="link-preview">
+  return <Affordance accessibilityRole="link" onPress={() => void Linking.openURL(preview.url)} style={styles.linkCard} testID="link-preview">
     {preview.image_url && !imageFailed ? <Image source={{ uri: preview.image_url }} onError={() => setImageFailed(true)} style={styles.linkImage} accessibilityIgnoresInvertColors /> : null}
     <View style={styles.linkBody}>
       <Text style={styles.linkSite} numberOfLines={1}>{preview.site_name}</Text>
       <Text style={styles.linkTitle} numberOfLines={2}>{preview.title}</Text>
       {preview.description ? <Text style={styles.linkDesc} numberOfLines={2}>{preview.description}</Text> : null}
     </View>
-  </Pressable>;
+  </Affordance>;
 }
 
 function QuotedPost({ post }: { post: Post & { unavailable?: boolean } }) {
   const { t } = useI18n();
   const router = useRouter();
   if (post.unavailable) return <View style={styles.quoted}><Text style={styles.unavailable}>{t("This post is no longer available.")}</Text></View>;
-  return <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/post/[id]", params: { id: post.id } })} style={styles.quoted} testID={`quoted-${post.id}`}>
+  return <Affordance accessibilityRole="button" onPress={() => router.push({ pathname: "/post/[id]", params: { id: post.id } })} style={styles.quoted} testID={`quoted-${post.id}`}>
     <View style={styles.quotedHead}><Avatar user={post.author} size={20} /><Text style={styles.author}>{post.author?.full_name || t("Member")}</Text></View>
     {post.content ? <RichText content={post.content} mentions={post.mentions} style={styles.commentText} numberOfLines={4} /> : null}
     {post.media?.length ? <Text style={styles.time}>{t("{count} attachments").replace("{count}", String(post.media.length))}</Text> : null}
-  </Pressable>;
+  </Affordance>;
 }
 
 /**
@@ -515,19 +516,19 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
         ? <View style={styles.commentEdit}>
             <View style={styles.commentRow}>
               <TextInput value={editing.text} onChangeText={text => { setEditing({ id: comment.id, text }); if (text.trim()) setEditError(""); }} maxLength={2000} style={styles.commentInput} testID="comment-edit-input" />
-              <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: busy || !editing.text.trim(), busy }} disabled={busy || !editing.text.trim()} onPress={() => void saveEdit()} testID="comment-edit-save">
+              <Affordance accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: busy || !editing.text.trim(), busy }} disabled={busy || !editing.text.trim()} onPress={() => void saveEdit()} testID="comment-edit-save">
                 {busy ? <ActivityIndicator color={colors.text} size="small" /> : <Text style={[styles.link, !editing.text.trim() && styles.disabled]}>{t(SAVE_LABEL)}</Text>}
-              </Pressable>
+              </Affordance>
             </View>
             {!editing.text.trim() || editError ? <Text accessibilityRole="alert" testID="comment-edit-error" style={styles.error}>{editError || t("Write something before saving.")}</Text> : null}
           </View>
         : <RichText content={comment.content} mentions={comment.mentions} style={styles.commentText} />}
       <View style={styles.commentActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={comment.liked_by_me ? t("Unlike comment") : t("Like comment")} onPress={() => void like(comment)} style={styles.commentAction}><Ionicons name={comment.liked_by_me ? "heart" : "heart-outline"} size={14} color={comment.liked_by_me ? colors.text : colors.textDim} />{comment.like_count ? <Text style={styles.time}>{comment.like_count}</Text> : null}</Pressable>
-        <Pressable accessibilityRole="button" onPress={() => setReplyTo(comment)} testID={`comment-reply-${comment.id}`}><Text style={styles.commentLink}>{t("Reply")}</Text></Pressable>
-        {mine && comment.can_edit ? <Pressable accessibilityRole="button" onPress={() => { setEditError(""); setEditing({ id: comment.id, text: comment.content }); }} testID={`comment-edit-${comment.id}`}><Text style={styles.commentLink}>{t("Edit")}</Text></Pressable> : null}
-        {canDelete ? <Pressable accessibilityRole="button" onPress={() => void remove(comment)} testID={`comment-delete-${comment.id}`}><Text style={[styles.commentLink, { color: colors.error }]}>{t("Delete")}</Text></Pressable> : null}
-        {!mine ? <Pressable accessibilityRole="button" onPress={() => onReport({ target_type: "comment", target_id: comment.id })} testID={`comment-report-${comment.id}`}><Text style={styles.commentLink}>{t("Report")}</Text></Pressable> : null}
+        <Affordance accessibilityRole="button" accessibilityLabel={comment.liked_by_me ? t("Unlike comment") : t("Like comment")} onPress={() => void like(comment)} style={styles.commentAction}><Ionicons name={comment.liked_by_me ? "heart" : "heart-outline"} size={14} color={comment.liked_by_me ? colors.text : colors.textDim} />{comment.like_count ? <Text style={styles.time}>{comment.like_count}</Text> : null}</Affordance>
+        <Affordance accessibilityRole="button" onPress={() => setReplyTo(comment)} testID={`comment-reply-${comment.id}`}><Text style={styles.commentLink}>{t("Reply")}</Text></Affordance>
+        {mine && comment.can_edit ? <Affordance accessibilityRole="button" onPress={() => { setEditError(""); setEditing({ id: comment.id, text: comment.content }); }} testID={`comment-edit-${comment.id}`}><Text style={styles.commentLink}>{t("Edit")}</Text></Affordance> : null}
+        {canDelete ? <Affordance accessibilityRole="button" onPress={() => void remove(comment)} testID={`comment-delete-${comment.id}`}><Text style={[styles.commentLink, { color: colors.error }]}>{t("Delete")}</Text></Affordance> : null}
+        {!mine ? <Affordance accessibilityRole="button" onPress={() => onReport({ target_type: "comment", target_id: comment.id })} testID={`comment-report-${comment.id}`}><Text style={styles.commentLink}>{t("Report")}</Text></Affordance> : null}
       </View>
       {!nested ? repliesOf(comment.id).map(reply => renderComment(reply, true)) : null}
     </View>;
@@ -537,16 +538,16 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
     {rows === null && !loadError ? <ActivityIndicator color={colors.text} /> : null}
     {loadError ? <View accessibilityRole="alert" testID="comments-error">
       <Text style={styles.error}>{loadError}</Text>
-      <Pressable accessibilityRole="button" testID="comments-retry" onPress={retryComments}><Text style={styles.link}>{t("Retry")}</Text></Pressable>
+      <Affordance accessibilityRole="button" testID="comments-retry" onPress={retryComments}><Text style={styles.link}>{t("Retry")}</Text></Affordance>
     </View> : null}
-    {hasOlder ? <Pressable accessibilityRole="button" onPress={() => void older()} testID="comments-older"><Text style={styles.link}>{t("View earlier comments")}</Text></Pressable> : null}
+    {hasOlder ? <Affordance accessibilityRole="button" onPress={() => void older()} testID="comments-older"><Text style={styles.link}>{t("View earlier comments")}</Text></Affordance> : null}
     {rows && rows.length === 0 && !loadError ? <Text style={styles.time}>{t("Be the first to comment")}</Text> : null}
     {topLevel.map(comment => renderComment(comment, false))}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    {replyTo ? <View style={styles.replyingTo}><Text style={styles.time}>{t("Replying to {name}").replace("{name}", replyTo.author?.full_name || t("Member"))}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel reply")} onPress={() => setReplyTo(null)}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable></View> : null}
+    {replyTo ? <View style={styles.replyingTo}><Text style={styles.time}>{t("Replying to {name}").replace("{name}", replyTo.author?.full_name || t("Member"))}</Text><Affordance accessibilityRole="button" accessibilityLabel={t("Cancel reply")} onPress={() => setReplyTo(null)}><Ionicons name="close" size={14} color={colors.textDim} /></Affordance></View> : null}
     <View style={styles.commentRow}>
       <View style={{ flex: 1 }}><MentionInput value={draft} onChangeText={setDraft} maxLength={2000} editable={!busy} placeholder={t("Write a comment...")} placeholderTextColor={colors.textDim} style={styles.commentInput} testID="comment-input" /></View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Send comment")} disabled={busy || !draft.trim()} onPress={() => void send()} style={[styles.iconButton, (busy || !draft.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.text} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Send comment")} disabled={busy || !draft.trim()} onPress={() => void send()} style={[styles.iconButton, (busy || !draft.trim()) && styles.disabled]}><Ionicons name="send" size={17} color={colors.text} /></Affordance>
     </View>
   </View>;
 }
@@ -566,10 +567,10 @@ function WorkoutCard({ summary, kudosCount, kudosMine, busy, onKudos }: { summar
     <View style={styles.workoutHead}><Ionicons name="barbell" size={16} color={colors.text} /><Text style={styles.workoutTitle}>{summary.title}</Text></View>
     <View style={styles.workoutStats}>{stats.map(([value, label]) => <View key={label} style={styles.workoutStat}><Text style={styles.workoutValue}>{value}</Text><Text style={styles.workoutLabel}>{label}</Text></View>)}</View>
     {summary.exercises.length ? <Text style={styles.workoutExercises} numberOfLines={2}>{summary.exercises.join(" · ")}{more > 0 ? ` +${more}` : ""}</Text> : null}
-    <Pressable accessibilityRole="button" accessibilityLabel={t("Kudos")} accessibilityState={{ selected: kudosMine }} testID={`post-kudos-${summary.workout_id}`} disabled={busy} onPress={onKudos} style={styles.kudos}>
+    <Affordance accessibilityRole="button" accessibilityLabel={t("Kudos")} accessibilityState={{ selected: kudosMine }} testID={`post-kudos-${summary.workout_id}`} disabled={busy} onPress={onKudos} style={styles.kudos}>
       <Ionicons name={kudosMine ? "ribbon" : "ribbon-outline"} size={16} color={kudosMine ? colors.text : colors.textMuted} />
       <Text style={[styles.kudosText, kudosMine && styles.actionActive]}>{t("Kudos")} · {formatNumber(kudosCount)}</Text>
-    </Pressable>
+    </Affordance>
   </View>;
 }
 

@@ -1,4 +1,5 @@
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "@/src/i18n";
 import { colors, radius, spacing } from "@/src/theme";
@@ -15,13 +16,13 @@ export type SheetAction = {
 export function ActionSheet({ visible, actions, onClose, testID }: { visible: boolean; actions: SheetAction[]; onClose: () => void; testID?: string }) {
   const { t } = useI18n();
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-    <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t("Close")} />
+    <Affordance signal="none" style={styles.backdrop} onPress={onClose} accessibilityLabel={t("Close")} />
     <View style={styles.sheet} testID={testID}>
-      {actions.map(action => <Pressable key={action.key} accessibilityRole="button" testID={`${testID ?? "sheet"}-${action.key}`} onPress={() => { onClose(); action.onPress(); }} style={styles.row}>
+      {actions.map(action => <Affordance key={action.key} accessibilityRole="button" testID={`${testID ?? "sheet"}-${action.key}`} onPress={() => { onClose(); action.onPress(); }} style={styles.row}>
         <Ionicons name={action.icon} size={19} color={action.destructive ? colors.error : colors.text} />
         <Text style={[styles.label, action.destructive && styles.destructive]}>{action.label}</Text>
-      </Pressable>)}
-      <Pressable accessibilityRole="button" onPress={onClose} style={[styles.row, styles.cancel]}><Text style={styles.cancelText}>{t("Cancel")}</Text></Pressable>
+      </Affordance>)}
+      <Affordance accessibilityRole="button" onPress={onClose} style={[styles.row, styles.cancel]}><Text style={styles.cancelText}>{t("Cancel")}</Text></Affordance>
     </View>
   </Modal>;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { api, TICKET_LIST_LIMIT, type TicketSummary } from "@/src/api";
@@ -59,7 +60,7 @@ export function SupportTicketList({
       onBack={onBack}
       testID="support-list"
       headerRight={(
-        <Pressable
+        <Affordance
           accessibilityRole="button"
           accessibilityLabel={t("NEW TICKET")}
           testID="support-new"
@@ -67,15 +68,15 @@ export function SupportTicketList({
           style={styles.icon}
         >
           <Ionicons name="add" size={24} color={colors.text} />
-        </Pressable>
+        </Affordance>
       )}
     >
       {error ? (
         <View accessibilityRole="alert" style={styles.alert}>
           <Text testID="support-error" style={supportStyles.error}>{error}</Text>
-          <Pressable accessibilityRole="button" testID="support-retry" onPress={() => { setLoading(true); setError(""); void load(); }}>
+          <Affordance accessibilityRole="button" testID="support-retry" onPress={() => { setLoading(true); setError(""); void load(); }}>
             <Text style={supportStyles.retry}>{t("Retry")}</Text>
-          </Pressable>
+          </Affordance>
         </View>
       ) : null}
       {loading ? <ActivityIndicator testID="support-loading" accessibilityLabel={t("Loading...")} color={colors.text} style={styles.spinner} /> : null}
@@ -89,13 +90,13 @@ export function SupportTicketList({
             <Ionicons name="chatbubbles-outline" size={36} color={colors.textDim} />
             <Text testID="support-empty" style={supportStyles.emptyTitle}>{t("No tickets yet.")}</Text>
             <Text style={supportStyles.emptyText}>{t("Open a ticket and the team will reply here.")}</Text>
-            <Pressable accessibilityRole="button" testID="support-empty-create" onPress={onCreate} style={supportStyles.submit}>
+            <Affordance signal="brand" accessibilityRole="button" testID="support-empty-create" onPress={onCreate} style={supportStyles.submit}>
               <Text style={supportStyles.submitText}>{t("NEW TICKET")}</Text>
-            </Pressable>
+            </Affordance>
           </View>
         ) : null}
         renderItem={({ item }) => (
-          <Pressable
+          <Affordance
             accessibilityRole="button"
             testID={`ticket-${item.id}`}
             onPress={() => onOpen(item.id)}
@@ -110,7 +111,7 @@ export function SupportTicketList({
               {" · "}
               {formatDate(item.updated_at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </Text>
-          </Pressable>
+          </Affordance>
         )}
       />
     </SupportScreen>

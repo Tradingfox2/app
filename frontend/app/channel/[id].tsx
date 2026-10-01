@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -275,32 +276,32 @@ export default function ChannelScreen() {
     return <View style={[styles.message, own && styles.messageOwn]} testID={`message-${item.id}`}>
       {item.pinned_at ? <View style={styles.pinnedTag}><Ionicons name="pin" size={10} color={colors.text} /><Text style={styles.pinnedText}>{t("PINNED")}</Text></View> : null}
       {item.reply_to ? <View style={styles.replyQuote}><Text numberOfLines={1} style={styles.replyQuoteText}>{item.reply_to.author?.full_name ? `${item.reply_to.author.full_name}: ` : ""}{item.reply_to.content}</Text></View> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Message actions")} testID={`message-actions-${item.id}`} onLongPress={() => setActionsFor(open ? null : item.id)} delayLongPress={250}>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Message actions")} testID={`message-actions-${item.id}`} onLongPress={() => setActionsFor(open ? null : item.id)} delayLongPress={250}>
         <View style={styles.messageHead}>
-          <Pressable accessibilityRole="button" accessibilityLabel={item.author?.full_name || t("Member")} onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.author_id } })}><Avatar user={item.author} size={20} /></Pressable>
+          <Affordance accessibilityRole="button" accessibilityLabel={item.author?.full_name || t("Member")} onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.author_id } })}><Avatar user={item.author} size={20} /></Affordance>
           <Text style={styles.author}>{own ? t("You") : item.author?.full_name || t("Member")}</Text>
           {item.author_role ? <Text style={[styles.roleTag, { color: item.author_role.color || colors.text, borderColor: item.author_role.color || colors.text }]} testID={`role-${item.id}`}>{item.author_role.name === "owner" || item.author_role.name === "moderator" ? t(item.author_role.name.toUpperCase()) : item.author_role.name}</Text> : null}
           <Text style={styles.time}>{formatDate(item.created_at, { hour: "2-digit", minute: "2-digit" })}</Text>{item.edited_at ? <Text style={styles.time}>{t("edited")}</Text> : null}
         </View>
         {item.content ? <RichText content={item.content} mentions={item.mentions ?? []} style={styles.messageText} /> : null}
-      </Pressable>
+      </Affordance>
       {item.media?.length ? <View style={{ marginTop: 6 }}><MediaGrid media={item.media} /></View> : null}
       {item.program ? <ProgramCard message={item as CommunityMessage & { program: ProgramSnapshot }} /> : null}
       {item.live_session_id ? <View style={styles.liveTag}><Ionicons name="radio" size={12} color={colors.text} /><Text style={styles.pinnedText}>{t("SESSION SCHEDULED — SEE ABOVE")}</Text></View> : null}
       {item.reactions?.length ? <View style={styles.reactionRow}>{item.reactions.map(row => {
         const mine = row.user_ids.includes(user?.id ?? "");
-        return <Pressable key={row.emoji} accessibilityRole="button" testID={`reaction-${item.id}-${row.emoji}`} disabled={!can(mask, ADD_REACTION)} onPress={() => react(item, row.emoji)} style={[styles.pill, mine && styles.pillMine]}><Text style={styles.pillText}>{row.emoji} {row.user_ids.length}</Text></Pressable>;
+        return <Affordance key={row.emoji} accessibilityRole="button" testID={`reaction-${item.id}-${row.emoji}`} disabled={!can(mask, ADD_REACTION)} onPress={() => react(item, row.emoji)} style={[styles.pill, mine && styles.pillMine]}><Text style={styles.pillText}>{row.emoji} {row.user_ids.length}</Text></Affordance>;
       })}</View> : null}
       {open ? <View style={styles.actions} testID={`actions-${item.id}`}>
-        {can(mask, ADD_REACTION) ? QUICK_REACTIONS.map(emoji => <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`${t("React")} ${emoji}`} testID={`react-${item.id}-${emoji}`} onPress={() => react(item, emoji)} style={styles.action}><Text style={styles.actionEmoji}>{emoji}</Text></Pressable>) : null}
-        {can(mask, ADD_REACTION) ? <Pressable accessibilityRole="button" accessibilityLabel={t("More reactions")} testID={`react-more-${item.id}`} onPress={() => setPickerFor(pickerFor === item.id ? null : item.id)} style={styles.action}><Ionicons name="happy-outline" size={15} color={colors.text} /></Pressable> : null}
-        {can(mask, SEND_MESSAGE) ? <Pressable accessibilityRole="button" testID={`reply-${item.id}`} onPress={() => { setReplyTo(item); setEditing(null); setActionsFor(null); }} style={styles.action}><Ionicons name="return-down-back" size={15} color={colors.text} /></Pressable> : null}
-        {can(mask, PIN_MESSAGE) ? <Pressable accessibilityRole="button" testID={`pin-${item.id}`} onPress={() => togglePin(item)} style={styles.action}><Ionicons name={item.pinned_at ? "pin-outline" : "pin"} size={15} color={colors.text} /></Pressable> : null}
-        {canEdit(item) ? <Pressable accessibilityRole="button" testID={`edit-${item.id}`} onPress={() => startEdit(item)} style={styles.action}><Ionicons name="pencil" size={15} color={colors.text} /></Pressable> : null}
-        {canDelete(item) ? <Pressable accessibilityRole="button" testID={`delete-${item.id}`} onPress={() => remove(item)} style={styles.action}><Ionicons name="trash-outline" size={15} color={colors.error} /></Pressable> : null}
-        {!own ? <Pressable accessibilityRole="button" accessibilityLabel={t("Report message")} testID={`report-${item.id}`} onPress={() => { setActionsFor(null); setReporting({ target_type: "message", target_id: item.id }); }} style={styles.action}><Ionicons name="flag-outline" size={15} color={colors.text} /></Pressable> : null}
+        {can(mask, ADD_REACTION) ? QUICK_REACTIONS.map(emoji => <Affordance key={emoji} accessibilityRole="button" accessibilityLabel={`${t("React")} ${emoji}`} testID={`react-${item.id}-${emoji}`} onPress={() => react(item, emoji)} style={styles.action}><Text style={styles.actionEmoji}>{emoji}</Text></Affordance>) : null}
+        {can(mask, ADD_REACTION) ? <Affordance accessibilityRole="button" accessibilityLabel={t("More reactions")} testID={`react-more-${item.id}`} onPress={() => setPickerFor(pickerFor === item.id ? null : item.id)} style={styles.action}><Ionicons name="happy-outline" size={15} color={colors.text} /></Affordance> : null}
+        {can(mask, SEND_MESSAGE) ? <Affordance accessibilityRole="button" testID={`reply-${item.id}`} onPress={() => { setReplyTo(item); setEditing(null); setActionsFor(null); }} style={styles.action}><Ionicons name="return-down-back" size={15} color={colors.text} /></Affordance> : null}
+        {can(mask, PIN_MESSAGE) ? <Affordance accessibilityRole="button" testID={`pin-${item.id}`} onPress={() => togglePin(item)} style={styles.action}><Ionicons name={item.pinned_at ? "pin-outline" : "pin"} size={15} color={colors.text} /></Affordance> : null}
+        {canEdit(item) ? <Affordance accessibilityRole="button" testID={`edit-${item.id}`} onPress={() => startEdit(item)} style={styles.action}><Ionicons name="pencil" size={15} color={colors.text} /></Affordance> : null}
+        {canDelete(item) ? <Affordance accessibilityRole="button" testID={`delete-${item.id}`} onPress={() => remove(item)} style={styles.action}><Ionicons name="trash-outline" size={15} color={colors.error} /></Affordance> : null}
+        {!own ? <Affordance accessibilityRole="button" accessibilityLabel={t("Report message")} testID={`report-${item.id}`} onPress={() => { setActionsFor(null); setReporting({ target_type: "message", target_id: item.id }); }} style={styles.action}><Ionicons name="flag-outline" size={15} color={colors.text} /></Affordance> : null}
       </View> : null}
-      {open && pickerFor === item.id ? <View style={styles.picker} testID={`emoji-picker-${item.id}`}>{ALL_REACTIONS.map(emoji => <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`${t("React")} ${emoji}`} onPress={() => react(item, emoji)} style={styles.pickerCell}><Text style={styles.actionEmoji}>{emoji}</Text></Pressable>)}</View> : null}
+      {open && pickerFor === item.id ? <View style={styles.picker} testID={`emoji-picker-${item.id}`}>{ALL_REACTIONS.map(emoji => <Affordance key={emoji} accessibilityRole="button" accessibilityLabel={`${t("React")} ${emoji}`} onPress={() => react(item, emoji)} style={styles.pickerCell}><Text style={styles.actionEmoji}>{emoji}</Text></Affordance>)}</View> : null}
     </View>;
   };
 
@@ -310,10 +311,10 @@ export default function ChannelScreen() {
 
   return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior="padding" style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <View style={{ flex: 1 }}><Text style={styles.headerTitle}># {channel?.name || t("CHANNEL")}</Text><Text style={styles.live}>{kindLabel}{slowmode}</Text></View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Search this channel")} testID="toggle-search" onPress={() => { setSearchOpen(open => !open); setQuery(""); }} style={styles.icon}><Ionicons name="search" size={18} color={searchOpen ? colors.text : colors.text} /></Pressable>
-      {pins.length ? <Pressable accessibilityRole="button" testID="toggle-pins" onPress={() => setPinsOpen(open => !open)} style={styles.icon}><Ionicons name="pin" size={18} color={pinsOpen ? colors.text : colors.text} /></Pressable> : null}
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Search this channel")} testID="toggle-search" onPress={() => { setSearchOpen(open => !open); setQuery(""); }} style={styles.icon}><Ionicons name="search" size={18} color={searchOpen ? colors.text : colors.text} /></Affordance>
+      {pins.length ? <Affordance accessibilityRole="button" testID="toggle-pins" onPress={() => setPinsOpen(open => !open)} style={styles.icon}><Ionicons name="pin" size={18} color={pinsOpen ? colors.text : colors.text} /></Affordance> : null}
     </View>
     {channel?.description ? <Text style={styles.topic} numberOfLines={2}>{channel.description}</Text> : null}
     {searchOpen ? <View style={styles.searchBox} testID="channel-search">
@@ -325,37 +326,37 @@ export default function ChannelScreen() {
     </View> : null}
     {pinsOpen && pins.length ? <View style={styles.pinsDrawer} testID="pins-drawer">{pins.map(item => <View key={item.id} style={styles.pinRow}>
       <Text numberOfLines={1} style={[styles.pinsItem, { flex: 1 }]}>{item.author?.full_name ? `${item.author.full_name}: ` : ""}{item.content}</Text>
-      {can(mask, PIN_MESSAGE) ? <Pressable accessibilityRole="button" accessibilityLabel={t("Unpin")} testID={`unpin-${item.id}`} onPress={() => togglePin(item)}><Ionicons name="close" size={14} color={colors.textDim} /></Pressable> : null}
+      {can(mask, PIN_MESSAGE) ? <Affordance accessibilityRole="button" accessibilityLabel={t("Unpin")} testID={`unpin-${item.id}`} onPress={() => togglePin(item)}><Ionicons name="close" size={14} color={colors.textDim} /></Affordance> : null}
     </View>)}</View> : null}
     {id && channel?.kind ? <FitnessPanel channelId={id} kind={channel.kind} refreshKey={messages.length + panelRefresh} mask={mask} userId={user?.id} /> : null}
-    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} style={styles.icon}><Text style={styles.author}>{t("Retry")}</Text></Pressable></View> : null}
+    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" onPress={() => void load()} style={styles.icon}><Text style={styles.author}>{t("Retry")}</Text></Affordance></View> : null}
     {loading ? <ActivityIndicator accessibilityLabel={t("Loading...")} color={colors.text} /> : null}
     <FlatList data={messages} keyExtractor={item => item.id} contentContainerStyle={styles.list}
-      ListHeaderComponent={hasOlder ? <Pressable accessibilityRole="button" testID="load-older" disabled={loadingOlder} onPress={() => void loadOlder()} style={styles.older}>
+      ListHeaderComponent={hasOlder ? <Affordance accessibilityRole="button" testID="load-older" disabled={loadingOlder} onPress={() => void loadOlder()} style={styles.older}>
         {loadingOlder ? <ActivityIndicator color={colors.text} /> : <Text style={styles.olderText}>{t("Load earlier messages")}</Text>}
-      </Pressable> : null}
+      </Affordance> : null}
       ListEmptyComponent={!loading && !error ? <View style={styles.empty}><Ionicons name="chatbubbles-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{t("Start the conversation")}</Text></View> : null} renderItem={renderMessage} />
     {typingNames.length ? <Text style={styles.typing} testID="typing-indicator">{typingNames.length === 1 ? t("{name} is typing…").replace("{name}", typingNames[0]) : t("Several people are typing…")}</Text> : null}
-    {replyTo ? <View style={styles.contextBar} testID="reply-bar"><Ionicons name="return-down-back" size={14} color={colors.text} /><Text numberOfLines={1} style={styles.contextText}>{replyTo.content}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel")} testID="cancel-reply" onPress={() => setReplyTo(null)}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable></View> : null}
-    {editing ? <View style={styles.contextBar} testID="edit-bar"><Ionicons name="pencil" size={14} color={colors.text} /><Text numberOfLines={1} style={styles.contextText}>{t("Editing message")}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Cancel")} testID="cancel-edit" onPress={() => { setEditing(null); setDraft(""); }}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable></View> : null}
+    {replyTo ? <View style={styles.contextBar} testID="reply-bar"><Ionicons name="return-down-back" size={14} color={colors.text} /><Text numberOfLines={1} style={styles.contextText}>{replyTo.content}</Text><Affordance accessibilityRole="button" accessibilityLabel={t("Cancel")} testID="cancel-reply" onPress={() => setReplyTo(null)}><Ionicons name="close" size={16} color={colors.textDim} /></Affordance></View> : null}
+    {editing ? <View style={styles.contextBar} testID="edit-bar"><Ionicons name="pencil" size={14} color={colors.text} /><Text numberOfLines={1} style={styles.contextText}>{t("Editing message")}</Text><Affordance accessibilityRole="button" accessibilityLabel={t("Cancel")} testID="cancel-edit" onPress={() => { setEditing(null); setDraft(""); }}><Ionicons name="close" size={16} color={colors.textDim} /></Affordance></View> : null}
     {suggestions.length ? <View style={styles.suggestions} testID="mention-suggestions">
-      {suggestions.map(candidate => <Pressable key={candidate.id} accessibilityRole="button" testID={`mention-${candidate.id}`} onPress={() => pickMention(candidate)} style={styles.suggestion}>
+      {suggestions.map(candidate => <Affordance key={candidate.id} accessibilityRole="button" testID={`mention-${candidate.id}`} onPress={() => pickMention(candidate)} style={styles.suggestion}>
         <Ionicons name="at" size={13} color={colors.text} />
         <Text style={styles.suggestionText}>{candidate.full_name || t("Member")}</Text>
-      </Pressable>)}
+      </Affordance>)}
     </View> : null}
     {attachments.length ? <View style={styles.pending}>{attachments.map(item => <View key={item.id}>
       {item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={18} color={colors.text} /></View>}
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setAttachments(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={10} color={colors.text} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setAttachments(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={10} color={colors.text} /></Affordance>
     </View>)}</View> : null}
     {readOnly
       ? <View style={styles.readOnly} testID="composer-read-only"><Ionicons name="lock-closed-outline" size={14} color={colors.textDim} /><Text style={styles.readOnlyText}>{t("Only channel managers can post here.")}</Text></View>
       : <View style={styles.composer}>
-        {can(mask, ATTACH_MEDIA) && !editing ? <Pressable accessibilityRole="button" accessibilityLabel={t("Add photo or video")} testID="composer-attach" disabled={uploading || attachments.length >= 4} onPress={() => void attach()} style={[styles.attach, (uploading || attachments.length >= 4) && styles.disabled]}>
+        {can(mask, ATTACH_MEDIA) && !editing ? <Affordance accessibilityRole="button" accessibilityLabel={t("Add photo or video")} testID="composer-attach" disabled={uploading || attachments.length >= 4} onPress={() => void attach()} style={[styles.attach, (uploading || attachments.length >= 4) && styles.disabled]}>
           {uploading ? <ActivityIndicator color={colors.text} /> : <Ionicons name="image-outline" size={20} color={colors.text} />}
-        </Pressable> : null}
+        </Affordance> : null}
         <TextInput value={draft} onChangeText={typed} editable={!sending} maxLength={4000} multiline placeholder={t("Message the channel...")} placeholderTextColor={colors.textDim} style={styles.input} testID="composer-input" />
-        <Pressable accessibilityRole="button" disabled={!canSend} onPress={send} accessibilityLabel={editing ? t(SAVE_LABEL) : t("Send message")} accessibilityHint={editing ? t("Confirm the edited message") : t("Send this message")} {...(Platform.OS === "web" ? { title: editing ? t(SAVE_LABEL) : t("Send message") } : {})} testID="composer-send" style={[styles.send, !canSend && styles.disabled]}><Ionicons name={editing ? "checkmark" : "send"} size={17} color={colors.brandOn} /></Pressable>
+        <Affordance signal="brand" accessibilityRole="button" disabled={!canSend} onPress={send} accessibilityLabel={editing ? t(SAVE_LABEL) : t("Send message")} accessibilityHint={editing ? t("Confirm the edited message") : t("Send this message")} {...(Platform.OS === "web" ? { title: editing ? t(SAVE_LABEL) : t("Send message") } : {})} testID="composer-send" style={[styles.send, !canSend && styles.disabled]}><Ionicons name={editing ? "checkmark" : "send"} size={17} color={colors.brandOn} /></Affordance>
       </View>}
     <ReportSheet target={reporting} onClose={() => setReporting(null)} />
   </KeyboardAvoidingView></SafeAreaView>;

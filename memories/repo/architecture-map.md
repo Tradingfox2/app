@@ -400,6 +400,12 @@ The activity-day screen landed from `cursor/home-activity-day-d3c3` and is on ma
 
 The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 
+## Press cues (2026-10-01, rebased onto `0f1f296`)
+
+- Community, You, and the screens they open use `frontend/src/press-affordance.tsx` (`Affordance`). Default `raise` lifts toward `#242A31` and draws a hairline. `brand` only brightens `#D6E35A` to `#DDE874`. `none` keeps today's look.
+- Workout hover and press stay in `frontend/src/press-feedback.ts`. Home and the tab bar stay on `frontend/src/affordance.ts`.
+- `LiveNowStrip` takes `affordance` (Home, default off) and `feedback` (Community, default off). Home still passes only `affordance`. Community passes `feedback`.
+
 - **Entry:** Home `quick-record` sits under the quick row, below Today. It opens
   `/record` (`frontend/app/record/index.tsx`). A finished recording opens
   `/record/[id]`, including from the workouts list when `item.activity` is set.

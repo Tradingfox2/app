@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, type LiveNowSession } from "@/src/api";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
+import { Affordance } from "@/src/press-affordance";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -11,8 +12,19 @@ const REFRESH_MS = 20000;
 /**
  * Sessions the signed-in member can join right now.
  * Renders nothing when the list is empty or the request fails.
+ *
+ * `affordance` is Home's cue and stays off unless Home passes it.
+ * `feedback` is Community's cue and stays off unless Community passes it.
  */
-export function LiveNowStrip({ inset = false, affordance = false }: { inset?: boolean; affordance?: boolean }) {
+export function LiveNowStrip({
+  inset = false,
+  affordance = false,
+  feedback = false,
+}: {
+  inset?: boolean;
+  affordance?: boolean;
+  feedback?: boolean;
+}) {
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
   const router = useRouter();
@@ -51,25 +63,46 @@ export function LiveNowStrip({ inset = false, affordance = false }: { inset?: bo
             .filter(Boolean)
             .join(" · ");
           const meta = [place, session.host?.full_name].filter(Boolean).join(" · ");
-          return (
-            <Pressable
-              key={session.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${t("JOIN")} ${session.title}`}
-              testID={`live-now-${session.id}`}
-              onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })}
-              style={
-                affordance
-                  ? (state) => [styles.card, pressableStyle(state, { variant: "surface", reduceMotion })]
-                  : styles.card
-              }
-            >
+          const card = (
+            <>
               <View style={styles.badge}>
                 <View style={styles.dot} />
                 <Text style={styles.badgeText}>{t("LIVE")}</Text>
               </View>
               <Text numberOfLines={1} style={styles.title}>{session.title}</Text>
               {meta ? <Text numberOfLines={1} style={styles.meta}>{meta}</Text> : null}
+            </>
+          );
+          const open = () => router.push({ pathname: "/live/[id]", params: { id: session.id } });
+          if (feedback) {
+            return (
+              <Affordance
+                key={session.id}
+                signal="raise"
+                accessibilityRole="button"
+                accessibilityLabel={`${t("JOIN")} ${session.title}`}
+                testID={`live-now-${session.id}`}
+                onPress={open}
+                style={styles.card}
+              >
+                {card}
+              </Affordance>
+            );
+          }
+          return (
+            <Pressable
+              key={session.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${t("JOIN")} ${session.title}`}
+              testID={`live-now-${session.id}`}
+              onPress={open}
+              style={
+                affordance
+                  ? (state) => [styles.card, pressableStyle(state, { variant: "surface", reduceMotion })]
+                  : styles.card
+              }
+            >
+              {card}
             </Pressable>
           );
         })}

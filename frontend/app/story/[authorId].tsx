@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -67,9 +68,9 @@ export default function StoryViewer() {
 
   return <SafeAreaView style={styles.safe} testID="story-viewer">
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title}>{highlights ? t("HIGHLIGHTS") : t("STORY")}</Text>
-      {own && story ? <Pressable accessibilityRole="button" testID="story-delete" onPress={() => void remove()} style={styles.icon}><Ionicons name="trash-outline" size={18} color={colors.error} /></Pressable> : <View style={styles.icon} />}
+      {own && story ? <Affordance accessibilityRole="button" testID="story-delete" onPress={() => void remove()} style={styles.icon}><Ionicons name="trash-outline" size={18} color={colors.error} /></Affordance> : <View style={styles.icon} />}
     </View>
     {loading ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xl }} /> : null}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -82,9 +83,9 @@ export default function StoryViewer() {
       {story.workout_summary ? <Summary summary={story.workout_summary} /> : null}
       {story.caption ? <Text style={styles.caption}>{story.caption}</Text> : null}
       <View style={styles.nav}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Previous")} testID="story-previous" disabled={index === 0} onPress={() => setIndex(current => Math.max(0, current - 1))} style={[styles.navBtn, index === 0 && styles.disabled]}><Text style={styles.navText}>{t("Previous")}</Text></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Previous")} testID="story-previous" disabled={index === 0} onPress={() => setIndex(current => Math.max(0, current - 1))} style={[styles.navBtn, index === 0 && styles.disabled]}><Text style={styles.navText}>{t("Previous")}</Text></Affordance>
         <Text style={styles.meta}>{index + 1}/{rows.length}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Next")} testID="story-next" disabled={index >= rows.length - 1} onPress={() => setIndex(current => Math.min(rows.length - 1, current + 1))} style={[styles.navBtn, index >= rows.length - 1 && styles.disabled]}><Text style={styles.navText}>{t("Next")}</Text></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Next")} testID="story-next" disabled={index >= rows.length - 1} onPress={() => setIndex(current => Math.min(rows.length - 1, current + 1))} style={[styles.navBtn, index >= rows.length - 1 && styles.disabled]}><Text style={styles.navText}>{t("Next")}</Text></Affordance>
       </View>
     </View> : null}
   </SafeAreaView>;

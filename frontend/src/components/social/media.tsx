@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Modal, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { mediaUrl, type MediaItem } from "@/src/api";
@@ -24,17 +25,17 @@ export function MediaGrid({ media, testID }: { media: MediaItem[]; testID?: stri
   const single = media.length === 1;
   return <View style={styles.grid} testID={testID}>
     {media.map(item => item.kind === "image"
-      ? <Pressable key={item.id} accessibilityRole="imagebutton" accessibilityLabel={t("Open photo")} onPress={() => setOpen(images.indexOf(item))} style={[styles.cell, single && styles.single]}>
+      ? <Affordance key={item.id} accessibilityRole="imagebutton" accessibilityLabel={t("Open photo")} onPress={() => setOpen(images.indexOf(item))} style={[styles.cell, single && styles.single]}>
         <Image source={{ uri: mediaUrl(item.url) }} style={styles.fill} accessibilityIgnoresInvertColors />
-      </Pressable>
+      </Affordance>
       : <View key={item.id} style={[styles.cell, single && styles.single]} testID={`video-${item.id}`}><VideoPlayer url={item.url} style={styles.fill} /></View>)}
     <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
       <View style={styles.viewer} testID="media-viewer">
         {open !== null && images[open] ? <Image source={{ uri: mediaUrl(images[open].url) }} style={styles.full} resizeMode="contain" accessibilityIgnoresInvertColors /> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Close")} onPress={() => setOpen(null)} style={[styles.control, styles.close]}><Ionicons name="close" size={24} color={colors.text} /></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Close")} onPress={() => setOpen(null)} style={[styles.control, styles.close]}><Ionicons name="close" size={24} color={colors.text} /></Affordance>
         {images.length > 1 && open !== null ? <>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Previous photo")} disabled={open === 0} onPress={() => setOpen(open - 1)} style={[styles.control, styles.prev, open === 0 && styles.dim]}><Ionicons name="chevron-back" size={26} color={colors.text} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Next photo")} disabled={open === images.length - 1} onPress={() => setOpen(open + 1)} style={[styles.control, styles.next, open === images.length - 1 && styles.dim]}><Ionicons name="chevron-forward" size={26} color={colors.text} /></Pressable>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Previous photo")} disabled={open === 0} onPress={() => setOpen(open - 1)} style={[styles.control, styles.prev, open === 0 && styles.dim]}><Ionicons name="chevron-back" size={26} color={colors.text} /></Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Next photo")} disabled={open === images.length - 1} onPress={() => setOpen(open + 1)} style={[styles.control, styles.next, open === images.length - 1 && styles.dim]}><Ionicons name="chevron-forward" size={26} color={colors.text} /></Affordance>
           <Text style={styles.counter}>{open + 1} / {images.length}</Text>
         </> : null}
       </View>

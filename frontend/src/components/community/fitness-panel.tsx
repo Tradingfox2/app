@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, type ChallengeBoard, type ChallengeMetric, type CheckinBoard, type CommunityMessage, type LiveSession, type ProgramSnapshot } from "@/src/api";
@@ -92,9 +93,9 @@ export function ChallengePanel({ channelId, refreshKey }: { channelId: string; r
           {t("Most {unit}").replace("{unit}", unit)} · {board.status === "active" ? t("{count} days left").replace("{count}", String(daysLeft)) : formatDate(board.challenge.ends_at, { month: "short", day: "numeric" })} · {t("{count} joined").replace("{count}", String(board.participant_count))}
         </Text>
       </View>
-      {board.status !== "ended" ? <Pressable accessibilityRole="button" testID="challenge-toggle" disabled={busy} onPress={() => void toggle()} style={[board.joined ? styles.secondary : styles.primary, busy && { opacity: 0.5 }]}>
+      {board.status !== "ended" ? <Affordance signal={board.joined ? "raise" : "brand"} accessibilityRole="button" testID="challenge-toggle" disabled={busy} onPress={() => void toggle()} style={[board.joined ? styles.secondary : styles.primary, busy && { opacity: 0.5 }]}>
         <Text style={board.joined ? styles.secondaryText : styles.primaryText}>{t(board.joined ? "LEAVE" : "JOIN")}</Text>
-      </Pressable> : null}
+      </Affordance> : null}
     </View>
     {board.me ? <Text style={styles.mine} testID="challenge-me">{t("You are #{place} with {score} {unit}").replace("{place}", String(board.me.place)).replace("{score}", formatNumber(board.me.score)).replace("{unit}", unit)}</Text>
       : board.status !== "ended" ? <Text style={styles.rule}>{t("Only members who join are scored, from their finished workouts.")}</Text> : null}
@@ -152,16 +153,16 @@ function ProgramPanel({ channelId, refreshKey, mask }: { channelId: string; refr
         <Text style={styles.headline}>{t("PROGRAM LIBRARY")}</Text>
         <Text style={styles.meta}>{count === null ? "" : t("{count} shared programs").replace("{count}", String(count))}</Text>
       </View>
-      {can(mask, POST_PROGRAM) ? <Pressable accessibilityRole="button" testID="share-program" onPress={open} style={styles.primary}><Text style={styles.primaryText}>{t("SHARE")}</Text></Pressable> : null}
+      {can(mask, POST_PROGRAM) ? <Affordance signal="brand" accessibilityRole="button" testID="share-program" onPress={open} style={styles.primary}><Text style={styles.primaryText}>{t("SHARE")}</Text></Affordance> : null}
     </View>
     <Text style={styles.rule}>{t("Tap USE THIS PROGRAM on any shared plan to make it your active program.")}</Text>
     {picking ? <View style={{ gap: spacing.xs }} testID="program-picker">
       <TextInput value={note} onChangeText={setNote} maxLength={1000} placeholder={t("Add a note for members (optional)")} placeholderTextColor={colors.textDim} style={styles.field} testID="program-note" />
       {mine === null ? <ActivityIndicator color={colors.text} /> : mine.length === 0 ? <Text style={styles.meta}>{t("You have no programs yet. Generate one on the Program screen first.")}</Text>
-        : mine.map(program => <Pressable key={program.id} accessibilityRole="button" disabled={busy} onPress={() => void share(program)} style={styles.leader} testID={`pick-program-${program.id}`}>
+        : mine.map(program => <Affordance key={program.id} accessibilityRole="button" disabled={busy} onPress={() => void share(program)} style={styles.leader} testID={`pick-program-${program.id}`}>
           <Text style={styles.leaderName}>{[program.params?.goal, program.params?.level].filter(Boolean).join(" · ") || t("Program")}</Text>
           <Text style={styles.leaderScore}>{t("{count} wk").replace("{count}", String(program.program?.weeks?.length ?? 0))}</Text>
-        </Pressable>)}
+        </Affordance>)}
     </View> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}
   </View>;
@@ -190,14 +191,14 @@ export function ProgramCard({ message }: { message: CommunityMessage & { program
       <Text style={styles.headline}>{[program.goal, program.level].filter(Boolean).join(" · ").toUpperCase() || t("PROGRAM")}</Text>
     </View>
     <Text style={styles.meta}>{t("{weeks} weeks · {days} days/week").replace("{weeks}", String(program.weeks_count)).replace("{days}", String(program.days_per_week ?? "?"))}{program.equipment.length ? ` · ${program.equipment.join(", ")}` : ""}</Text>
-    <Pressable accessibilityRole="button" onPress={() => setOpen(value => !value)} testID={`program-toggle-${message.id}`}><Text style={styles.link}>{t(open ? "Hide the plan" : "See the plan")}</Text></Pressable>
+    <Affordance accessibilityRole="button" onPress={() => setOpen(value => !value)} testID={`program-toggle-${message.id}`}><Text style={styles.link}>{t(open ? "Hide the plan" : "See the plan")}</Text></Affordance>
     {open ? program.weeks.map(week => <View key={week.week_index} style={{ gap: 2 }}>
       <Text style={styles.leaderName}>{t("Week {n}").replace("{n}", String(week.week_index))} · {week.phase}</Text>
       {week.days.map(day => <Text key={day.day_index} style={styles.rule}>{t("Day {n}").replace("{n}", String(day.day_index))} — {day.focus}: {day.exercises.map(ex => `${ex.name} ${ex.sets}×${ex.reps_min}-${ex.reps_max}`).join(", ")}</Text>)}
     </View>) : null}
     {state === "done"
-      ? <Pressable accessibilityRole="button" onPress={() => router.push("/program")} style={styles.secondary} testID={`program-open-${message.id}`}><Text style={styles.secondaryText}>{t("IN USE · OPEN")}</Text></Pressable>
-      : <Pressable accessibilityRole="button" disabled={state === "busy"} onPress={() => void adopt()} style={[styles.primary, state === "busy" && { opacity: 0.5 }]} testID={`program-adopt-${message.id}`}><Text style={styles.primaryText}>{t("USE THIS PROGRAM")}</Text></Pressable>}
+      ? <Affordance accessibilityRole="button" onPress={() => router.push("/program")} style={styles.secondary} testID={`program-open-${message.id}`}><Text style={styles.secondaryText}>{t("IN USE · OPEN")}</Text></Affordance>
+      : <Affordance signal="brand" accessibilityRole="button" disabled={state === "busy"} onPress={() => void adopt()} style={[styles.primary, state === "busy" && { opacity: 0.5 }]} testID={`program-adopt-${message.id}`}><Text style={styles.primaryText}>{t("USE THIS PROGRAM")}</Text></Affordance>}
     {error ? <Text style={styles.error}>{error}</Text> : null}
   </View>;
 }
@@ -275,14 +276,14 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
         <Text style={styles.headline}>{t("LIVE SESSIONS")}</Text>
         <Text style={styles.meta}>{sessions === null ? "" : sessions.length ? t("{count} coming up").replace("{count}", String(sessions.length)) : t("Nothing scheduled yet")}</Text>
       </View>
-      {canHost ? <Pressable accessibilityRole="button" testID="schedule-live" onPress={() => setScheduling(value => !value)} style={styles.primary}><Text style={styles.primaryText}>{t("SCHEDULE")}</Text></Pressable> : null}
+      {canHost ? <Affordance signal="brand" accessibilityRole="button" testID="schedule-live" onPress={() => setScheduling(value => !value)} style={styles.primary}><Text style={styles.primaryText}>{t("SCHEDULE")}</Text></Affordance> : null}
     </View>
     {scheduling ? <View style={{ gap: spacing.xs }} testID="live-form">
       <TextInput value={form.title} onChangeText={title => setForm({ ...form, title })} maxLength={120} placeholder={t("Session title")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-title" />
       <SchedulePicker value={form.starts} onChange={starts => setForm(current => ({ ...current, starts }))} testID="live-when" />
-      <View style={{ flexDirection: "row", gap: spacing.xs }}>{DURATIONS.map(minutes => <Pressable key={minutes} accessibilityRole="button" onPress={() => setForm({ ...form, duration: minutes })} style={[styles.secondary, form.duration === minutes && { borderColor: colors.text }]} testID={`live-duration-${minutes}`}><Text style={styles.secondaryText}>{minutes} min</Text></Pressable>)}</View>
+      <View style={{ flexDirection: "row", gap: spacing.xs }}>{DURATIONS.map(minutes => <Affordance key={minutes} accessibilityRole="button" onPress={() => setForm({ ...form, duration: minutes })} style={[styles.secondary, form.duration === minutes && { borderColor: colors.text }]} testID={`live-duration-${minutes}`}><Text style={styles.secondaryText}>{minutes} min</Text></Affordance>)}</View>
       <TextInput value={form.url} onChangeText={url => setForm({ ...form, url })} maxLength={500} autoCapitalize="none" placeholder={t("Join link (https://…) — Zoom, Meet, YouTube")} placeholderTextColor={colors.textDim} style={styles.field} testID="live-url" />
-      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void schedule()} style={styles.primary} testID="live-submit"><Text style={styles.primaryText}>{t("SCHEDULE SESSION")}</Text></Pressable>
+      <Affordance signal="brand" accessibilityRole="button" disabled={busy} onPress={() => void schedule()} style={styles.primary} testID="live-submit"><Text style={styles.primaryText}>{t("SCHEDULE SESSION")}</Text></Affordance>
     </View> : null}
     {(sessions || []).map(session => {
       const hosting = session.host_id === userId;
@@ -295,14 +296,14 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
         </View>
         <Text style={styles.meta}>{formatDate(session.starts_at, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {session.duration_min} min · {session.host?.full_name || t("Coach")} · {t("{count} going").replace("{count}", String(session.rsvp_count))}</Text>
         <View style={[styles.row, { flexWrap: "wrap" }]}>
-          <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => session.rsvped ? api.cancelRsvp(session.id) : api.rsvpLive(session.id))} style={session.rsvped ? styles.secondary : styles.primary} testID={`live-rsvp-${session.id}`}>
+          <Affordance signal={session.rsvped ? "raise" : "brand"} accessibilityRole="button" disabled={busy} onPress={() => void act(() => session.rsvped ? api.cancelRsvp(session.id) : api.rsvpLive(session.id))} style={session.rsvped ? styles.secondary : styles.primary} testID={`live-rsvp-${session.id}`}>
             <Text style={session.rsvped ? styles.secondaryText : styles.primaryText}>{t(session.rsvped ? "GOING ✓" : "I'M IN")}</Text>
-          </Pressable>
-          {live ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })} style={styles.primary} testID={`live-join-${session.id}`}><Text style={styles.primaryText}>{t("JOIN")}</Text></Pressable> : null}
-          {session.join_url && (live || hosting) ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.secondary} testID={`live-external-${session.id}`}><Text style={styles.secondaryText}>{t("OPEN LINK")}</Text></Pressable> : null}
-          {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(async () => { await api.startLive(session.id); router.push({ pathname: "/live/[id]", params: { id: session.id } }); })} style={styles.secondary} testID={`live-start-${session.id}`}><Text style={styles.secondaryText}>{t("GO LIVE")}</Text></Pressable> : null}
-          {manage && live ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.endLive(session.id))} style={styles.secondary} testID={`live-end-${session.id}`}><Text style={styles.secondaryText}>{t("END")}</Text></Pressable> : null}
-          {manage && session.status === "scheduled" ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.cancelLive(session.id))} style={styles.secondary} testID={`live-cancel-${session.id}`}><Text style={[styles.secondaryText, { color: colors.error }]}>{t("CANCEL")}</Text></Pressable> : null}
+          </Affordance>
+          {live ? <Affordance signal="brand" accessibilityRole="button" onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })} style={styles.primary} testID={`live-join-${session.id}`}><Text style={styles.primaryText}>{t("JOIN")}</Text></Affordance> : null}
+          {session.join_url && (live || hosting) ? <Affordance accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.secondary} testID={`live-external-${session.id}`}><Text style={styles.secondaryText}>{t("OPEN LINK")}</Text></Affordance> : null}
+          {manage && session.status === "scheduled" ? <Affordance accessibilityRole="button" disabled={busy} onPress={() => void act(async () => { await api.startLive(session.id); router.push({ pathname: "/live/[id]", params: { id: session.id } }); })} style={styles.secondary} testID={`live-start-${session.id}`}><Text style={styles.secondaryText}>{t("GO LIVE")}</Text></Affordance> : null}
+          {manage && live ? <Affordance accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.endLive(session.id))} style={styles.secondary} testID={`live-end-${session.id}`}><Text style={styles.secondaryText}>{t("END")}</Text></Affordance> : null}
+          {manage && session.status === "scheduled" ? <Affordance accessibilityRole="button" disabled={busy} onPress={() => void act(() => api.cancelLive(session.id))} style={styles.secondary} testID={`live-cancel-${session.id}`}><Text style={[styles.secondaryText, { color: colors.error }]}>{t("CANCEL")}</Text></Affordance> : null}
         </View>
       </View>;
     })}
@@ -310,10 +311,10 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
       <Text style={styles.meta}>{t("EARLIER")}</Text>
       {past.map(session => {
         const label = pastStatusLabel(session.status, t);
-        return <Pressable key={session.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })} style={styles.liveRow} testID={`live-past-${session.id}`}>
+        return <Affordance key={session.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })} style={styles.liveRow} testID={`live-past-${session.id}`}>
           <Text style={styles.leaderName} numberOfLines={1}>{session.title}</Text>
           <Text style={styles.meta}>{label ? `${label} · ` : ""}{formatDate(session.starts_at, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
-        </Pressable>;
+        </Affordance>;
       })}
     </View> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -161,44 +162,44 @@ export default function DirectMessageScreen() {
 
   return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior="padding" style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
-      <Pressable accessibilityRole="button" onPress={() => id && router.push({ pathname: "/user/[id]", params: { id } })} style={{ flex: 1 }}>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
+      <Affordance accessibilityRole="button" onPress={() => id && router.push({ pathname: "/user/[id]", params: { id } })} style={{ flex: 1 }}>
         <Text style={styles.headerTitle}>{name || t("Direct message")}</Text>
         <Text style={styles.live} testID="dm-status">{peerTyping ? t("typing…") : t("PRIVATE")}</Text>
-      </Pressable>
+      </Affordance>
     </View>
     {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text></View> : null}
     {loading ? <ActivityIndicator color={colors.text} /> : null}
     <FlatList data={messages} keyExtractor={item => item.id} contentContainerStyle={styles.list}
-      ListHeaderComponent={hasOlder ? <Pressable accessibilityRole="button" testID="dm-older" onPress={() => void older()} style={styles.older}><Text style={styles.olderText}>{t("Load earlier messages")}</Text></Pressable> : null}
+      ListHeaderComponent={hasOlder ? <Affordance accessibilityRole="button" testID="dm-older" onPress={() => void older()} style={styles.older}><Text style={styles.olderText}>{t("Load earlier messages")}</Text></Affordance> : null}
       ListEmptyComponent={!loading && !error && !closed ? <View style={styles.empty}><Ionicons name="lock-closed-outline" size={36} color={colors.textDim} /><Text style={styles.emptyText}>{t("Say hello. Only the two of you can read this.")}</Text></View> : null}
       renderItem={({ item }) => {
         const own = item.sender_id === user?.id;
         const deleted = item.status === "deleted";
         return <View>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Message options")} onLongPress={() => !deleted && setMenuFor(item)} testID={`dm-${item.id}`} style={[styles.message, own && styles.messageOwn, deleted && styles.deleted]}>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Message options")} onLongPress={() => !deleted && setMenuFor(item)} testID={`dm-${item.id}`} style={[styles.message, own && styles.messageOwn, deleted && styles.deleted]}>
             {deleted ? <Text style={styles.deletedText}>{t("Message deleted")}</Text> : <>
               {item.content ? <Text style={styles.messageText}>{item.content}</Text> : null}
               {item.media?.length ? <MediaGrid media={item.media} /> : null}
             </>}
             <View style={styles.meta}>
               <Text style={styles.time}>{formatDate(item.created_at, { hour: "2-digit", minute: "2-digit" })}</Text>
-              {!deleted ? <Pressable accessibilityRole="button" accessibilityLabel={t("Message options")} testID={`dm-menu-${item.id}`} onPress={() => setMenuFor(item)}><Ionicons name="ellipsis-horizontal" size={12} color={colors.textDim} /></Pressable> : null}
+              {!deleted ? <Affordance accessibilityRole="button" accessibilityLabel={t("Message options")} testID={`dm-menu-${item.id}`} onPress={() => setMenuFor(item)}><Ionicons name="ellipsis-horizontal" size={12} color={colors.textDim} /></Affordance> : null}
             </View>
-          </Pressable>
+          </Affordance>
           {item.id === lastSeenId ? <Text style={styles.seen} testID="dm-seen">{t("Seen")}</Text> : null}
         </View>;
       }} />
     {!closed && attachments.length ? <View style={styles.pending}>{attachments.map(item => <View key={item.id}>
       {item.kind === "image" ? <Image source={{ uri: mediaUrl(item.url) }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.videoThumb]}><Ionicons name="videocam" size={18} color={colors.text} /></View>}
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setAttachments(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={10} color={colors.text} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Remove attachment")} onPress={() => setAttachments(items => items.filter(x => x.id !== item.id))} style={styles.removeThumb}><Ionicons name="close" size={10} color={colors.text} /></Affordance>
     </View>)}</View> : null}
     {closed ? null : <View style={styles.composer} testID="dm-composer">
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Add photo or video")} testID="dm-attach" disabled={uploading || attachments.length >= 4} onPress={() => void attach()} style={[styles.attach, (uploading || attachments.length >= 4) && styles.disabled]}>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Add photo or video")} testID="dm-attach" disabled={uploading || attachments.length >= 4} onPress={() => void attach()} style={[styles.attach, (uploading || attachments.length >= 4) && styles.disabled]}>
         {uploading ? <ActivityIndicator color={colors.text} /> : <Ionicons name="image-outline" size={20} color={colors.text} />}
-      </Pressable>
+      </Affordance>
       <TextInput value={draft} onChangeText={typed} editable={!sending} maxLength={4000} multiline placeholder={t("Message...")} placeholderTextColor={colors.textDim} style={styles.input} />
-      <Pressable accessibilityRole="button" disabled={!canSend} onPress={() => void send()} accessibilityLabel={t("Send message")} style={[styles.send, !canSend && styles.disabled]}><Ionicons name="send" size={17} color={colors.brandOn} /></Pressable>
+      <Affordance signal="brand" accessibilityRole="button" disabled={!canSend} onPress={() => void send()} accessibilityLabel={t("Send message")} style={[styles.send, !canSend && styles.disabled]}><Ionicons name="send" size={17} color={colors.brandOn} /></Affordance>
     </View>}
     <ActionSheet visible={!!menuFor} onClose={() => setMenuFor(null)} testID="dm-sheet" actions={menuFor ? (menuFor.sender_id === user?.id
       ? [{ key: "unsend", label: t("Unsend"), icon: "trash-outline", destructive: true, onPress: () => void unsend(menuFor) }]

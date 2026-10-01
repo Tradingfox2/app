@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -50,13 +51,13 @@ export default function FollowRequests() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <View style={{ flex: 1 }}>
         <Text style={styles.headerTitle}>{t("FOLLOW REQUESTS")}</Text>
         {rows.length ? <Text style={styles.count}>{t("{count} waiting").replace("{count}", String(rows.length))}</Text> : null}
       </View>
     </View>
-    {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+    {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" onPress={() => void load()} style={styles.icon}><Text style={styles.retry}>{t("Retry")}</Text></Affordance></View> : null}
     {loading && !error ? <ActivityIndicator color={colors.text} /> : null}
     <FlatList
       data={rows}
@@ -68,15 +69,15 @@ export default function FollowRequests() {
         <Text style={styles.emptyHint}>{t("Requests only arrive while your account is private.")}</Text>
       </View> : null}
       renderItem={({ item }) => <View style={styles.row} testID={`request-${item.follower_id}`}>
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.follower_id } })} style={styles.person}>
+        <Affordance accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: item.follower_id } })} style={styles.person}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(item.follower?.full_name || "?").charAt(0).toUpperCase()}</Text></View>
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={styles.name}>{item.follower?.full_name || t("Member")}</Text>
             <Text style={styles.time}>{formatDate(item.created_at, { month: "short", day: "numeric" })}</Text>
           </View>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Reject")} testID={`deny-${item.follower_id}`} onPress={() => void decide(item, false)} style={styles.deny}><Ionicons name="close" size={19} color={colors.error} /></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Approve")} testID={`approve-${item.follower_id}`} onPress={() => void decide(item, true)} style={styles.approve}><Ionicons name="checkmark" size={19} color={colors.brandOn} /></Pressable>
+        </Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Reject")} testID={`deny-${item.follower_id}`} onPress={() => void decide(item, false)} style={styles.deny}><Ionicons name="close" size={19} color={colors.error} /></Affordance>
+        <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t("Approve")} testID={`approve-${item.follower_id}`} onPress={() => void decide(item, true)} style={styles.approve}><Ionicons name="checkmark" size={19} color={colors.brandOn} /></Affordance>
       </View>}
     />
   </SafeAreaView>;

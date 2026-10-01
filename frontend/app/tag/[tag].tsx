@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -22,18 +23,18 @@ export default function TagScreen() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title} testID="tag-title">#{tag}</Text>
     </View>
     <ScrollView>
       {feed.loading ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xl }} /> : null}
       {feed.error ? <View accessibilityRole="alert" testID="tag-feed-error" style={styles.errorBox}>
         <Text style={styles.error}>{feed.error}</Text>
-        <Pressable accessibilityRole="button" testID="tag-feed-retry" onPress={() => void feed.load()}><Text style={styles.moreText}>{t("Retry")}</Text></Pressable>
+        <Affordance accessibilityRole="button" testID="tag-feed-retry" onPress={() => void feed.load()}><Text style={styles.moreText}>{t("Retry")}</Text></Affordance>
       </View> : null}
       {!feed.loading && !feed.error && feed.posts.length === 0 ? <Text style={styles.empty}>{t("No posts with this tag yet.")}</Text> : null}
       {feed.posts.map(post => <PostCard key={post.id} post={post} onChange={next => feed.patch(post.id, () => next)} onRemoved={() => feed.remove(post.id)} onReposted={feed.prepend} />)}
-      {feed.hasMore ? <Pressable accessibilityRole="button" onPress={() => void feed.loadMore()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Pressable> : null}
+      {feed.hasMore ? <Affordance accessibilityRole="button" onPress={() => void feed.loadMore()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Affordance> : null}
     </ScrollView>
   </SafeAreaView>;
 }

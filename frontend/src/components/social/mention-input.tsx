@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle } from "react-native";
+import { StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { api, type MentionedUser } from "@/src/api";
 import { activeQuery, applyMention } from "@/src/mentions";
 import { colors, radius, spacing } from "@/src/theme";
@@ -28,9 +29,9 @@ export function MentionInput({ value, onChangeText, style, testID, ...props }: O
 
   return <View>
     {suggestions.length && query !== null ? <View style={styles.list} testID={testID ? `${testID}-suggestions` : undefined}>
-      {suggestions.map(person => <Pressable key={person.id} accessibilityRole="button" onPress={() => { onChangeText(applyMention(value, person)); setSuggestions([]); }} style={styles.row} testID={`mention-suggestion-${person.id}`}>
+      {suggestions.map(person => <Affordance key={person.id} accessibilityRole="button" onPress={() => { onChangeText(applyMention(value, person)); setSuggestions([]); }} style={styles.row} testID={`mention-suggestion-${person.id}`}>
         <Avatar user={person} size={24} /><Text style={styles.name}>{person.full_name || "?"}</Text>
-      </Pressable>)}
+      </Affordance>)}
     </View> : null}
     <TextInput {...props} testID={testID} value={value} onChangeText={onChangeText} style={style} />
   </View>;

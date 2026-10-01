@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { api, type AnalyticsSummary } from "@/src/api";
 import { METRIC_GLOSSARY } from "@/src/analytics-locales";
 import { MetricGlossary } from "@/src/components/metric-glossary";
@@ -76,9 +77,9 @@ export function AnalyticsPanel() {
     <View testID="analytics-panel">
       <Text style={styles.section}>{t("Product events")}</Text>
       <Text style={styles.hint}>{t("Counts are read from stored events. Nothing on this page is estimated.")}</Text>
-      <Pressable accessibilityRole="button" testID="analytics-refresh" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
+      <Affordance accessibilityRole="button" testID="analytics-refresh" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
         <Text style={styles.actionText}>{t("Refresh counts")}</Text>
-      </Pressable>
+      </Affordance>
       {loading ? <ActivityIndicator color={colors.text} /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       {data ? (

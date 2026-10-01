@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
@@ -125,40 +126,40 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
     <SafeAreaView edges={variant === "tab" ? ["top"] : undefined} style={styles.safe} testID={variant === "tab" ? "profile-screen" : undefined}>
       <View style={styles.header}>
         {variant === "screen" ? (
-          <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}>
+          <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}>
             <Ionicons name="arrow-back" size={20} color={colors.text} />
-          </Pressable>
+          </Affordance>
         ) : null}
         <Text style={styles.headerTitle}>{variant === "tab" ? t("You") : t("PROFILE")}</Text>
         {own ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={t("SETTINGS")} testID="open-settings" onPress={() => router.push("/settings" as Href)} style={styles.icon}>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("SETTINGS")} testID="open-settings" onPress={() => router.push("/settings" as Href)} style={styles.icon}>
             <Ionicons name="settings-outline" size={22} color={colors.text} />
-          </Pressable>
+          </Affordance>
         ) : <View style={styles.icon} />}
       </View>
       {own ? (
         <View style={styles.shortcuts}>
-          <Pressable accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.shortcut}>
+          <Affordance accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.shortcut}>
             <Ionicons name="create-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("EDIT PROFILE")}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" testID="open-saved" onPress={() => router.push("/saved")} style={styles.shortcut}>
+          </Affordance>
+          <Affordance accessibilityRole="button" testID="open-saved" onPress={() => router.push("/saved")} style={styles.shortcut}>
             <Ionicons name="bookmark-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("SAVED POSTS")}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Friends feed")} testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.shortcut}>
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Friends feed")} testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.shortcut}>
             <Ionicons name="people-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("FRIENDS")}</Text>
-          </Pressable>
+          </Affordance>
         </View>
       ) : null}
       <ScrollView contentContainerStyle={styles.scroll}>
         {error ? (
           <View accessibilityRole="alert">
             <Text style={styles.error}>{error}</Text>
-            <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.icon}>
+            <Affordance accessibilityRole="button" onPress={() => void load()} style={styles.icon}>
               <Text style={styles.retry}>{t("Retry")}</Text>
-            </Pressable>
+            </Affordance>
           </View>
         ) : null}
         {!profile && !error ? <ActivityIndicator color={colors.text} /> : null}
@@ -167,9 +168,9 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
             <View style={wall.cover} testID="profile-cover">
               {profile.cover_url ? <Image source={{ uri: mediaUrl(profile.cover_url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : null}
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={stories.length > 0 ? t("STORY") : undefined} disabled={stories.length === 0} onPress={() => stories.length > 0 && router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "stories" } })} style={[styles.avatar, stories.length > 0 && styles.avatarStory]}>
+            <Affordance accessibilityRole="button" accessibilityLabel={stories.length > 0 ? t("STORY") : undefined} disabled={stories.length === 0} onPress={() => stories.length > 0 && router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "stories" } })} style={[styles.avatar, stories.length > 0 && styles.avatarStory]}>
               <Avatar user={profile} size={84} />
-            </Pressable>
+            </Affordance>
             <Text style={styles.name}>{profile.full_name || t("Member")}</Text>
             {profile.is_coach ? (
               <View style={styles.coachTag} testID="coach-badge">
@@ -191,45 +192,45 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
             ) : null}
             <View style={styles.stats}>
               <View style={styles.stat}><Text style={styles.statValue}>{formatNumber(profile.posts)}</Text><Text style={styles.statLabel}>{t("POSTS")}</Text></View>
-              <Pressable accessibilityRole="button" accessibilityLabel={t("Followers list")} testID="open-followers" onPress={() => openConnections("followers")} style={styles.stat}>
+              <Affordance accessibilityRole="button" accessibilityLabel={t("Followers list")} testID="open-followers" onPress={() => openConnections("followers")} style={styles.stat}>
                 <Text style={styles.statValue}>{formatNumber(profile.followers)}</Text>
                 <Text style={styles.statLabel}>{t("FOLLOWERS")}</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel={t("Following list")} testID="open-following" onPress={() => openConnections("following")} style={styles.stat}>
+              </Affordance>
+              <Affordance accessibilityRole="button" accessibilityLabel={t("Following list")} testID="open-following" onPress={() => openConnections("following")} style={styles.stat}>
                 <Text style={styles.statValue}>{formatNumber(profile.following)}</Text>
                 <Text style={styles.statLabel}>{t("FOLLOWING")}</Text>
-              </Pressable>
+              </Affordance>
             </View>
             {!profileOwn ? (
               <View style={styles.actions}>
-                <Pressable accessibilityRole="button" testID="follow-toggle" disabled={busy} onPress={() => void toggleFollow()} style={[styles.primary, profile.follow_state !== "none" && styles.secondary, busy && styles.disabled]}>
+                <Affordance signal={profile.follow_state === "none" ? "brand" : "raise"} accessibilityRole="button" testID="follow-toggle" disabled={busy} onPress={() => void toggleFollow()} style={[styles.primary, profile.follow_state !== "none" && styles.secondary, busy && styles.disabled]}>
                   <Text style={[styles.primaryText, profile.follow_state !== "none" && styles.secondaryText]}>{t(followLabel)}</Text>
-                </Pressable>
+                </Affordance>
                 {profile.can_message ? (
-                  <Pressable accessibilityRole="button" testID="message-user" onPress={() => router.push({ pathname: "/dm/[id]", params: { id: profile.id, name: profile.full_name || "" } })} style={styles.secondary}>
+                  <Affordance accessibilityRole="button" testID="message-user" onPress={() => router.push({ pathname: "/dm/[id]", params: { id: profile.id, name: profile.full_name || "" } })} style={styles.secondary}>
                     <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
                     <Text style={styles.secondaryText}>{t("MESSAGE")}</Text>
-                  </Pressable>
+                  </Affordance>
                 ) : null}
-                <Pressable accessibilityRole="button" accessibilityLabel={t("More")} testID="profile-menu" onPress={() => setMenuOpen(open => !open)} style={styles.secondary}>
+                <Affordance accessibilityRole="button" accessibilityLabel={t("More")} testID="profile-menu" onPress={() => setMenuOpen(open => !open)} style={styles.secondary}>
                   <Ionicons name="ellipsis-horizontal" size={16} color={colors.text} />
-                </Pressable>
+                </Affordance>
               </View>
             ) : null}
             {!profileOwn && menuOpen ? (
               <View style={styles.menu} testID="profile-menu-sheet">
-                <Pressable accessibilityRole="button" testID="toggle-mute" disabled={busy} onPress={() => void toggleMute()} style={styles.menuRow}>
+                <Affordance accessibilityRole="button" testID="toggle-mute" disabled={busy} onPress={() => void toggleMute()} style={styles.menuRow}>
                   <Ionicons name={profile.is_muted ? "volume-high-outline" : "volume-mute-outline"} size={16} color={colors.text} />
                   <Text style={styles.menuText}>{t(profile.is_muted ? "Unmute" : "Mute")}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" testID="toggle-block" disabled={busy} onPress={() => void toggleBlock()} style={styles.menuRow}>
+                </Affordance>
+                <Affordance accessibilityRole="button" testID="toggle-block" disabled={busy} onPress={() => void toggleBlock()} style={styles.menuRow}>
                   <Ionicons name="ban-outline" size={16} color={colors.error} />
                   <Text style={[styles.menuText, { color: colors.error }]}>{t(profile.is_blocked ? "Unblock" : "Block")}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" testID="report-user" onPress={() => { setMenuOpen(false); setReporting({ target_type: "user", target_id: profile.id }); }} style={styles.menuRow}>
+                </Affordance>
+                <Affordance accessibilityRole="button" testID="report-user" onPress={() => { setMenuOpen(false); setReporting({ target_type: "user", target_id: profile.id }); }} style={styles.menuRow}>
                   <Ionicons name="flag-outline" size={16} color={colors.text} />
                   <Text style={styles.menuText}>{t("Report account")}</Text>
-                </Pressable>
+                </Affordance>
                 <Text style={styles.menuHint}>{t("Muting hides their posts. Blocking also removes the follow both ways.")}</Text>
               </View>
             ) : null}
@@ -245,10 +246,10 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
             {canSeePosts ? (
               <View testID="profile-activity" style={styles.activity}>
                 {profileOwn ? (
-                  <Pressable accessibilityRole="button" testID="profile-new-story" onPress={() => router.push("/story-new" as Href)} style={wall.storyAdd}>
+                  <Affordance accessibilityRole="button" testID="profile-new-story" onPress={() => router.push("/story-new" as Href)} style={wall.storyAdd}>
                     <Ionicons name="add" size={18} color={colors.text} />
                     <Text style={wall.storyAddText}>{t("YOUR STORY")}</Text>
-                  </Pressable>
+                  </Affordance>
                 ) : null}
                 {(highlights.length > 0 || profileOwn) ? (
                   <View testID="profile-highlights">
@@ -258,9 +259,9 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
                         {highlights.map(story => {
                           const mark = limitedAudienceLabel(story.audience);
                           return (
-                            <Pressable key={story.id} accessibilityRole="button" testID={`profile-highlight-${story.id}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "highlights" } })} style={wall.highlight}>
+                            <Affordance key={story.id} accessibilityRole="button" testID={`profile-highlight-${story.id}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId: profile.id, kind: "highlights" } })} style={wall.highlight}>
                               <Text style={wall.chipText} numberOfLines={2}>{story.highlight_title || story.workout_summary?.title || t("HIGHLIGHTS")}{mark ? ` · ${t(mark)}` : ""}</Text>
-                            </Pressable>
+                            </Affordance>
                           );
                         })}
                       </ScrollView>
@@ -273,9 +274,9 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
               <View style={styles.wall}>
                 <View style={wall.tabs}>
                   {(["posts", "photos", "about"] as WallTab[]).map(item => (
-                    <Pressable key={item} accessibilityRole="button" testID={`profile-tab-${item}`} onPress={() => setWallTab(item)} style={[wall.tab, wallTab === item && wall.tabOn]}>
+                    <Affordance key={item} accessibilityRole="button" testID={`profile-tab-${item}`} onPress={() => setWallTab(item)} style={[wall.tab, wallTab === item && wall.tabOn]}>
                       <Text style={[wall.tabText, wallTab === item && wall.tabTextOn]}>{t(wallLabel(item))}</Text>
-                    </Pressable>
+                    </Affordance>
                   ))}
                 </View>
                 {wallTab === "posts" ? (
@@ -284,21 +285,21 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
                     {posts.error ? (
                       <View accessibilityRole="alert" testID="profile-posts-error">
                         <Text style={styles.error}>{posts.error}</Text>
-                        <Pressable accessibilityRole="button" testID="profile-posts-retry" onPress={() => void posts.load()}>
+                        <Affordance accessibilityRole="button" testID="profile-posts-retry" onPress={() => void posts.load()}>
                           <Text style={styles.retry}>{t("Retry")}</Text>
-                        </Pressable>
+                        </Affordance>
                       </View>
                     ) : null}
                     {!posts.loading && !posts.error && posts.posts.length === 0 ? <Text style={styles.hint}>{t("No posts yet.")}</Text> : null}
                     {posts.posts.map(post => <PostCard key={post.id} post={post} onChange={next => posts.patch(post.id, () => next)} onRemoved={() => posts.remove(post.id)} onReposted={() => undefined} />)}
-                    {posts.hasMore ? <Pressable accessibilityRole="button" onPress={() => void posts.loadMore()} style={styles.icon}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Pressable> : null}
+                    {posts.hasMore ? <Affordance accessibilityRole="button" onPress={() => void posts.loadMore()} style={styles.icon}><Text style={styles.retry}>{t("LOAD MORE")}</Text></Affordance> : null}
                   </View>
                 ) : wallTab === "photos" ? (
                   <View style={wall.photoGrid} testID="profile-photos">
                     {photos.length === 0 ? <Text style={styles.hint}>{t("No photos yet.")}</Text> : photos.map(photo => (
-                      <Pressable key={`${photo.post_id}-${photo.id}`} accessibilityRole="button" onPress={() => router.push({ pathname: "/post/[id]", params: { id: photo.post_id } })}>
+                      <Affordance key={`${photo.post_id}-${photo.id}`} accessibilityRole="button" onPress={() => router.push({ pathname: "/post/[id]", params: { id: photo.post_id } })}>
                         <Image source={{ uri: mediaUrl(photo.url) }} style={wall.photo} accessibilityIgnoresInvertColors />
-                      </Pressable>
+                      </Affordance>
                     ))}
                   </View>
                 ) : (

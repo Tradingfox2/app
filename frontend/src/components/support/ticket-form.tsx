@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { useFocusEffect } from "expo-router";
 import { api, TICKET_CATEGORIES, type TicketCategory } from "@/src/api";
 import { track } from "@/src/analytics";
@@ -83,7 +84,7 @@ export function SupportTicketForm({
           {TICKET_CATEGORIES.map(item => {
             const selected = category === item;
             return (
-              <Pressable
+              <Affordance
                 key={item}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
@@ -101,7 +102,7 @@ export function SupportTicketForm({
                 <Text style={{ color: selected ? colors.text : colors.textMuted, fontSize: 12, fontWeight: "800" }}>
                   {ticketCategoryLabel(item, t)}
                 </Text>
-              </Pressable>
+              </Affordance>
             );
           })}
         </View>
@@ -129,7 +130,7 @@ export function SupportTicketForm({
         ) : null}
 
         {error ? <Text accessibilityRole="alert" testID="support-form-error" style={supportStyles.error}>{error}</Text> : null}
-        <Pressable
+        <Affordance signal="brand"
           accessibilityRole="button"
           testID="support-submit"
           disabled={!canSubmit}
@@ -137,7 +138,7 @@ export function SupportTicketForm({
           style={[supportStyles.submit, !canSubmit && supportStyles.disabled]}
         >
           <Text style={supportStyles.submitText}>{t(saving ? "SENDING…" : "SEND TICKET")}</Text>
-        </Pressable>
+        </Affordance>
       </ScrollView>
     </SupportScreen>
   );
