@@ -82,6 +82,7 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=8, max_length=72)
     full_name: Optional[str] = None
     role: str = Field(default="athlete", pattern="^(athlete|coach)$")
+    referral_code: str | None = Field(default=None, max_length=32)
 
 
 class LoginIn(BaseModel):
@@ -259,7 +260,9 @@ async def current_user(
 
 
 async def require_pro(user: dict = Depends(current_user)) -> dict:
-    """A live Pro row. `past_due` still counts while Stripe retries the card."""
+    """A live Pro row, or Pro credit days that have not run out.
+    `past_due` still counts while Stripe retries the card.
+    """
     sub = await db.subscriptions.find_one(
         {
             "user_id": user["id"],
@@ -268,9 +271,15 @@ async def require_pro(user: dict = Depends(current_user)) -> dict:
         },
         {"_id": 1},
     )
-    if not sub:
-        raise HTTPException(402, "Pro subscription required")
-    return user
+    if sub:
+        return user
+    until = user.get("pro_credit_until")
+    if isinstance(until, datetime):
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        if until > now():
+            return user
+    raise HTTPException(402, "Pro subscription required")
 
 
 async def optional_user(
@@ -427,6 +436,10 @@ async def lifespan(app: FastAPI):
         "stripe_subscription_id", partialFilterExpression={"stripe_subscription_id": {"$type": "string"}})
     await db.community_checkouts.create_index("id", unique=True)
     await db.billing_events.create_index("id", unique=True)
+    await db.referrals.create_index("code", unique=True)
+    await db.users.create_index("referred_by", partialFilterExpression={"referred_by": {"$type": "string"}})
+    await db.commissions.create_index([("source_user_id", 1), ("level", 1)], unique=True)
+    await db.commissions.create_index([("beneficiary_id", 1), ("status", 1)])
     await db.subscriptions.create_index("user_id")
     await db.subscriptions.create_index(
         "stripe_subscription_id", unique=True,
@@ -546,6 +559,11 @@ async def register(body: RegisterIn):
         "preferred_locale": DEFAULT_LOCALE,
         "created_at": now(),
     }
+    code = (body.referral_code or "").strip().upper()
+    if code:
+        referrer = await db.referrals.find_one({"code": code}, {"_id": 0, "referrer_id": 1})
+        if referrer and referrer.get("referrer_id"):
+            user_doc["referred_by"] = referrer["referrer_id"]
     await db.users.insert_one(user_doc)
     return TokenOut(access_token=make_token(user_doc["id"]), user=to_public_user(user_doc))
 
@@ -1319,24 +1337,6 @@ async def upsert_sub(body: SubscriptionIn, user: dict = Depends(current_user)):
     if existing and existing.get("plan") != "free":
         raise HTTPException(409, "Paid subscriptions must be canceled through verified billing")
     return clean(existing) if existing else {"plan": "free", "status": "active"}
-
-
-@api.get("/referrals/mine")
-async def my_referrals(user: dict = Depends(current_user)):
-    my_ref = await db.referrals.find_one({"referrer_id": user["id"]}, {"_id": 0})
-    if not my_ref:
-        my_ref = {
-            "id": new_id(),
-            "referrer_id": user["id"],
-            "referred_id": None,
-            "code": secrets.token_urlsafe(6).upper(),
-            "status": "pending",
-            "reward_amount_cents": 0,
-            "reward_currency": "EUR",
-            "created_at": now(),
-        }
-        await db.referrals.insert_one(dict(my_ref))
-    return clean(my_ref)
 
 
 # ---- Progression & muscle heatmap ---------------------------------------- #

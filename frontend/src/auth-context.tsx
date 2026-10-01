@@ -7,7 +7,7 @@ type Ctx = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, role: string) => Promise<void>;
+  register: (email: string, password: string, name: string, role: string, referralCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await auth.setToken(r.access_token);
     setUser(r.user);
   };
-  const register = async (email: string, password: string, name: string, role: string) => {
-    const r = await api.register(email, password, name, role);
+  const register = async (email: string, password: string, name: string, role: string, referralCode?: string) => {
+    const r = await api.register(email, password, name, role, referralCode);
     await auth.setToken(r.access_token);
     setUser(r.user);
   };

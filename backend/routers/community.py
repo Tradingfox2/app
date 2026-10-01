@@ -16,6 +16,7 @@ from server import clean, current_user, db, new_id, now, optional_user
 from community_rankings import build_rankings
 import billing
 import pro_billing
+import referrals
 from routers import gyms
 import challenges
 import moderation
@@ -989,6 +990,9 @@ async def stripe_webhook(request: Request):
         await pro_billing.invoice_changed(obj, failed=kind == "invoice.payment_failed")
         if kind == "invoice.paid":
             await _record_partner_invoice(obj)
+            await referrals.invoice_paid(obj)
+    elif kind == "charge.refunded":
+        await referrals.charge_refunded(obj)
     await db.billing_events.update_one(
         {"id": event.get("id")}, {"$setOnInsert": {"type": kind, "received_at": now()}}, upsert=True)
     return {"received": True}

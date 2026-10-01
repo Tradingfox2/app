@@ -38,7 +38,7 @@
 | POST | `/group-sessions` | `create_session` |
 | GET | `/subscriptions/current` | `current_sub` |
 | POST | `/subscriptions` | `upsert_sub` |
-| GET | `/referrals/mine` | `my_referrals` |
+| GET | `/referrals/mine` | `referrals.mine` |
 | GET | `/progression/{exercise_id}` | `progression` |
 
 ## `backend/routers/admin.py` (11)

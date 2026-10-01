@@ -218,6 +218,13 @@ export type SupportTicketList = {
 
 export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
 
+export type ReferralSummary = {
+  code: string;
+  counts: { referred: number; converted: number };
+  pending: AccountingBucket;
+  paid: AccountingBucket;
+};
+
 export type ProPlanPrice = {
   plan: "pro_monthly" | "pro_yearly";
   amount_cents: number;
@@ -917,10 +924,12 @@ export function mediaUrl(url: string): string {
 }
 
 export const api = {
-  register: (email: string, password: string, full_name: string, role: string) =>
+  register: (email: string, password: string, full_name: string, role: string, referral_code?: string) =>
     request<{ access_token: string; user: User }>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, full_name, role }),
+      body: JSON.stringify({
+        email, password, full_name, role, ...(referral_code ? { referral_code } : {}),
+      }),
     }),
   login: (email: string, password: string) =>
     request<{ access_token: string; user: User }>("/auth/login", {
@@ -1338,7 +1347,7 @@ export const api = {
   subscriptionCheckout: (plan: "pro_monthly" | "pro_yearly") =>
     request<{ url: string }>("/subscriptions/checkout", { method: "POST", body: JSON.stringify({ plan }) }),
   subscriptionPortal: () => request<{ url: string }>("/subscriptions/portal", { method: "POST" }),
-  referral: () => request<any>("/referrals/mine"),
+  referral: () => request<ReferralSummary>("/referrals/mine"),
 
   progression: (exerciseId: string) =>
     request<{ series: any[]; pr: any }>(`/progression/${exerciseId}`),
