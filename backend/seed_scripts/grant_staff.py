@@ -7,23 +7,23 @@ self-grant staff powers. After that, admins manage the team in the app.
     python seed_scripts/grant_staff.py alice@example.com none
 """
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
-
-from staff import STAFF_ROLES
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
+# db.py reads MONGO_URL at import. server.py uses the same client.
+# staff_roles, not staff: staff imports server, which imports routers that
+# call staff.require before staff has finished loading.
+from db import client, db  # noqa: E402
+from staff_roles import STAFF_ROLES  # noqa: E402
+
 
 async def main(email: str, role: str | None) -> int:
-    client = AsyncIOMotorClient(os.environ["MONGO_URL"], tz_aware=True)
-    db = client[os.environ.get("DB_NAME", "ironflow")]
     try:
         result = await db.users.update_one({"email": email.lower()}, {"$set": {"staff_role": role}})
         if result.matched_count == 0:
