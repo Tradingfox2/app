@@ -331,7 +331,9 @@ through the shared module.
   `ticket-detail.tsx` and staff `admin/index.tsx` emit `ticket_replied`.
   The opening note is not a reply.
 
-## Frontend visual system (verified 2026-09-30, branch `cursor/visual-system-1295`)
+## Frontend visual system (verified 2026-10-01, on main through #26)
+
+The palette below landed from `cursor/visual-system-1295` and is on main.
 
 - **Owner:** `frontend/src/theme.ts`. Screens use these tokens. There is no
   second palette and no light canvas. Page is `colors.bg` `#101418`.
@@ -352,7 +354,9 @@ through the shared module.
 - **Plan vs coach:** `/program` header is `t("Plan")`. The human coach stays
   Home `quick-coach` and `/coach/onboarding`. Screens are not merged.
 
-## Home week (verified 2026-10-01, activity day on `cursor/home-activity-day-d3c3`)
+## Home week (verified 2026-10-01, on main through #28)
+
+The activity-day screen landed from `cursor/home-activity-day-d3c3` and is on main.
 
 - **Fold:** header, `LiveNowStrip` only when someone is live, rings on
   `colors.ringPlate`, then `today-card`. The week block is `training-week-card`
@@ -384,7 +388,9 @@ through the shared module.
   `/workouts` shows `week-days-retry` and keeps the last totals. A failed
   activity load keeps its own retry and does not fall through to "Not measured".
 
-## Outdoor recorder (2026-10-01, `cursor/phone-recorder-d3c3`)
+## Outdoor recorder (2026-10-01, on main through #29)
+
+The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 
 - **Entry:** Home `quick-record` sits under the quick row, below Today. It opens
   `/record` (`frontend/app/record/index.tsx`). A finished recording opens
@@ -406,3 +412,24 @@ through the shared module.
   wearable_metrics write. No background location task.
 - **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
   bridge emits the browser watch id, which does not match its subscriber id.
+
+## Interaction affordance (verified 2026-10-01, main `6422411`)
+
+- There was no shared press or hover helper. `frontend/src/affordance.ts`
+  (`useReducedMotion`, `pressableStyle`) is that helper. Web hover is 140ms.
+  Reduced motion keeps the color or opacity change and drops scale and the
+  transition. Disabled controls return no extra style.
+- React Native Web `Pressable` already sets `cursor: pointer`, and
+  `app/+html.tsx` does the same for buttons and tabs. `hovered` is passed at
+  runtime and is absent from the React Native style-callback type.
+- The default bottom-tab button uses `pressOpacity: 1` and no `hoverEffect`.
+  `app/(tabs)/_layout.tsx` replaces it with `TabBarButton`, which still
+  forwards `href` and ignores modified clicks so a plain click stays in the
+  app.
+- `MuscleHeatmap` is shared with `/muscles` (opened from the workout logger)
+  through a relative import in `muscle-explorer.tsx`. `LiveNowStrip` is shared
+  with Community. Both take `affordance` (default off). Home passes it. The
+  SVG muscle regions already highlight the selected muscle and were left alone.
+- `recorder.spec.ts` and `activity-day.spec.ts` assert computed background and
+  text colors. Primary hover uses `filter: brightness(1.06)` so the chartreuse
+  fill stays `rgb(214, 227, 90)`. Activity hover never uses `colors.brand`.

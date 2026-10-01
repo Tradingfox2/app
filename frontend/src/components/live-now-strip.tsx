@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { api, type LiveNowSession } from "@/src/api";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -11,8 +12,9 @@ const REFRESH_MS = 20000;
  * Sessions the signed-in member can join right now.
  * Renders nothing when the list is empty or the request fails.
  */
-export function LiveNowStrip({ inset = false }: { inset?: boolean }) {
+export function LiveNowStrip({ inset = false, affordance = false }: { inset?: boolean; affordance?: boolean }) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const [sessions, setSessions] = useState<LiveNowSession[]>([]);
 
@@ -56,7 +58,11 @@ export function LiveNowStrip({ inset = false }: { inset?: boolean }) {
               accessibilityLabel={`${t("JOIN")} ${session.title}`}
               testID={`live-now-${session.id}`}
               onPress={() => router.push({ pathname: "/live/[id]", params: { id: session.id } })}
-              style={styles.card}
+              style={
+                affordance
+                  ? (state) => [styles.card, pressableStyle(state, { variant: "surface", reduceMotion })]
+                  : styles.card
+              }
             >
               <View style={styles.badge}>
                 <View style={styles.dot} />

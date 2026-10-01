@@ -1,12 +1,86 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
+import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import { Redirect, Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors } from "@/src/theme";
-import { ActivityIndicator, Platform, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  View,
+  type GestureResponderEvent,
+  type PressableProps,
+} from "react-native";
 import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { useI18n } from "@/src/i18n";
 import { useShellScreenView } from "@/src/screen-view";
+
+type AnchorPressableProps = PressableProps & { href?: string };
+
+const AnchorPressable = Pressable as ComponentType<AnchorPressableProps>;
+
+function isPlainActivation(event: GestureResponderEvent | { preventDefault?: () => void }): boolean {
+  const click = event as GestureResponderEvent & {
+    metaKey?: boolean;
+    altKey?: boolean;
+    ctrlKey?: boolean;
+    shiftKey?: boolean;
+    button?: number;
+    currentTarget?: { target?: string };
+    preventDefault?: () => void;
+  };
+  const hasModifier = Boolean(click.metaKey || click.altKey || click.ctrlKey || click.shiftKey);
+  const isLeft = click.button == null || click.button === 0;
+  const target = click.currentTarget?.target;
+  const isSelf = target == null || target === "" || target === "_self";
+  return !hasModifier && isLeft && isSelf;
+}
+
+function TabBarButton({
+  children,
+  disabled,
+  href,
+  onPress,
+  style,
+  android_ripple,
+  pressColor: _pressColor,
+  pressOpacity: _pressOpacity,
+  hoverEffect: _hoverEffect,
+  ...rest
+}: BottomTabBarButtonProps) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <AnchorPressable
+      {...rest}
+      disabled={disabled}
+      href={href}
+      android_ripple={
+        disabled
+          ? undefined
+          : { borderless: true, ...android_ripple, color: "rgba(242, 243, 244, 0.14)" }
+      }
+      onPress={(event) => {
+        if (Platform.OS === "web" && href != null) {
+          if (!isPlainActivation(event)) return;
+          event.preventDefault?.();
+        }
+        onPress?.(event);
+      }}
+      style={(state) => [
+        style,
+        pressableStyle(state, {
+          variant: "quiet",
+          reduceMotion,
+          disabled: Boolean(disabled),
+        }),
+      ]}
+    >
+      {children}
+    </AnchorPressable>
+  );
+}
 
 function badge(count: number): string | undefined {
   if (count <= 0) return undefined;
@@ -64,6 +138,7 @@ export default function TabsLayout() {
           fontWeight: "700",
           letterSpacing: 0.2,
         },
+        tabBarButton: (props) => <TabBarButton {...props} />,
       }}
     >
       <Tabs.Screen

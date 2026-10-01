@@ -28,6 +28,7 @@ import {
 } from "@/src/activity-day";
 import { ActivityRing } from "@/src/components/activity-ring";
 import { useI18n } from "@/src/i18n";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing, type } from "@/src/theme";
 
 type FigureState =
@@ -55,6 +56,7 @@ export default function ActivityDayScreen() {
   const rawDay = Array.isArray(params.day) ? params.day[0] : params.day;
   const dayKey = parseDayKey(rawDay);
   const { t, formatDate, formatNumber } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [workouts, setWorkouts] = useState<ActivityWorkout[] | null>(null);
   const [workoutError, setWorkoutError] = useState<string | null>(null);
   const [workoutSettled, setWorkoutSettled] = useState(false);
@@ -236,7 +238,7 @@ export default function ActivityDayScreen() {
             accessibilityLabel={t("Back")}
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
             hitSlop={12}
-            style={styles.back}
+            style={(state) => [styles.back, pressableStyle(state, { variant: "quiet", reduceMotion })]}
             testID="activity-back"
           >
             <Ionicons name="chevron-back" size={26} color={colors.text} />
@@ -259,7 +261,11 @@ export default function ActivityDayScreen() {
                 accessibilityState={{ selected: selectedDay }}
                 testID={`activity-day-${day.key}`}
                 onPress={() => router.setParams({ day: day.key })}
-                style={[styles.weekDay, selectedDay && styles.weekDayOn]}
+                style={(state) => [
+                  styles.weekDay,
+                  selectedDay && styles.weekDayOn,
+                  pressableStyle(state, { variant: "quiet", reduceMotion }),
+                ]}
               >
                 <Text style={[styles.weekLetter, selectedDay && styles.weekLetterOn]}>
                   {formatDate(day.date, { weekday: "narrow" })}
@@ -335,6 +341,7 @@ function distancePrimary(
 
 function FigureBody({ state }: { state: FigureState }) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   switch (state.kind) {
     case "loading":
       return <View style={styles.skeleton} accessibilityLabel={t("Loading activity")} />;
@@ -346,7 +353,7 @@ function FigureBody({ state }: { state: FigureState }) {
             accessibilityRole="button"
             onPress={state.onRetry}
             testID={state.retryTestID}
-            style={styles.retryBtn}
+            style={(press) => [styles.retryBtn, pressableStyle(press, { variant: "hairline", reduceMotion })]}
           >
             <Text style={styles.retryTxt}>{t("Retry")}</Text>
           </Pressable>
@@ -385,6 +392,7 @@ function HourChart({
   formatNumber: (value: number) => string;
 }) {
   const [width, setWidth] = useState(0);
+  const reduceMotion = useReducedMotion();
   if (loading) {
     return <View style={styles.skeleton} accessibilityLabel={t("Loading activity")} testID="activity-hours-loading" />;
   }
@@ -392,7 +400,12 @@ function HourChart({
     return (
       <View style={styles.errorBanner} accessibilityRole="alert">
         <Text style={styles.errorTxt} testID="activity-hours-error">{error ?? t("Could not load this day")}</Text>
-        <Pressable accessibilityRole="button" onPress={onRetry} testID="activity-hours-retry" style={styles.retryBtn}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onRetry}
+          testID="activity-hours-retry"
+          style={(state) => [styles.retryBtn, pressableStyle(state, { variant: "hairline", reduceMotion })]}
+        >
           <Text style={styles.retryTxt}>{t("Retry")}</Text>
         </Pressable>
       </View>

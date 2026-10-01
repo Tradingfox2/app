@@ -37,6 +37,7 @@ import {
 } from "@/src/recorder-math";
 import { useI18n } from "@/src/i18n";
 import { storage } from "@/src/utils/storage";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing } from "@/src/theme";
 
 const PENDING_KEY = "ironflow_pending_recording";
@@ -50,6 +51,7 @@ function messageOf(cause: unknown, fallback: string): string {
 
 export default function RecordScreen() {
   const { t, formatNumber } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [kind, setKind] = useState<Sport>("walk");
   const [phase, setPhase] = useState<Phase>("idle");
   const [movingMs, setMovingMs] = useState(0);
@@ -315,7 +317,7 @@ export default function RecordScreen() {
             accessibilityLabel={t("Back")}
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
             hitSlop={12}
-            style={styles.back}
+            style={(state) => [styles.back, pressableStyle(state, { variant: "quiet", reduceMotion })]}
             testID="record-back"
           >
             <Ionicons name="chevron-back" size={26} color={colors.text} />
@@ -330,7 +332,7 @@ export default function RecordScreen() {
               accessibilityRole="button"
               onPress={() => void saveBody(pending)}
               disabled={saving}
-              style={styles.bannerBtn}
+              style={(state) => [styles.bannerBtn, pressableStyle(state, { variant: "surface", reduceMotion, disabled: saving })]}
               testID="record-pending-retry"
             >
               <Text style={styles.bannerBtnTxt}>{saving ? t("SAVING...") : t("Try again")}</Text>
@@ -341,17 +343,26 @@ export default function RecordScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {SPORTS.map((sport) => {
             const selected = sport === kind;
+            const locked = phase !== "idle" || saving;
             return (
               <Pressable
                 key={sport}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                disabled={phase !== "idle" || saving}
+                disabled={locked}
                 onPress={() => {
                   kindRef.current = sport;
                   setKind(sport);
                 }}
-                style={[styles.chip, selected && styles.chipOn]}
+                style={(state) => [
+                  styles.chip,
+                  selected && styles.chipOn,
+                  pressableStyle(state, {
+                    variant: selected ? "mark" : "surface",
+                    reduceMotion,
+                    disabled: locked,
+                  }),
+                ]}
                 testID={`sport-${sport}`}
               >
                 <Text style={[styles.chipTxt, selected && styles.chipTxtOn]}>{t(sportTitle(sport))}</Text>
@@ -412,7 +423,7 @@ export default function RecordScreen() {
                   sensorGen.current += 1;
                   void beginSensors(sensorGen.current);
                 }}
-                style={styles.bannerBtn}
+                style={(state) => [styles.bannerBtn, pressableStyle(state, { variant: "surface", reduceMotion })]}
                 testID="record-allow-location"
               >
                 <Text style={styles.bannerBtnTxt}>{t("ALLOW LOCATION")}</Text>
@@ -422,7 +433,7 @@ export default function RecordScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("OPEN SETTINGS")}
               onPress={() => void Linking.openSettings()}
-              style={styles.bannerBtn}
+              style={(state) => [styles.bannerBtn, pressableStyle(state, { variant: "surface", reduceMotion })]}
               testID="record-location-settings"
             >
               <Text style={styles.bannerBtnTxt}>{t("OPEN SETTINGS")}</Text>
@@ -437,7 +448,7 @@ export default function RecordScreen() {
             accessibilityRole="button"
             accessibilityLabel={t("START")}
             onPress={start}
-            style={styles.start}
+            style={(state) => [styles.start, pressableStyle(state, { variant: "primary", reduceMotion })]}
             testID="record-start"
           >
             <Text style={styles.startTxt}>{t("START")}</Text>
@@ -445,11 +456,21 @@ export default function RecordScreen() {
         ) : (
           <View style={styles.actions}>
             {phase === "recording" ? (
-              <Pressable accessibilityRole="button" onPress={pause} style={styles.secondary} testID="record-pause">
+              <Pressable
+                accessibilityRole="button"
+                onPress={pause}
+                style={(state) => [styles.secondary, pressableStyle(state, { variant: "surface", reduceMotion })]}
+                testID="record-pause"
+              >
                 <Text style={styles.secondaryTxt}>{t("PAUSE")}</Text>
               </Pressable>
             ) : (
-              <Pressable accessibilityRole="button" onPress={start} style={styles.secondary} testID="record-resume">
+              <Pressable
+                accessibilityRole="button"
+                onPress={start}
+                style={(state) => [styles.secondary, pressableStyle(state, { variant: "surface", reduceMotion })]}
+                testID="record-resume"
+              >
                 <Text style={styles.secondaryTxt}>{t("RESUME")}</Text>
               </Pressable>
             )}
@@ -458,7 +479,12 @@ export default function RecordScreen() {
               accessibilityLabel={t("FINISH")}
               disabled={!canFinish}
               onPress={finish}
-              style={[styles.start, styles.finish, !canFinish && styles.finishOff]}
+              style={(state) => [
+                styles.start,
+                styles.finish,
+                !canFinish && styles.finishOff,
+                pressableStyle(state, { variant: "primary", reduceMotion, disabled: !canFinish }),
+              ]}
               testID="record-finish"
             >
               <Text style={[styles.startTxt, !canFinish && styles.finishOffTxt]}>

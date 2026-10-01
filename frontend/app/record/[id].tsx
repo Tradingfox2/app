@@ -17,6 +17,7 @@ import {
   type Fix,
 } from "@/src/recorder-math";
 import { useI18n } from "@/src/i18n";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing } from "@/src/theme";
 
 function messageOf(cause: unknown, fallback: string): string {
@@ -47,6 +48,7 @@ export default function RecordSummaryScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const { t, formatNumber } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [workout, setWorkout] = useState<Record<string, unknown> | null>(null);
   const [segments, setSegments] = useState<Fix[][] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +120,7 @@ export default function RecordSummaryScreen() {
             accessibilityLabel={t("Back")}
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
             hitSlop={12}
-            style={styles.back}
+            style={(state) => [styles.back, pressableStyle(state, { variant: "quiet", reduceMotion })]}
             testID="record-summary-back"
           >
             <Ionicons name="chevron-back" size={26} color={colors.text} />
@@ -130,7 +132,12 @@ export default function RecordSummaryScreen() {
         {error ? (
           <View>
             <Text accessibilityRole="alert" style={styles.error} testID="record-summary-error">{error}</Text>
-            <Pressable accessibilityRole="button" onPress={() => void load()} testID="record-summary-retry">
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void load()}
+              testID="record-summary-retry"
+              style={(state) => pressableStyle(state, { variant: "quiet", reduceMotion })}
+            >
               <Text style={styles.retry}>{t("Retry")}</Text>
             </Pressable>
           </View>
