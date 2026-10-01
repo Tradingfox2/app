@@ -18,6 +18,7 @@ import {
   loggedMinutes,
   parseDayKey,
   readDailyMetric,
+  recordedDistanceRows,
   rollupSets,
   weekActivity,
   workoutIdsOnDay,
@@ -123,8 +124,9 @@ export default function ActivityDayScreen() {
       return undefined;
     }
     const ids = workoutIdsOnDay(workouts, dayKey);
+    const recorded = recordedDistanceRows(workouts, dayKey);
     if (ids.length === 0) {
-      setSetsState({ kind: "ready", day: dayKey, rollup: { tonnageKg: null, distanceM: null } });
+      setSetsState({ kind: "ready", day: dayKey, rollup: rollupSets(recorded) });
       return undefined;
     }
     let cancel = false;
@@ -136,7 +138,7 @@ export default function ActivityDayScreen() {
           setSetsState({ kind: "error", day: dayKey, message: t("Could not load distance") });
           return;
         }
-        setSetsState({ kind: "ready", day: dayKey, rollup: rollupSets(groups.flat()) });
+        setSetsState({ kind: "ready", day: dayKey, rollup: rollupSets([...groups.flat(), ...recorded]) });
       })
       .catch((cause: unknown) => {
         if (cancel) return;

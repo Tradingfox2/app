@@ -1,6 +1,6 @@
 # Native permissions
 
-This is the operating-system permission checklist for the Expo app in `frontend/`. It is not `frontend/src/permissions.ts`. That file is the community role bitmask and has nothing to do with the camera, photos, or notifications.
+This is the operating-system permission checklist for the Expo app in `frontend/`. It is not `frontend/src/permissions.ts`. That file is the community role bitmask and has nothing to do with the camera, photos, location, motion, or notifications.
 
 A denied permission must leave the screen usable. None of these flows crash, retry in a loop, or pretend the permission was granted.
 
@@ -72,6 +72,32 @@ Turning Push on:
 Turning Push off only updates the server preference. It does not revoke the OS permission; the member does that in system Settings. Signing out still calls `unregisterPush()` for the token this install registered.
 
 Opening settings while Push is already on and the OS has blocked alerts shows the same blocked copy and Settings button, without prompting again (`devicePushPermission()`).
+
+## Location while recording
+
+| | |
+| --- | --- |
+| Why | Measure the route, distance, pace, or speed of a walk, run, ride, or hike the member starts themselves. |
+| Where | `frontend/app/record/index.tsx`. The prompt runs when the member taps **START**, not at launch. |
+| iOS string | `NSLocationWhenInUseUsageDescription`: "Record the route, distance, and pace of a walk, run, or ride while this screen is open." The `expo-location` plugin repeats that string. |
+| Android | `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION`. |
+
+There is no background location permission and no always-on tracking. Leaving the screen pauses the recording. Hiking asks for a coarser fix (`Balanced`, about 20 meters). The other sports ask for a fine fix. GPS altitude is not used.
+
+Deny behavior: the clock still runs. Distance, pace, speed, and the route stay **Not measured**. The screen offers **ALLOW LOCATION** when the system will ask again, and **OPEN SETTINGS** either way. A saved recording with no accepted fixes stores no route and no distance.
+
+## Motion while recording
+
+| | |
+| --- | --- |
+| Why | Count steps during a walk, run, or hike while that recording is running. |
+| Where | `Pedometer.watchStepCount` from `expo-sensors`, started with the recording. |
+| iOS string | `NSMotionUsageDescription`: "Count steps during a walk, run, or hike while the recording is running." |
+| Android | `ACTIVITY_RECOGNITION`. |
+
+If the phone cannot count steps, the figure stays **Not measured**. A zero from a missing counter is not stored. Pausing the recording stops the counter so steps taken during the pause are not added.
+
+Elevation uses the barometer's relative altitude when that reading exists. A pressure-only sensor does not become elevation. There is no extra permission for the barometer beyond motion on the phones that expose it.
 
 ## Microphone
 

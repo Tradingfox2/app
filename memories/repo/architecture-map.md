@@ -372,8 +372,9 @@ through the shared module.
   `calories`. Finished `duration_sec` is split across the local hours it
   occupied; hours with none are omitted. Tonnage and distance come from
   `GET /workouts/{id}/sets` (`weight_kg × reps`, `distance_m`) for sessions
-  that started that local day. `workout_sets.distance_m` still has no writer
-  in the logger. Wearable `calories` means Terra `total_burned_calories` or
+  that started that local day, plus `activity.distance_m` from a finished
+  phone recording (`recordedDistanceRows`). `workout_sets.distance_m` still has
+  no writer in the logger. Wearable `calories` means Terra `total_burned_calories` or
   Samsung active calories, one row per day — not Move, and not hourly.
   `import_day` wins over `recorded_at` when the importer set it. `simulated:
   true` is sample data. A missing or non-positive figure stays "Not measured",
@@ -382,3 +383,26 @@ through the shared module.
   `/home/today` shows `week-retry`. A quiet week shows `week-empty`. A failed
   `/workouts` shows `week-days-retry` and keeps the last totals. A failed
   activity load keeps its own retry and does not fall through to "Not measured".
+
+## Outdoor recorder (2026-10-01, `cursor/phone-recorder-d3c3`)
+
+- **Entry:** Home `quick-record` sits under the quick row, below Today. It opens
+  `/record` (`frontend/app/record/index.tsx`). A finished recording opens
+  `/record/[id]`, including from the workouts list when `item.activity` is set.
+  Strength sessions still open `/workout/[id]`. The logger, rest timer, feed,
+  and audience are unchanged.
+- **Save:** `POST /api/workouts/recorded` inserts an already-finished workout
+  (`source: phone_recorder`, `duration_sec` = moving time). It does not call
+  `finish_workout` and does not leave `ended_at` null, so it does not become
+  Home `active_workout`. Idempotent on `(user_id, activity.client_id)`.
+  Client distance is rejected (`extra=forbid`). The server haversine is the
+  stored `activity.distance_m`. The trace is `workout_routes`, owner-only
+  `GET /workouts/{id}/route` (a coach who can open the workout still gets 403).
+- **Honesty:** time is the moving clock. GPS distance, pace or speed, and the
+  route come from accepted fixes. A gap over 20s or an impossible jump is not
+  drawn. Hike uses coarse GPS (50 m accuracy ceiling, 4 m/s). Steps are stored
+  only when the pedometer counted some during the recording. Elevation is
+  barometer relative altitude only, with a 1 m deadband. No calories. No
+  wearable_metrics write. No background location task.
+- **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
+  bridge emits the browser watch id, which does not match its subscriber id.

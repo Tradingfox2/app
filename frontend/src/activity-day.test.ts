@@ -4,6 +4,7 @@ import {
   loggedMinutes,
   parseDayKey,
   readDailyMetric,
+  recordedDistanceRows,
   rollupSets,
   weekActivity,
   workoutIdsOnDay,
@@ -130,6 +131,41 @@ const sample = readDailyMetric(
 );
 assert.equal(sample?.simulated, true);
 assert.equal(sample?.value, 2200);
+
+const recorded = recordedDistanceRows(
+  [
+    {
+      id: "rec",
+      started_at: "2026-10-01T18:10:00",
+      ended_at: "2026-10-01T18:30:00",
+      duration_sec: 1200,
+      activity: { distance_m: 3200, kind: "run" },
+    },
+    {
+      id: "plain",
+      started_at: "2026-10-01T08:00:00",
+      ended_at: "2026-10-01T08:20:00",
+      duration_sec: 1200,
+    },
+    {
+      id: "empty",
+      started_at: "2026-10-01T09:00:00",
+      ended_at: "2026-10-01T09:10:00",
+      duration_sec: 600,
+      activity: { distance_m: 0 },
+    },
+    {
+      id: "other-day",
+      started_at: "2026-10-02T09:00:00",
+      ended_at: "2026-10-02T09:10:00",
+      duration_sec: 600,
+      activity: { distance_m: 500 },
+    },
+  ],
+  day,
+);
+assert.deepEqual(recorded, [{ distance_m: 3200 }]);
+assert.deepEqual(rollupSets([...[{ distance_m: 400 }], ...recorded]), { tonnageKg: null, distanceM: 3600 });
 
 assert.equal(loggedMinutes(5400), 90);
 assert.equal(loggedMinutes(20), null);

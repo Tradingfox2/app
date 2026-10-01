@@ -455,6 +455,16 @@ export default function Home() {
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={t("Record a walk, run, or ride")}
+          testID="quick-record"
+          style={styles.coachRow}
+          onPress={() => router.push("/record" as Href)}
+        >
+          <Ionicons name="walk-outline" size={18} color={colors.text} />
+          <Text style={styles.coachRowTxt}>{t("RECORD OUTSIDE")}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel={t("TRAIN WITH A COACH")}
           testID="quick-coach"
           style={styles.coachRow}
