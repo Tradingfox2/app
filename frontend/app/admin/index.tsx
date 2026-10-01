@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole, SupportMessage, SupportTicket, SupportTicketDetail, SupportTicketStatus } from "@/src/api";
+import { AccountingPanel } from "@/src/components/admin/accounting-panel";
 import { AnalyticsPanel } from "@/src/components/admin/analytics-panel";
 import { staffTicketStatusLabel } from "@/src/components/support/copy";
 import { track } from "@/src/analytics";
@@ -12,13 +13,14 @@ import { selectedControl } from "@/src/community-copy";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
-type Tab = "overview" | "analytics" | "support" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit";
+type Tab = "overview" | "analytics" | "accounting" | "support" | "reports" | "coaches" | "joins" | "communities" | "users" | "team" | "audit";
 type CoachFilter = "pending" | "approved" | "rejected" | "suspended";
 type Status = "all" | "active" | "suspended" | "staff";
 
 const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: "overview", label: "OVERVIEW", icon: "grid-outline" },
   { id: "analytics", label: "ANALYTICS", icon: "pulse-outline" },
+  { id: "accounting", label: "ACCOUNTING", icon: "cash-outline" },
   { id: "support", label: "SUPPORT", icon: "chatbubbles-outline" },
   { id: "reports", label: "REPORTS", icon: "flag-outline" },
   { id: "coaches", label: "COACHES", icon: "ribbon-outline" },
@@ -343,6 +345,7 @@ export default function AdminConsole() {
       <View style={styles.tabs}>
         {NAV.filter(item => {
           if (item.id === "analytics") return can("analytics.read");
+          if (item.id === "accounting") return can("accounting.read");
           if (item.id === "support") return can("tickets.read");
           return true;
         }).map(item => {
@@ -716,6 +719,7 @@ export default function AdminConsole() {
         </> : null}
 
         {tab === "analytics" && can("analytics.read") ? <AnalyticsPanel /> : null}
+        {tab === "accounting" && can("accounting.read") ? <AccountingPanel /> : null}
 
         {tab === "audit" ? <>
           <Text style={styles.hint}>{t("Append-only record of every staff action.")}</Text>

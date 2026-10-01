@@ -404,5 +404,7 @@ through the shared module.
   only when the pedometer counted some during the recording. Elevation is
   barometer relative altitude only, with a 1 m deadband. No calories. No
   wearable_metrics write. No background location task.
+
+- **2026-10-01 — staff accounting:** `backend/accounting.py` owns `GET /admin/accounting/summary` (`accounting.read`, admin staff only). It reads `community_checkouts`, `billing_events`, `subscriptions`, `partner_ledger`, `referrals`, and `commissions` when that collection exists. Totals are `{amount_cents, currency}` in the stored currency, with no conversion and no zero filled in for a missing or empty window. A failed read does not blank the report. Opening it writes `audit_log` action `accounting.viewed`. The console tab mounts `AccountingPanel` only after it is chosen.
 - **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
   bridge emits the browser watch id, which does not match its subscriber id.

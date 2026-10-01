@@ -101,6 +101,31 @@ export type AnalyticsSummary = {
   };
 };
 
+export type AccountingMoney = { amount_cents: number; currency: string | null };
+export type AccountingBucket =
+  | { state: "none_in_period" | "unavailable" }
+  | { state: "recorded"; amounts_stored: false; row_count: number }
+  | { state: "recorded"; amounts_stored: true; totals: AccountingMoney[] };
+export type AccountingCounts =
+  | { state: "none_in_period" | "unavailable" }
+  | { state: "recorded"; counts: { currency: string | null; count: number }[] };
+export type AccountingLine = {
+  kind: string; stripe_id: string | null; currency: string | null;
+  cents: number | null; when: string | null; status: string | null;
+};
+export type AccountingSummary = {
+  period: { from: string; to: string };
+  generated_at: string;
+  sections: {
+    gross_collected: AccountingBucket; platform_fees: AccountingBucket; owed_to_coaches: AccountingBucket;
+    refunds: AccountingBucket; chargebacks: AccountingBucket;
+    commissions: { pending: AccountingBucket; paid: AccountingBucket };
+    referrals: { pending: AccountingBucket; paid: AccountingBucket };
+    active_subscriptions: AccountingCounts;
+  };
+  recent_lines: AccountingLine[];
+};
+
 export type AdminOverview = {
   users: { total: number; new_7d: number; suspended: number; coaches: number };
   queues: {
@@ -1207,6 +1232,8 @@ export const api = {
     request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
   adminAuditLog: () => request<AuditEntry[]>("/admin/audit-log"),
   adminAnalytics: () => request<AnalyticsSummary>("/admin/analytics"),
+  adminAccounting: (from: string, to: string) =>
+    request<AccountingSummary>(`/admin/accounting/summary?from=${from}&to=${to}`),
   /** Authenticated product-event ingest. `track` in `./analytics` is the caller. */
   ingestEvents: (body: {
     name: string;
