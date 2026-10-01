@@ -29,6 +29,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
 import media_storage
+import readiness
 from locales import DEFAULT_LOCALE, SUPPORTED_LOCALES, normalize_locale
 
 ROOT_DIR = Path(__file__).parent
@@ -1032,9 +1033,19 @@ async def home_today(user: dict = Depends(current_user)):
 
     GET /dashboard returns this same document so the existing home client
     does not need a second request. Daily tips still call dashboard_snapshot
-    on its own and do not load club activity.
+    on its own and do not load club activity. ``readiness`` rides on this
+    payload; Home does not call GET /readiness/today to paint.
     """
     return await home_today_for(user["id"])
+
+
+@api.get("/readiness/today")
+async def readiness_today(user: dict = Depends(current_user)):
+    """Today's IronFlow Readiness for the signed-in athlete.
+
+    The same object is on GET /home/today. This route is optional.
+    """
+    return await readiness.today_for(db, user["id"], now())
 
 
 async def dashboard_snapshot(uid: str) -> dict:
@@ -1321,6 +1332,7 @@ async def home_today_for(uid: str) -> dict:
     snap = await dashboard_snapshot(uid)
     snap["next_session"] = await next_planned_session(uid)
     snap["clubs"] = await light_club_activity(uid)
+    snap["readiness"] = await readiness.today_for(db, uid, now())
     return snap
 
 

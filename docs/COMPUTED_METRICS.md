@@ -31,6 +31,19 @@ There is no `workout_templates` table unless a later product decision proves it 
 
 Reuse `programs` (`public.programs`) or duplicate a finished workout. Exercises queued before logging live on the workout as `planned_exercise_slugs` (`WorkoutIn` in `backend/server.py`).
 
+## Readiness
+
+IronFlow Readiness is not stored. `backend/readiness.py` is the only place that computes it. `GET /api/readiness/today` and the `readiness` object on `GET /home/today` return `{score, verdict, confidence, components, missing}`.
+
+`score` is an integer from 0 to 100, or null when nothing could be scored. Null means unknown. A score of 0 means the present inputs scored at the floor. `verdict` is `push` at 67 and above, `steady` from 34 through 66, `rest` below 34, and null when `score` is null. `confidence` is the fraction of the 100 weight points whose inputs were present (0–1).
+
+When an input is present its weight is HRV 35, resting heart rate 20, sleep 25, and acute:chronic load 20. Missing inputs are dropped and the remaining weights are renormalized. A missing or non-positive measurement is left out of `components` and named in `missing`. It is not scored as 0, and no wearable number is invented to fill it.
+
+- HRV: `clamp(75 + 250 × (latest / 14-day mean − 1))`. The mean needs at least three other positive samples in the last 14 days. The latest reading is excluded from its own baseline. A reading older than 48 hours is not used.
+- Resting heart rate: `clamp(75 − 5 × (latest − 14-day mean))`, in beats per minute, with the same baseline rules. Higher than baseline lowers the score.
+- Sleep: `clamp(100 × min(hours, 8) / 8)`. The need is 8 hours, the midpoint of the adult 7–9 hour range. It is a constant, not a measured wearable value.
+- Load: acute:chronic = `load_7d / (load_28d / 4)`, then `clamp(75 − 125 × (ratio − 1))`. A stored `training_load` series on `wearable_metrics` is the load. Until that series exists, each finished workout contributes `perceived_effort × duration_sec / 60` when both numbers are positive. No such load leaves the component out. `load_28d` of 0 cannot form a ratio, so the component is missing rather than 0.
+
 ## Out of scope
 
 Presence, `last_seen`, and a PR cache are P2. They are not part of this change.
