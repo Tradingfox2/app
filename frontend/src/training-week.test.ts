@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { localDayKey, readTrainingTotals, readWorkoutCount, trainingCalendar } from "./training-week.ts";
+import { loadRingMax, localDayKey, readTrainingLoad, readTrainingTotals, readWorkoutCount, trainingCalendar } from "./training-week.ts";
 
 const now = new Date(2026, 9, 1, 15, 30, 0);
 
@@ -46,3 +46,11 @@ assert.equal(readTrainingTotals({ training: {} }), null);
 assert.equal(readTrainingTotals({ training: { sets_week: 1, tonnage_week_kg: 0, minutes_week: 0, muscles_week: [], streak_days: 0 } })?.sets, 1);
 assert.equal(readWorkoutCount([]), null);
 assert.equal(readWorkoutCount({ workouts_this_week: "3" }), null);
+
+const load = readTrainingLoad({
+  training: { sets_week: 1, load_week: 420, load_28d_avg: 300, acwr: 1.4 },
+});
+assert.deepEqual(load, { week: 420, avg28d: 300, acwr: 1.4 });
+assert.equal(loadRingMax(load), 420);
+assert.deepEqual(readTrainingLoad({ training: { sets_week: 0 } }), { week: null, avg28d: null, acwr: null });
+assert.equal(readTrainingLoad(null), null);

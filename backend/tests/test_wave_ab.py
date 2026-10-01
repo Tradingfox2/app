@@ -5,6 +5,7 @@ Requests go through the ASGI app against a throwaway Mongo database.
 import asyncio
 import os
 import uuid
+from datetime import timedelta
 
 from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -379,5 +380,62 @@ def test_home_today_without_a_program_or_club_stays_empty(monkeypatch):
             assert home.json()["clubs"] == []
             assert home.json()["active_workout"] is None
             assert home.json()["training"]["streak_days"] == 0
+            assert home.json()["training"]["load_week"] is None
+            assert home.json()["training"]["load_28d_avg"] is None
+            assert home.json()["training"]["acwr"] is None
+
+    run_isolated(scenario)
+
+
+def test_finish_stores_session_load_and_old_rows_are_computed_on_read(monkeypatch):
+    async def scenario(database):
+        bind(monkeypatch, database)
+        await database.users.insert_one(account("alice"))
+        moment = server.now()
+        await database.workouts.insert_one({
+            "id": "old-session",
+            "user_id": "alice",
+            "title": "Old",
+            "started_at": moment - timedelta(days=2),
+            "ended_at": moment - timedelta(days=2) + timedelta(hours=1),
+            "duration_sec": 1800,
+            "perceived_effort": 8,
+            "created_at": moment,
+        })
+        transport = ASGITransport(app=server.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            opened = await client.post(
+                "/api/workouts",
+                headers=auth("alice"),
+                json={"title": "Load day", "perceived_effort": 6},
+            )
+            workout_id = opened.json()["id"]
+            await database.workouts.update_one(
+                {"id": workout_id},
+                {"$set": {"started_at": moment - timedelta(minutes=30)}},
+            )
+            finished = await client.post(f"/api/workouts/{workout_id}/finish", headers=auth("alice"))
+            assert finished.status_code == 200, finished.text
+            body = finished.json()
+            assert body["load_au"] == round(6 * body["duration_sec"] / 60, 1)
+            again = await client.post(f"/api/workouts/{workout_id}/finish", headers=auth("alice"))
+            assert again.json()["load_au"] == body["load_au"]
+
+            plain = await client.post(
+                "/api/workouts", headers=auth("alice"), json={"title": "No effort"},
+            )
+            plain_done = await client.post(
+                f"/api/workouts/{plain.json()['id']}/finish", headers=auth("alice"),
+            )
+            assert plain_done.json().get("load_au") is None
+
+            home = await client.get("/api/home/today", headers=auth("alice"))
+            training = home.json()["training"]
+            expected_week = round(240 + body["load_au"], 1)
+            assert training["load_week"] == expected_week
+            assert training["load_28d_avg"] == round(expected_week / 4, 1)
+            assert training["acwr"] == round(expected_week / training["load_28d_avg"], 2)
+            stored = await database.workouts.find_one({"id": "old-session"})
+            assert "load_au" not in stored
 
     run_isolated(scenario)

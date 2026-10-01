@@ -58,6 +58,7 @@ export const waveAMessages: Record<SupportedLocale, Messages> = {
     "{day}, rest": "{day}, repos",
     "{day}, trained, today": "{day}, entraîné, aujourd'hui",
     "{day}, rest, today": "{day}, repos, aujourd'hui",
+    LOAD: "CHARGE",
   },
   de: {
     "TRAINING PLAN": "TRAININGSPLAN",
