@@ -150,12 +150,19 @@ test("a run can be started, stopped, and saved onto the activity day", async ({ 
 
   await page.goto("/home");
   await expect(page.getByTestId("today-card")).toBeVisible();
-  const viewport = page.viewportSize();
-  const todayBox = await page.getByTestId("today-card").boundingBox();
-  const entry = await page.getByTestId("quick-record").boundingBox();
-  expect(todayBox && entry && viewport).toBeTruthy();
-  expect(todayBox!.y + todayBox!.height <= (viewport?.height ?? 844)).toBeTruthy();
-  expect(entry!.y).toBeGreaterThan(todayBox!.y + todayBox!.height - 2);
+  const fold = await page.evaluate(() => {
+    const today = document.querySelector("[data-testid='today-card']")?.getBoundingClientRect();
+    const entry = document.querySelector("[data-testid='quick-record']")?.getBoundingClientRect();
+    return {
+      height: window.innerHeight,
+      todayBottom: today ? today.bottom : null,
+      entryTop: entry ? entry.top : null,
+    };
+  });
+  expect(fold.todayBottom).not.toBeNull();
+  expect(fold.entryTop).not.toBeNull();
+  expect(fold.todayBottom!).toBeLessThanOrEqual(fold.height);
+  expect(fold.entryTop!).toBeGreaterThan(fold.todayBottom! - 2);
   const entryPaint = await page.getByTestId("quick-record").evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(entryPaint).not.toBe("rgb(214, 227, 90)");
 
