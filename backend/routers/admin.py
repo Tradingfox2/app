@@ -275,6 +275,10 @@ async def list_users(
         query["$or"] = [{"email": {"$regex": safe, "$options": "i"}},
                         {"full_name": {"$regex": safe, "$options": "i"}}, {"id": q.strip()}]
     rows = [clean(row) async for row in db.users.find(query, ACCOUNT_FIELDS).sort("created_at", -1).limit(limit)]
+    ids = [row["id"] for row in rows]
+    owned = set(await db.gyms.distinct("owner_user_id", {"owner_user_id": {"$in": ids}})) if ids else set()
+    for row in rows:
+        row["gym_owner"] = row["id"] in owned
     return {"users": rows, "count": len(rows)}
 
 

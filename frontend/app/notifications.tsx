@@ -32,6 +32,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   live_session: "radio-outline",
   program_adopted: "barbell-outline",
   join_request: "person-add-outline",
+  gym_reward: "gift-outline",
 };
 
 const PAGE = 30;
@@ -92,6 +93,10 @@ export default function NotificationsScreen() {
     }
     if (row.type === "program_adopted") {
       router.push("/program");
+      return;
+    }
+    if (row.type === "gym_reward") {
+      router.push("/checkin");
       return;
     }
     const sessionId = row.metadata?.session_id;

@@ -434,6 +434,8 @@ async def lifespan(app: FastAPI):
     await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
     # Product analytics: unique event id, and name+ts for the 24h / 7d rollup.
     await analytics.ensure_indexes(db)
+    # Bound at the bottom of this module (gyms imports wearables, which imports server).
+    await ensure_gym_indexes(db)
     await db.user_notes.create_index([("user_id", 1), ("created_at", -1)])
     # Read by _roles() on every permission resolve — the hot path for each
     # channel read and message write, so it must never be a collection scan.
@@ -1339,6 +1341,8 @@ from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import next_planned_session, router as program_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
+from routers.gyms import ensure_indexes as ensure_gym_indexes  # noqa: E402
+from routers.gyms import router as gyms_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
 from routers.tickets import router as tickets_router  # noqa: E402
@@ -1372,6 +1376,7 @@ api.include_router(recordings_router)
 api.include_router(notifications_router)
 api.include_router(search_router)
 api.include_router(wearables_router)
+api.include_router(gyms_router)
 api.include_router(muscles_router)
 api.include_router(tips_router)
 

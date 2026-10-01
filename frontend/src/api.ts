@@ -42,8 +42,37 @@ export type AdminAccount = {
   suspended_at: string | null;
   suspended_until: string | null;
   suspension_reason: string | null;
+  gym_owner?: boolean;
   stats?: { workouts: number; posts: number; communities: number; reports_against: number };
   notes?: { id: string; note: string; author_email: string; created_at: string }[];
+};
+
+export type GymRewardKind = "free_session" | "discount" | "merch" | "custom";
+export type GymPartnerStatus = "pending" | "active" | "paused";
+export type GymPlan = "free" | "partner";
+
+export type GymReward = {
+  id: string;
+  user_id: string;
+  gym_id: string;
+  code: string;
+  status: "issued" | "redeemed" | "expired";
+  expires_at: string;
+  title?: string;
+  kind?: GymRewardKind;
+  note?: string;
+  gym_name?: string;
+};
+
+export type OwnedGym = {
+  id: string;
+  name: string;
+  city?: string;
+  partner_status?: GymPartnerStatus;
+  plan?: GymPlan;
+  reward?: { title: string; kind: GymRewardKind; note?: string } | null;
+  members_today: number;
+  visits_week: number;
 };
 
 export type ModerationReport = {
@@ -1354,6 +1383,13 @@ export const api = {
       body: JSON.stringify({ qr_payload, workout_id }),
     }),
   gymVisits: () => request<any[]>("/gyms/visits"),
+  gymRewards: () => request<GymReward[]>("/gyms/rewards"),
+  myGyms: () => request<OwnedGym[]>("/gyms/mine"),
+  redeemGymReward: (gymId: string, code: string) =>
+    request<GymReward>(`/gyms/${encodeURIComponent(gymId)}/redeem`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
 
   tickets: (params?: { status?: TicketStatus; limit?: number }) => {
     const qs = new URLSearchParams();
