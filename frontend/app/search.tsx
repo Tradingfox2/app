@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -49,18 +50,18 @@ export default function SearchScreen() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <View style={styles.inputWrap}>
         <Ionicons name="search" size={16} color={colors.textDim} />
         <TextInput autoFocus value={query} onChangeText={value => { setQuery(value); if (value.startsWith("#")) setKind("tags"); }} maxLength={80} placeholder={t("Search people, communities, posts, #tags")} placeholderTextColor={colors.textDim} style={styles.input} testID="search-input" returnKeyType="search" />
-        {query ? <Pressable accessibilityRole="button" accessibilityLabel={t("Clear")} testID="search-clear" onPress={() => setQuery("")}><Ionicons name="close-circle" size={16} color={colors.textDim} /></Pressable> : null}
+        {query ? <Affordance accessibilityRole="button" accessibilityLabel={t("Clear")} testID="search-clear" onPress={() => setQuery("")}><Ionicons name="close-circle" size={16} color={colors.textDim} /></Affordance> : null}
       </View>
     </View>
     <View style={styles.tabs}>
       {(["users", "communities", "posts", "tags"] as SearchKind[]).map(item => (
-        <Pressable key={item} accessibilityRole="button" testID={`search-tab-${item}`} onPress={() => setKind(item)} style={[styles.tab, kind === item && styles.tabOn]}>
+        <Affordance key={item} accessibilityRole="button" testID={`search-tab-${item}`} onPress={() => setKind(item)} style={[styles.tab, kind === item && styles.tabOn]}>
           <Text style={[styles.tabText, kind === item && styles.tabTextOn]}>{t(item === "users" ? "PEOPLE" : item.toUpperCase())}</Text>
-        </Pressable>
+        </Affordance>
       ))}
     </View>
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -75,34 +76,34 @@ export default function SearchScreen() {
       renderItem={({ item }) => {
         if (kind === "users") {
           const person = item as SearchPerson;
-          return <Pressable accessibilityRole="button" testID={`result-user-${person.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: person.id } })} style={styles.row}>
+          return <Affordance accessibilityRole="button" testID={`result-user-${person.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: person.id } })} style={styles.row}>
             <View style={styles.avatar}><Text style={styles.avatarText}>{(person.full_name || "?").charAt(0).toUpperCase()}</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{person.full_name || t("Member")}</Text>
               <Text style={styles.meta}>{person.follow_state === "following" ? t("FOLLOWING") : person.follow_state === "pending" ? t("REQUESTED") : person.is_private ? t("Private") : " "}</Text>
             </View>
             {person.is_private ? <Ionicons name="lock-closed" size={14} color={colors.textDim} /> : null}
-          </Pressable>;
+          </Affordance>;
         }
         if (kind === "tags") {
           const row = item as SearchTag;
-          return <Pressable accessibilityRole="button" testID={`result-tag-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.row}>
+          return <Affordance accessibilityRole="button" testID={`result-tag-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.row}>
             <View style={styles.avatar}><Text style={styles.avatarText}>#</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>#{row.tag}</Text>
               <Text style={styles.meta}>{t("{count} posts").replace("{count}", String(row.posts))}</Text>
             </View>
-          </Pressable>;
+          </Affordance>;
         }
         if (kind === "communities") {
           const group = item as Community;
-          return <Pressable accessibilityRole="button" testID={`result-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
+          return <Affordance accessibilityRole="button" testID={`result-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
             <View style={styles.avatar}><Ionicons name="people" size={18} color={colors.text} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{group.name}</Text>
               <Text numberOfLines={1} style={styles.meta}>{t("{count} members").replace("{count}", String(group.member_count))}{group.description ? ` · ${group.description}` : ""}</Text>
             </View>
-          </Pressable>;
+          </Affordance>;
         }
         const post = item as Post;
         return <View testID={`result-post-${post.id}`}><PostCard post={post} onChange={next => setResults(prev => ({ ...prev, posts: prev.posts.map(row => row.id === next.id ? next : row) }))} onRemoved={() => setResults(prev => ({ ...prev, posts: prev.posts.filter(row => row.id !== post.id) }))} onReposted={() => undefined} /></View>;

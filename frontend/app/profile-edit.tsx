@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -127,28 +128,28 @@ export default function EditProfileScreen() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title}>{t("EDIT PROFILE")}</Text>
       <View style={{ flex: 1 }} />
-      <Pressable accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: !ready || !!busy || name.trim().length < 2, busy: busy === "save" }} testID="profile-save" disabled={!ready || !!busy || name.trim().length < 2} onPress={() => void save()} style={[styles.save, (!ready || !!busy || name.trim().length < 2) && styles.disabled]}>
+      <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t(SAVE_LABEL)} accessibilityState={{ disabled: !ready || !!busy || name.trim().length < 2, busy: busy === "save" }} testID="profile-save" disabled={!ready || !!busy || name.trim().length < 2} onPress={() => void save()} style={[styles.save, (!ready || !!busy || name.trim().length < 2) && styles.disabled]}>
         {busy === "save" ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.saveText}>{t(SAVE_LABEL)}</Text>}
-      </Pressable>
+      </Affordance>
     </View>
     {error ? <Text accessibilityRole="alert" testID="profile-save-error" style={styles.headerError}>{error}</Text> : null}
     {!ready && !error ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.lg }} /> : null}
     {ready ? <ScrollView contentContainerStyle={styles.body}>
-      <Pressable accessibilityRole="button" testID="profile-cover" disabled={!!busy} onPress={() => void pickImage("cover")} style={styles.cover}>
+      <Affordance accessibilityRole="button" testID="profile-cover" disabled={!!busy} onPress={() => void pickImage("cover")} style={styles.cover}>
         {cover.url && !removeCover ? <Image source={{ uri: mediaUrl(cover.url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : <Text style={styles.secondaryText}>{t("CHANGE COVER")}</Text>}
         {busy === "cover" ? <ActivityIndicator color={colors.text} /> : null}
-      </Pressable>
-      {cover.url && !removeCover ? <Pressable accessibilityRole="button" testID="profile-cover-remove" onPress={() => { setRemoveCover(true); setCover({ id: null, url: null }); }}><Text style={styles.remove}>{t("Remove cover")}</Text></Pressable> : null}
+      </Affordance>
+      {cover.url && !removeCover ? <Affordance accessibilityRole="button" testID="profile-cover-remove" onPress={() => { setRemoveCover(true); setCover({ id: null, url: null }); }}><Text style={styles.remove}>{t("Remove cover")}</Text></Affordance> : null}
       <View style={styles.photoRow}>
         <Avatar user={{ full_name: name || user?.email || "?", avatar_url: removeAvatar ? null : avatar.url }} size={96} />
         <View style={{ gap: spacing.sm }}>
-          <Pressable accessibilityRole="button" testID="profile-photo" disabled={!!busy} onPress={() => void pickImage("avatar")} style={styles.secondary}>
+          <Affordance accessibilityRole="button" testID="profile-photo" disabled={!!busy} onPress={() => void pickImage("avatar")} style={styles.secondary}>
             {busy === "upload" ? <ActivityIndicator color={colors.text} /> : <Text style={styles.secondaryText}>{t("CHANGE PHOTO")}</Text>}
-          </Pressable>
-          {(avatar.url && !removeAvatar) ? <Pressable accessibilityRole="button" testID="profile-photo-remove" onPress={() => { setRemoveAvatar(true); setAvatar({ id: null, url: null }); }}><Text style={styles.remove}>{t("Remove photo")}</Text></Pressable> : null}
+          </Affordance>
+          {(avatar.url && !removeAvatar) ? <Affordance accessibilityRole="button" testID="profile-photo-remove" onPress={() => { setRemoveAvatar(true); setAvatar({ id: null, url: null }); }}><Text style={styles.remove}>{t("Remove photo")}</Text></Affordance> : null}
         </View>
       </View>
       <Text style={styles.label}>{t("NAME")}</Text>
@@ -158,11 +159,11 @@ export default function EditProfileScreen() {
       <Text style={styles.counter}>{bio.length}/300</Text>
       <Text style={styles.label}>{t("SPORTS")}</Text>
       <View style={styles.chips}>
-        {sports.map(tag => <Pressable key={tag} accessibilityRole="button" accessibilityLabel={t("Remove {name}").replace("{name}", tag)} onPress={() => setSports(current => current.filter(item => item !== tag))} style={styles.chip}><Text style={styles.chipText}>{tag}</Text></Pressable>)}
+        {sports.map(tag => <Affordance key={tag} accessibilityRole="button" accessibilityLabel={t("Remove {name}").replace("{name}", tag)} onPress={() => setSports(current => current.filter(item => item !== tag))} style={styles.chip}><Text style={styles.chipText}>{tag}</Text></Affordance>)}
       </View>
       <View style={styles.sportRow}>
         <TextInput value={sportDraft} onChangeText={setSportDraft} maxLength={24} placeholder={t("Add a sport")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1 }]} testID="profile-sport-input" onSubmitEditing={addSport} />
-        <Pressable accessibilityRole="button" testID="profile-sport-add" disabled={!sportDraft.trim() || sports.length >= 8} onPress={addSport} style={styles.secondary}><Text style={styles.secondaryText}>{t("ADD")}</Text></Pressable>
+        <Affordance accessibilityRole="button" testID="profile-sport-add" disabled={!sportDraft.trim() || sports.length >= 8} onPress={addSport} style={styles.secondary}><Text style={styles.secondaryText}>{t("ADD")}</Text></Affordance>
       </View>
       <Text style={styles.label}>{t("ABOUT")}</Text>
       <TextInput value={about} onChangeText={setAbout} maxLength={500} multiline placeholder={t("Tell people how you train.")} placeholderTextColor={colors.textDim} style={[styles.input, styles.bio]} testID="profile-about-input" />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -136,18 +137,18 @@ export default function CommunityDetail() {
     if (group) group[1].push(channel); else groups.push([heading, [channel]]);
   }
 
-  return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text numberOfLines={1} style={styles.headerTitle}>{community?.name || t("COMMUNITY")}</Text>
-    {isActive ? <Pressable accessibilityRole="button" accessibilityLabel={t("Invite people")} testID="invite-people" disabled={inviting} onPress={() => void createInvite()} style={styles.icon}><Ionicons name="person-add-outline" size={20} color={colors.text} /></Pressable> : null}
-    {isManager ? <Pressable accessibilityRole="button" accessibilityLabel={t("Manage community")} testID="manage-community" onPress={() => router.push({ pathname: "/community/[id]/manage", params: { id } })} style={styles.icon}><Ionicons name="settings-outline" size={20} color={colors.text} /></Pressable> : null}
-    {community && membership?.role !== "owner" ? <Pressable accessibilityRole="button" accessibilityLabel={t("Report community")} testID="report-community" onPress={() => setReporting({ target_type: "community", target_id: community.id })} style={styles.icon}><Ionicons name="flag-outline" size={18} color={colors.textDim} /></Pressable> : null}
+  return <SafeAreaView style={styles.safe}><View style={styles.header}><Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance><Text numberOfLines={1} style={styles.headerTitle}>{community?.name || t("COMMUNITY")}</Text>
+    {isActive ? <Affordance accessibilityRole="button" accessibilityLabel={t("Invite people")} testID="invite-people" disabled={inviting} onPress={() => void createInvite()} style={styles.icon}><Ionicons name="person-add-outline" size={20} color={colors.text} /></Affordance> : null}
+    {isManager ? <Affordance accessibilityRole="button" accessibilityLabel={t("Manage community")} testID="manage-community" onPress={() => router.push({ pathname: "/community/[id]/manage", params: { id } })} style={styles.icon}><Ionicons name="settings-outline" size={20} color={colors.text} /></Affordance> : null}
+    {community && membership?.role !== "owner" ? <Affordance accessibilityRole="button" accessibilityLabel={t("Report community")} testID="report-community" onPress={() => setReporting({ target_type: "community", target_id: community.id })} style={styles.icon}><Ionicons name="flag-outline" size={18} color={colors.textDim} /></Affordance> : null}
   </View>
     {inviteLink ? <View style={styles.invitePanel} testID="invite-panel">
       <Text style={styles.inviteTitle}>{t("INVITE LINK")}</Text>
       <Text selectable style={styles.inviteLink} testID="invite-link">{inviteLink}</Text>
       <Text style={styles.inviteHint}>{t("Valid for 7 days. Anyone with the link can ask to join.")}</Text>
       <View style={styles.inviteRow}>
-        <Pressable accessibilityRole="button" testID="invite-close" onPress={() => setInviteLink("")} style={styles.inviteSecondary}><Text style={styles.inviteSecondaryText}>{t("DONE")}</Text></Pressable>
-        <Pressable accessibilityRole="button" testID="invite-share" onPress={() => void shareInvite()} style={styles.invitePrimary}><Text style={styles.invitePrimaryText}>{t("SHARE")}</Text></Pressable>
+        <Affordance accessibilityRole="button" testID="invite-close" onPress={() => setInviteLink("")} style={styles.inviteSecondary}><Text style={styles.inviteSecondaryText}>{t("DONE")}</Text></Affordance>
+        <Affordance signal="brand" accessibilityRole="button" testID="invite-share" onPress={() => void shareInvite()} style={styles.invitePrimary}><Text style={styles.invitePrimaryText}>{t("SHARE")}</Text></Affordance>
       </View>
     </View> : null}
     {inviteError ? <View accessibilityRole="alert" testID="invite-error" style={styles.notice}><Ionicons name="information-circle" size={18} color={colors.warning} /><Text style={styles.noticeText}>{inviteError}</Text></View> : null}
@@ -163,31 +164,31 @@ export default function CommunityDetail() {
         {community.redacted ? null : <Text style={styles.description} numberOfLines={3}>{community.description || t("A focused place to train and progress together.")}</Text>}
         <View style={styles.meta}><Ionicons name="people" size={16} color={colors.text} /><Text style={styles.metaText}>{formatNumber(community.member_count)} {t("members")}</Text><Text style={styles.metaText}>· {community.owner?.full_name || t("Coach")}</Text>{community.is_public ? <Text style={styles.metaText}>· {t(LISTED_PUBLICLY_LABEL)}</Text> : null}</View>
       </View>
-      {!isActive ? <View style={styles.joinBand}><View style={{ flex: 1 }}><Text style={styles.joinTitle}>{confirming ? t("CONFIRMING PAYMENT…") : membership?.status === "pending" ? t("REQUEST PENDING") : membership?.status === "banned" ? t("YOU ARE BANNED") : membership?.status === "rejected" ? t("REQUEST DECLINED") : community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) + t(" / month") : t("JOIN THE GROUP")}</Text><Text style={styles.joinCopy}>{membership?.status === "pending" ? t("A community manager will review your request.") : membership?.status === "banned" ? t("The community's managers removed you.") : membership?.status === "rejected" ? t("A manager declined this request.") : !community.is_public ? t("This community is invite-only. Ask a member for a link.") : community.join_policy === "paid" ? t("Monthly, by card through Stripe. Leave any time and the subscription stops.") : t("Get access to channels and member conversations.")}</Text></View>{confirming ? <ActivityIndicator color={colors.text} testID="checkout-confirming" /> : membership?.status !== "pending" && membership?.status !== "banned" && community.is_public ? <Pressable onPress={join} disabled={busy} style={styles.joinButton} testID="join-community"><Text style={styles.joinButtonText}>{t(community.join_policy === "paid" ? "CONTINUE" : community.join_policy === "approval" ? "REQUEST" : "JOIN")}</Text></Pressable> : null}</View> : null}
+      {!isActive ? <View style={styles.joinBand}><View style={{ flex: 1 }}><Text style={styles.joinTitle}>{confirming ? t("CONFIRMING PAYMENT…") : membership?.status === "pending" ? t("REQUEST PENDING") : membership?.status === "banned" ? t("YOU ARE BANNED") : membership?.status === "rejected" ? t("REQUEST DECLINED") : community.join_policy === "paid" ? new Intl.NumberFormat(localeTag, { style: "currency", currency: community.currency }).format(community.price_cents / 100) + t(" / month") : t("JOIN THE GROUP")}</Text><Text style={styles.joinCopy}>{membership?.status === "pending" ? t("A community manager will review your request.") : membership?.status === "banned" ? t("The community's managers removed you.") : membership?.status === "rejected" ? t("A manager declined this request.") : !community.is_public ? t("This community is invite-only. Ask a member for a link.") : community.join_policy === "paid" ? t("Monthly, by card through Stripe. Leave any time and the subscription stops.") : t("Get access to channels and member conversations.")}</Text></View>{confirming ? <ActivityIndicator color={colors.text} testID="checkout-confirming" /> : membership?.status !== "pending" && membership?.status !== "banned" && community.is_public ? <Affordance signal="brand" onPress={join} disabled={busy} style={styles.joinButton} testID="join-community"><Text style={styles.joinButtonText}>{t(community.join_policy === "paid" ? "CONTINUE" : community.join_policy === "approval" ? "REQUEST" : "JOIN")}</Text></Affordance> : null}</View> : null}
       {timedOutUntil ? <View style={styles.notice} testID="timeout-notice"><Ionicons name="time-outline" size={18} color={colors.warning} /><Text style={styles.noticeText}>{t("You are timed out until {date}. You can read but not post.").replace("{date}", formatDate(timedOutUntil, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</Text></View> : null}
       {error ? <View style={styles.notice}><Ionicons name="information-circle" size={18} color={colors.warning} /><Text style={styles.noticeText}>{error}</Text></View> : null}
-      {isActive ? <View style={styles.tabs}>{(["channels", "wall", "about", "members"] as Tab[]).map(item => <Pressable key={item} accessibilityRole="tab" {...selectedControl(tab === item)} accessibilityLabel={t(item.toUpperCase())} testID={`community-detail-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabOn]}><Text style={[styles.tabText, tab === item && styles.tabTextOn]}>{t(item.toUpperCase())}</Text></Pressable>)}</View> : null}
+      {isActive ? <View style={styles.tabs}>{(["channels", "wall", "about", "members"] as Tab[]).map(item => <Affordance key={item} accessibilityRole="tab" {...selectedControl(tab === item)} accessibilityLabel={t(item.toUpperCase())} testID={`community-detail-tab-${item}`} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabOn]}><Text style={[styles.tabText, tab === item && styles.tabTextOn]}>{t(item.toUpperCase())}</Text></Affordance>)}</View> : null}
 
       {isActive && tab === "channels" ? <>
         {openChallenges.length ? <View testID="club-challenges">
           <View style={styles.sectionHead}><Text style={styles.section}>{t("CHALLENGES")}</Text><Text style={styles.count}>{openChallenges.length}</Text></View>
           {openChallenges.map(channel => <View key={channel.id} testID={`club-challenge-${channel.id}`}>
             <ChallengePanel channelId={channel.id} refreshKey={0} />
-            <Pressable accessibilityRole="button" testID={`open-challenge-${channel.id}`} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })} style={styles.channel}><Text style={styles.moreText}>{t("Open challenge")}</Text></Pressable>
+            <Affordance accessibilityRole="button" testID={`open-challenge-${channel.id}`} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })} style={styles.channel}><Text style={styles.moreText}>{t("Open challenge")}</Text></Affordance>
           </View>)}
         </View> : null}
         {groups.map(([heading, rows]) => <View key={heading || "_"}>
         <View style={styles.sectionHead}><Text style={styles.section}>{heading ? heading.toUpperCase() : t("CHANNELS")}</Text><Text style={styles.count}>{rows.length}</Text></View>
-        {rows.map(channel => <Pressable key={channel.id} testID={`open-channel-${channel.id}`} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })} style={styles.channel}><View style={styles.hash}>{channel.kind && channel.kind !== "text" ? <Ionicons name={KIND_ICONS[channel.kind]} size={18} color={colors.text} /> : <Text style={styles.hashText}>#</Text>}</View><View style={{ flex: 1 }}><Text style={[styles.channelName, !!channel.unread_count && styles.channelUnread]}>{channel.name}</Text><Text style={styles.channelDescription}>{channel.description || t(channel.kind && channel.kind !== "text" ? channel.kind.toUpperCase() : "Open conversation")}</Text></View>{channel.unread_count ? <View testID={`unread-${channel.id}`} style={styles.unreadBadge}><Text style={styles.unreadText}>{channel.unread_count >= 100 ? "99+" : channel.unread_count}</Text></View> : null}<Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Pressable>)}
+        {rows.map(channel => <Affordance key={channel.id} testID={`open-channel-${channel.id}`} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })} style={styles.channel}><View style={styles.hash}>{channel.kind && channel.kind !== "text" ? <Ionicons name={KIND_ICONS[channel.kind]} size={18} color={colors.text} /> : <Text style={styles.hashText}>#</Text>}</View><View style={{ flex: 1 }}><Text style={[styles.channelName, !!channel.unread_count && styles.channelUnread]}>{channel.name}</Text><Text style={styles.channelDescription}>{channel.description || t(channel.kind && channel.kind !== "text" ? channel.kind.toUpperCase() : "Open conversation")}</Text></View>{channel.unread_count ? <View testID={`unread-${channel.id}`} style={styles.unreadBadge}><Text style={styles.unreadText}>{channel.unread_count >= 100 ? "99+" : channel.unread_count}</Text></View> : null}<Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Affordance>)}
       </View>)}</> : null}
 
       {isActive && tab === "wall" ? <View testID="community-wall">
         <Composer communityId={community.id} onPublished={wall.prepend} />
         {wall.loading ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.lg }} /> : null}
-        {wall.error ? <View accessibilityRole="alert" testID="wall-error"><Text style={styles.emptyText}>{wall.error}</Text><Pressable accessibilityRole="button" testID="wall-retry" onPress={() => void wall.load()}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+        {wall.error ? <View accessibilityRole="alert" testID="wall-error"><Text style={styles.emptyText}>{wall.error}</Text><Affordance accessibilityRole="button" testID="wall-retry" onPress={() => void wall.load()}><Text style={styles.retry}>{t("Retry")}</Text></Affordance></View> : null}
         {!wall.loading && !wall.error && wall.posts.length === 0 ? <Text style={styles.emptyText}>{t("No posts on the wall yet. Start the conversation.")}</Text> : null}
         {wall.posts.map(post => <PostCard key={post.id} post={post} onChange={next => wall.patch(post.id, () => next)} onRemoved={() => wall.remove(post.id)} onReposted={wall.prepend} />)}
-        {wall.hasMore ? <Pressable accessibilityRole="button" onPress={() => void wall.loadMore()} style={styles.leave}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Pressable> : null}
+        {wall.hasMore ? <Affordance accessibilityRole="button" onPress={() => void wall.loadMore()} style={styles.leave}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Affordance> : null}
       </View> : null}
 
       {(!isActive || tab === "about") && !community.redacted ? <View style={styles.about} testID="community-about">
@@ -198,18 +199,18 @@ export default function CommunityDetail() {
           {community.rules.map((rule, index) => <View key={index} style={styles.rule}><Text style={styles.ruleNumber}>{index + 1}</Text><Text style={styles.aboutText}>{rule}</Text></View>)}
         </> : null}
         <Text style={[styles.section, { marginTop: spacing.lg }]}>{t("RUN BY")}</Text>
-        <Pressable accessibilityRole="button" onPress={() => community.owner && router.push({ pathname: "/user/[id]", params: { id: community.owner.id } })} style={styles.memberRow}><Avatar user={community.owner} size={36} /><Text style={styles.channelName}>{community.owner?.full_name || t("Coach")}</Text></Pressable>
+        <Affordance accessibilityRole="button" onPress={() => community.owner && router.push({ pathname: "/user/[id]", params: { id: community.owner.id } })} style={styles.memberRow}><Avatar user={community.owner} size={36} /><Text style={styles.channelName}>{community.owner?.full_name || t("Coach")}</Text></Affordance>
         <Text style={styles.channelDescription}>{t("Created {date}").replace("{date}", formatDate(community.created_at, { month: "long", year: "numeric" }))}</Text>
       </View> : null}
 
       {isActive && tab === "members" ? <View testID="community-members">
-        {membersError ? <View accessibilityRole="alert" testID="members-error"><Text style={styles.emptyText}>{membersError}</Text><Pressable accessibilityRole="button" testID="members-retry" onPress={() => { setMembersError(""); setMembers(null); }}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : members === null ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.lg }} /> : members.map(person => <Pressable key={person.id} accessibilityRole="button" testID={`directory-${person.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: person.id } })} style={[styles.memberRow, { marginHorizontal: spacing.lg }]}><Avatar user={person} size={36} /><Text style={styles.channelName}>{person.full_name || t("Member")}</Text></Pressable>)}
+        {membersError ? <View accessibilityRole="alert" testID="members-error"><Text style={styles.emptyText}>{membersError}</Text><Affordance accessibilityRole="button" testID="members-retry" onPress={() => { setMembersError(""); setMembers(null); }}><Text style={styles.retry}>{t("Retry")}</Text></Affordance></View> : members === null ? <ActivityIndicator color={colors.text} style={{ marginTop: spacing.lg }} /> : members.map(person => <Affordance key={person.id} accessibilityRole="button" testID={`directory-${person.id}`} onPress={() => router.push({ pathname: "/user/[id]", params: { id: person.id } })} style={[styles.memberRow, { marginHorizontal: spacing.lg }]}><Avatar user={person} size={36} /><Text style={styles.channelName}>{person.full_name || t("Member")}</Text></Affordance>)}
       </View> : null}
 
-      {isActive && membership?.role !== "owner" ? <Pressable accessibilityRole="button" testID="leave-community" disabled={busy} onPress={leave} style={[styles.leave, busy && { opacity: 0.4 }]}>
+      {isActive && membership?.role !== "owner" ? <Affordance accessibilityRole="button" testID="leave-community" disabled={busy} onPress={leave} style={[styles.leave, busy && { opacity: 0.4 }]}>
         <Ionicons name="exit-outline" size={15} color={colors.error} />
         <Text style={styles.leaveText}>{t(community.join_policy === "paid" ? "Leave and cancel subscription" : "Leave community")}</Text>
-      </Pressable> : null}
+      </Affordance> : null}
     </ScrollView> : <Text style={styles.error}>{error}</Text>}
     <Modal visible={onboarding} transparent animationType="fade" onRequestClose={() => void finishOnboarding()}>
       <View style={styles.modalBackdrop}>
@@ -221,7 +222,7 @@ export default function CommunityDetail() {
             <Text style={[styles.section, { marginTop: spacing.md }]}>{t("HOUSE RULES")}</Text>
             {community.rules.map((rule, index) => <View key={index} style={styles.rule}><Text style={styles.ruleNumber}>{index + 1}</Text><Text style={styles.aboutText}>{rule}</Text></View>)}
           </> : null}
-          <Pressable accessibilityRole="button" testID="accept-rules" onPress={() => void finishOnboarding()} style={[styles.joinButton, { marginTop: spacing.lg }]}><Text style={styles.joinButtonText}>{t(community?.rules?.length ? "I AGREE — LET'S GO" : "LET'S GO")}</Text></Pressable>
+          <Affordance signal="brand" accessibilityRole="button" testID="accept-rules" onPress={() => void finishOnboarding()} style={[styles.joinButton, { marginTop: spacing.lg }]}><Text style={styles.joinButtonText}>{t(community?.rules?.length ? "I AGREE — LET'S GO" : "LET'S GO")}</Text></Affordance>
         </View>
       </View>
     </Modal>

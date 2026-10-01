@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing, type } from "@/src/theme";
@@ -28,7 +29,7 @@ export function SupportScreen({
   return (
     <SafeAreaView style={styles.safe} testID={testID}>
       <View style={styles.header}>
-        <Pressable
+        <Affordance
           accessibilityRole="button"
           accessibilityLabel={t("Back")}
           onPress={onBack}
@@ -36,7 +37,7 @@ export function SupportScreen({
           testID="support-back"
         >
           <Ionicons name="arrow-back" size={20} color={colors.text} />
-        </Pressable>
+        </Affordance>
         <View style={styles.headerText}>
           {kicker ? <Text style={styles.kicker}>{kicker}</Text> : null}
           <Text numberOfLines={2} style={kicker ? styles.subjectHeader : styles.headerTitle}>{title}</Text>

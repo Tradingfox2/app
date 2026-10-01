@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -108,7 +109,7 @@ export default function NotificationSettingsScreen() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title}>{t("NOTIFICATION SETTINGS")}</Text>
     </View>
     <ScrollView contentContainerStyle={styles.body}>
@@ -120,7 +121,7 @@ export default function NotificationSettingsScreen() {
             <Text style={styles.label}>{t("Push notifications")}</Text>
             <Text style={styles.hint}>{t("Also send these to your phone.")}</Text>
             {pushHint ? <Text style={styles.hint} testID="pref-push-hint">{pushHint}</Text> : null}
-            {pushBlocked ? <Pressable accessibilityRole="button" accessibilityLabel={t("OPEN SETTINGS")} onPress={() => void Linking.openSettings()} style={styles.settings} testID="pref-push-settings"><Text style={styles.settingsText}>{t("OPEN SETTINGS")}</Text></Pressable> : null}
+            {pushBlocked ? <Affordance accessibilityRole="button" accessibilityLabel={t("OPEN SETTINGS")} onPress={() => void Linking.openSettings()} style={styles.settings} testID="pref-push-settings"><Text style={styles.settingsText}>{t("OPEN SETTINGS")}</Text></Affordance> : null}
           </View>
           <Switch testID="pref-push" accessibilityLabel={t("Push notifications")} disabled={pushBusy} value={prefs.push} onValueChange={value => void onPush(value)} trackColor={{ true: colors.text }} />
         </View>

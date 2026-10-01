@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -79,11 +80,11 @@ export default function NewStory() {
 
   return <SafeAreaView style={styles.safe} testID="story-new-screen">
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title}>{t("NEW STORY")}</Text>
-      <Pressable accessibilityRole="button" testID="story-publish" disabled={!selected || !!busy} onPress={() => void publish()} style={[styles.save, (!selected || busy) && styles.disabled]}>
+      <Affordance signal="brand" accessibilityRole="button" testID="story-publish" disabled={!selected || !!busy} onPress={() => void publish()} style={[styles.save, (!selected || busy) && styles.disabled]}>
         {busy === "save" ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.saveText}>{t("POST")}</Text>}
-      </Pressable>
+      </Affordance>
     </View>
     <ScrollView contentContainerStyle={styles.body}>
       <Text style={styles.hint}>{t("A highlight stays on your profile. A story disappears after 24 hours.")}</Text>
@@ -91,26 +92,26 @@ export default function NewStory() {
       {loading ? <ActivityIndicator color={colors.text} /> : null}
       {!loading && workouts.length === 0 ? <View style={styles.empty} testID="story-no-workouts">
         <Text style={styles.hint}>{t("Finish a workout to share it as a story.")}</Text>
-        <Pressable accessibilityRole="button" testID="story-open-workouts" onPress={() => router.push("/workouts" as Href)} style={styles.secondary}><Text style={styles.secondaryText}>{t("OPEN WORKOUTS")}</Text></Pressable>
+        <Affordance accessibilityRole="button" testID="story-open-workouts" onPress={() => router.push("/workouts" as Href)} style={styles.secondary}><Text style={styles.secondaryText}>{t("OPEN WORKOUTS")}</Text></Affordance>
       </View> : null}
       {workouts.map(workout => {
         const on = workout.id === selected;
-        return <Pressable key={workout.id} accessibilityRole="radio" accessibilityState={{ selected: on }} testID={`story-workout-${workout.id}`} onPress={() => setSelected(workout.id)} style={[styles.workout, on && styles.workoutOn]}>
+        return <Affordance key={workout.id} accessibilityRole="radio" accessibilityState={{ selected: on }} testID={`story-workout-${workout.id}`} onPress={() => setSelected(workout.id)} style={[styles.workout, on && styles.workoutOn]}>
           <Ionicons name={on ? "checkmark-circle" : "barbell-outline"} size={18} color={on ? colors.text : colors.textMuted} />
           <View style={{ flex: 1 }}>
             <Text style={styles.workoutTitle}>{workout.title}</Text>
             {workout.duration_sec ? <Text style={styles.meta}>{Math.round(workout.duration_sec / 60)} min</Text> : null}
           </View>
-        </Pressable>;
+        </Affordance>;
       })}
       <Text style={styles.label}>{t("What did you train?")}</Text>
       <TextInput value={caption} onChangeText={setCaption} maxLength={300} multiline placeholder={t("Your sport, your goals, your coach credentials...")} placeholderTextColor={colors.textDim} style={styles.input} testID="story-caption" />
       <Text style={styles.label}>{t("Choose audience")}</Text>
       <View style={styles.audiences} testID="story-audience">
         {(["friends", "public", "only_me"] as const).map(option => (
-          <Pressable key={option} accessibilityRole="button" testID={audienceTestId("story-audience", option)} onPress={() => setStoryAudience(option)} style={[styles.chip, storyAudience === option && styles.chipOn]}>
+          <Affordance key={option} accessibilityRole="button" testID={audienceTestId("story-audience", option)} onPress={() => setStoryAudience(option)} style={[styles.chip, storyAudience === option && styles.chipOn]}>
             <Text style={[styles.chipText, storyAudience === option && styles.chipTextOn]}>{t(audienceLabel(option))}</Text>
-          </Pressable>
+          </Affordance>
         ))}
       </View>
       <Text style={styles.meta} testID="story-audience-hint">{t(audienceHint(storyAudience))}</Text>
@@ -125,9 +126,9 @@ export default function NewStory() {
         <Text style={styles.label}>{t("HIGHLIGHT TITLE")}</Text>
         <TextInput value={title} onChangeText={setTitle} maxLength={40} placeholder={t("HIGHLIGHT TITLE")} placeholderTextColor={colors.textDim} style={styles.input} testID="story-highlight-title" />
       </> : null}
-      <Pressable accessibilityRole="button" testID="story-photo" disabled={!!busy} onPress={() => void pickPhoto()} style={styles.secondary}>
+      <Affordance accessibilityRole="button" testID="story-photo" disabled={!!busy} onPress={() => void pickPhoto()} style={styles.secondary}>
         {busy === "upload" ? <ActivityIndicator color={colors.text} /> : <Text style={styles.secondaryText}>{t("CHANGE PHOTO")}</Text>}
-      </Pressable>
+      </Affordance>
       {media ? <Image source={{ uri: mediaUrl(media.url) }} style={styles.preview} accessibilityIgnoresInvertColors /> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     </ScrollView>

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -20,16 +21,16 @@ export default function MessagesScreen() {
   }, [t]);
   useFocusEffect(useCallback(() => { setLoading(true); void load(); return () => { revision.current += 1; }; }, [load]));
   return <SafeAreaView style={styles.safe}>
-    <View style={styles.header}><Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text style={styles.headerTitle}>{t("MESSAGES")}</Text></View>
+    <View style={styles.header}><Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance><Text style={styles.headerTitle}>{t("MESSAGES")}</Text></View>
     <ScrollView contentContainerStyle={styles.scroll}>
       {loading ? <ActivityIndicator color={colors.text} /> : null}
-      {error ? <View accessibilityRole="alert" style={styles.center}><Text style={styles.muted}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} style={styles.retry}><Text style={styles.retryText}>{t("Retry")}</Text></Pressable></View> : null}
+      {error ? <View accessibilityRole="alert" style={styles.center}><Text style={styles.muted}>{error}</Text><Affordance signal="brand" accessibilityRole="button" onPress={() => void load()} style={styles.retry}><Text style={styles.retryText}>{t("Retry")}</Text></Affordance></View> : null}
       {!loading && !error && threads.length === 0 ? <View style={styles.center}><Ionicons name="chatbubbles-outline" size={36} color={colors.textDim} /><Text style={styles.muted}>{t("No conversations yet. Open a profile to start one with people you train with.")}</Text></View> : null}
-      {threads.map(thread => <Pressable key={thread.peer?.id || thread.last_message.id} accessibilityRole="button" onPress={() => thread.peer && router.push({ pathname: "/dm/[id]", params: { id: thread.peer.id, name: thread.peer.full_name || "" } })} style={styles.row}>
+      {threads.map(thread => <Affordance key={thread.peer?.id || thread.last_message.id} accessibilityRole="button" onPress={() => thread.peer && router.push({ pathname: "/dm/[id]", params: { id: thread.peer.id, name: thread.peer.full_name || "" } })} style={styles.row}>
         <Avatar user={thread.peer} size={44} />
         <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.name}>{thread.peer?.full_name || t("Member")}</Text><Text numberOfLines={1} style={styles.preview}>{thread.last_message.status === "deleted" ? t("Message deleted") : thread.last_message.content || (thread.last_message.media?.length ? t("📎 Attachment") : "")}</Text></View>
         <View style={styles.meta}><Text style={styles.time}>{formatDate(thread.last_message.created_at, { day: "numeric", month: "short" })}</Text>{thread.unread ? <View style={styles.badge}><Text style={styles.badgeText}>{thread.unread}</Text></View> : null}</View>
-      </Pressable>)}
+      </Affordance>)}
     </ScrollView>
   </SafeAreaView>;
 }

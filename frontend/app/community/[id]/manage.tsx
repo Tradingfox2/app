@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -371,9 +372,9 @@ export default function ManageCommunity() {
     const pending = pendingAction === actionId;
     const saved = savedAction === actionId;
     const label = t(saved ? SAVED_LABEL : SAVE_LABEL);
-    return <Pressable {...iconButtonA11y(label, hint)} accessibilityState={{ disabled: blocked || pending, busy: pending }} testID={testID} disabled={blocked || pending} onPress={onPress} style={[styles.approve, (blocked || pending) && !pending && { opacity: 0.4 }]}>
+    return <Affordance signal="brand" {...iconButtonA11y(label, hint)} accessibilityState={{ disabled: blocked || pending, busy: pending }} testID={testID} disabled={blocked || pending} onPress={onPress} style={[styles.approve, (blocked || pending) && !pending && { opacity: 0.4 }]}>
       {pending ? <ActivityIndicator color={colors.brandOn} size="small" /> : <Ionicons name={saved ? "checkmark-done" : "checkmark"} size={18} color={colors.brandOn} />}
-    </Pressable>;
+    </Affordance>;
   };
   const triFor = (channel: CommunityChannel, roleId: string, bit: number): Tri => {
     const row = (channel.overwrites ?? []).find(entry => entry.role_id === roleId);
@@ -382,8 +383,8 @@ export default function ManageCommunity() {
   };
   const timedOut = (member: Membership) => member.timeout_until && new Date(member.timeout_until).getTime() > Date.now();
 
-  return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable accessibilityRole="button" accessibilityLabel={t("Back")} testID="manage-back" onPress={requestLeave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable><Text style={styles.headerTitle}>{t("MANAGE COMMUNITY")}</Text></View>{confirmLeave ? <View style={styles.leaveRow} testID="unsaved-settings"><Text style={styles.error}>{t("Unsaved changes will be lost")}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("Stay")} testID="unsaved-stay" onPress={() => setConfirmLeave(false)} style={styles.action}><Text style={styles.actionText}>{t("Stay")}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={t("Leave")} testID="unsaved-leave" onPress={() => { dirtyRef.current = false; setConfirmLeave(false); setLeaving(true); }} style={styles.action}><Text style={styles.actionText}>{t("Leave")}</Text></Pressable></View> : null}<ScrollView contentContainerStyle={styles.scroll}>
-    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" disabled={reviewing} onPress={() => void load()} style={styles.icon}><Text style={styles.active}>{t("Retry")}</Text></Pressable></View> : null}
+  return <SafeAreaView style={styles.safe}><View style={styles.header}><Affordance accessibilityRole="button" accessibilityLabel={t("Back")} testID="manage-back" onPress={requestLeave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance><Text style={styles.headerTitle}>{t("MANAGE COMMUNITY")}</Text></View>{confirmLeave ? <View style={styles.leaveRow} testID="unsaved-settings"><Text style={styles.error}>{t("Unsaved changes will be lost")}</Text><Affordance accessibilityRole="button" accessibilityLabel={t("Stay")} testID="unsaved-stay" onPress={() => setConfirmLeave(false)} style={styles.action}><Text style={styles.actionText}>{t("Stay")}</Text></Affordance><Affordance accessibilityRole="button" accessibilityLabel={t("Leave")} testID="unsaved-leave" onPress={() => { dirtyRef.current = false; setConfirmLeave(false); setLeaving(true); }} style={styles.action}><Text style={styles.actionText}>{t("Leave")}</Text></Affordance></View> : null}<ScrollView contentContainerStyle={styles.scroll}>
+    {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" disabled={reviewing} onPress={() => void load()} style={styles.icon}><Text style={styles.active}>{t("Retry")}</Text></Affordance></View> : null}
     {loading || reviewing ? <ActivityIndicator color={colors.text} /> : null}
 
     {insights ? <>
@@ -420,38 +421,38 @@ export default function ManageCommunity() {
 
     <Text style={styles.section}>{t("COMMUNITY SETTINGS")}</Text>
     <View style={styles.imagesRow}>
-      <Pressable {...iconButtonA11y(t("Community photo"), t("Upload a community photo"))} testID="upload-avatar" disabled={disabled} onPress={() => void uploadImage("avatar_media_id")} style={styles.avatarBox}>
+      <Affordance {...iconButtonA11y(t("Community photo"), t("Upload a community photo"))} testID="upload-avatar" disabled={disabled} onPress={() => void uploadImage("avatar_media_id")} style={styles.avatarBox}>
         {community?.avatar_url ? <Image source={{ uri: mediaUrl(community.avatar_url) }} style={styles.fill} accessibilityIgnoresInvertColors /> : <Ionicons name="image-outline" size={22} color={colors.textDim} />}
-      </Pressable>
-      <Pressable {...iconButtonA11y(t("Cover image"), t("Upload a cover image"))} testID="upload-cover" disabled={disabled} onPress={() => void uploadImage("cover_media_id")} style={styles.coverBox}>
+      </Affordance>
+      <Affordance {...iconButtonA11y(t("Cover image"), t("Upload a cover image"))} testID="upload-cover" disabled={disabled} onPress={() => void uploadImage("cover_media_id")} style={styles.coverBox}>
         {community?.cover_url ? <Image source={{ uri: mediaUrl(community.cover_url) }} style={styles.fill} accessibilityIgnoresInvertColors /> : <Text style={styles.meta}>{t("Tap to add a cover image")}</Text>}
-      </Pressable>
+      </Affordance>
     </View>
     <TextInput value={settings.name} onChangeText={value => setSettings(current => ({ ...current, name: value }))} maxLength={80} editable={!disabled} placeholder={t("Community name")} placeholderTextColor={colors.textDim} style={styles.input} testID="settings-name" />
     <TextInput value={settings.description} onChangeText={value => setSettings(current => ({ ...current, description: value }))} maxLength={1200} multiline editable={!disabled} placeholder={t("Who is this community for?")} placeholderTextColor={colors.textDim} style={[styles.input, styles.multiline]} testID="settings-description" />
     <Text style={styles.meta}>{t("Category")}</Text>
-    <View style={styles.chipRow}>{COMMUNITY_CATEGORIES.map(category => <Pressable key={category} accessibilityRole="button" {...selectedControl(extras.category === category)} testID={`settings-category-${category}`} onPress={() => setExtras(current => ({ ...current, category }))} style={[styles.chip, extras.category === category && styles.chipOn]}><Text style={styles.chipText}>{t(category.replace("_", " ").toUpperCase())}</Text></Pressable>)}</View>
+    <View style={styles.chipRow}>{COMMUNITY_CATEGORIES.map(category => <Affordance key={category} accessibilityRole="button" {...selectedControl(extras.category === category)} testID={`settings-category-${category}`} onPress={() => setExtras(current => ({ ...current, category }))} style={[styles.chip, extras.category === category && styles.chipOn]}><Text style={styles.chipText}>{t(category.replace("_", " ").toUpperCase())}</Text></Affordance>)}</View>
     <View style={styles.switchRow}>
       <View style={{ flex: 1 }}><Text style={styles.name}>{t(LISTED_PUBLICLY_LABEL)}</Text><Text style={styles.meta}>{t("Private communities are hidden from discovery and joined by invite only.")}</Text></View>
       <Switch testID="settings-public" accessibilityLabel={t(LISTED_PUBLICLY_LABEL)} accessibilityHint={t("Show this community in search and rankings.")} value={extras.is_public} disabled={disabled} onValueChange={value => setExtras(current => ({ ...current, is_public: value }))} trackColor={{ true: colors.text }} />
     </View>
     {community?.join_policy !== "paid" ? <>
       <Text style={styles.meta}>{t("Who can join")}</Text>
-      <View style={styles.chipRow}>{(["open", "approval"] as const).map(policy => <Pressable key={policy} accessibilityRole="button" {...selectedControl(extras.join_policy === policy)} testID={`settings-policy-${policy}`} onPress={() => setExtras(current => ({ ...current, join_policy: policy }))} style={[styles.chip, extras.join_policy === policy && styles.chipOn]}><Text style={styles.chipText}>{t(joinPolicyPhrase(policy))}</Text></Pressable>)}</View>
+      <View style={styles.chipRow}>{(["open", "approval"] as const).map(policy => <Affordance key={policy} accessibilityRole="button" {...selectedControl(extras.join_policy === policy)} testID={`settings-policy-${policy}`} onPress={() => setExtras(current => ({ ...current, join_policy: policy }))} style={[styles.chip, extras.join_policy === policy && styles.chipOn]}><Text style={styles.chipText}>{t(joinPolicyPhrase(policy))}</Text></Affordance>)}</View>
     </> : null}
     <Text style={styles.meta}>{t("Welcome message — shown once to each new member")}</Text>
     <TextInput value={extras.welcome_message} onChangeText={value => setExtras(current => ({ ...current, welcome_message: value }))} maxLength={1000} multiline editable={!disabled} placeholder={t("Welcome! Start by introducing yourself in #general...")} placeholderTextColor={colors.textDim} style={[styles.input, styles.multiline]} testID="settings-welcome" />
     <Text style={styles.meta}>{t("House rules")}</Text>
     {extras.rules.map((rule, index) => <View key={index} style={styles.ruleRow}>
       <Text style={styles.active}>{index + 1}</Text><Text style={[styles.checkLabel]}>{rule}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Remove rule")} testID={`remove-rule-${index}`} onPress={() => setExtras(current => ({ ...current, rules: current.rules.filter((_, i) => i !== index) }))} style={styles.icon}><Ionicons name="close" size={16} color={colors.textDim} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Remove rule")} testID={`remove-rule-${index}`} onPress={() => setExtras(current => ({ ...current, rules: current.rules.filter((_, i) => i !== index) }))} style={styles.icon}><Ionicons name="close" size={16} color={colors.textDim} /></Affordance>
     </View>)}
-    {extras.rules.length < 15 ? <View style={styles.addRow}><TextInput value={newRule} onChangeText={setNewRule} maxLength={300} placeholder={t("Add a rule")} placeholderTextColor={colors.textDim} style={styles.input} testID="new-rule" /><Pressable {...iconButtonA11y(t("Add rule"), t("Not saved until you save."))} testID="add-rule" disabled={!newRule.trim() || disabled} onPress={() => { setExtras(current => ({ ...current, rules: [...current.rules, newRule.trim()] })); setNewRule(""); }} style={[styles.approve, (!newRule.trim() || disabled) && { opacity: 0.4 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View> : null}
+    {extras.rules.length < 15 ? <View style={styles.addRow}><TextInput value={newRule} onChangeText={setNewRule} maxLength={300} placeholder={t("Add a rule")} placeholderTextColor={colors.textDim} style={styles.input} testID="new-rule" /><Affordance signal="brand" {...iconButtonA11y(t("Add rule"), t("Not saved until you save."))} testID="add-rule" disabled={!newRule.trim() || disabled} onPress={() => { setExtras(current => ({ ...current, rules: [...current.rules, newRule.trim()] })); setNewRule(""); }} style={[styles.approve, (!newRule.trim() || disabled) && { opacity: 0.4 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Affordance></View> : null}
     {community && JSON.stringify(extras.rules) !== JSON.stringify(community.rules ?? []) ? <Text style={styles.meta} testID="rules-unsaved">{t("Not saved until you save.")}</Text> : null}
     {settingsUnsaved ? <Text style={styles.meta} testID="settings-unsaved">{t("Not saved until you save.")}</Text> : null}
-    <Pressable accessibilityRole="button" accessibilityLabel={t(settingsSaved ? SAVED_LABEL : SAVE_LABEL)} accessibilityState={{ disabled: disabled || settings.name.trim().length < 3, busy: settingsBusy }} testID="save-settings" disabled={disabled || settings.name.trim().length < 3} onPress={saveSettings} style={[styles.primary, ((disabled && !settingsBusy) || settings.name.trim().length < 3) && { opacity: 0.4 }]}>
+    <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t(settingsSaved ? SAVED_LABEL : SAVE_LABEL)} accessibilityState={{ disabled: disabled || settings.name.trim().length < 3, busy: settingsBusy }} testID="save-settings" disabled={disabled || settings.name.trim().length < 3} onPress={saveSettings} style={[styles.primary, ((disabled && !settingsBusy) || settings.name.trim().length < 3) && { opacity: 0.4 }]}>
       {settingsBusy ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.primaryText}>{t(settingsSaved ? SAVED_LABEL : SAVE_LABEL)}</Text>}
-    </Pressable>
+    </Affordance>
     {settingsError ? <Text accessibilityRole="alert" testID="save-settings-error" style={styles.error}>{settingsError}</Text> : null}
 
     {can(myMask, MANAGE_MESSAGES) ? <>
@@ -461,13 +462,13 @@ export default function ManageCommunity() {
         {report.content_snapshot ? <Text style={styles.snapshot} numberOfLines={3}>“{report.content_snapshot}”</Text> : null}
         {report.detail ? <Text style={styles.meta}>{report.detail}</Text> : null}
         <View style={styles.addRow}>
-          <Pressable accessibilityRole="button" testID={`dismiss-report-${report.id}`} disabled={disabled} onPress={() => void resolveReport(report, "dismissed")} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("DISMISS")}</Text></Pressable>
-          <Pressable accessibilityRole="button" testID={`remove-reported-${report.id}`} disabled={disabled} onPress={() => void resolveReport(report, "content_removed")} style={[styles.dangerSolid, { flex: 1 }]}><Text style={styles.dangerSolidText}>{t("REMOVE CONTENT")}</Text></Pressable>
+          <Affordance accessibilityRole="button" testID={`dismiss-report-${report.id}`} disabled={disabled} onPress={() => void resolveReport(report, "dismissed")} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("DISMISS")}</Text></Affordance>
+          <Affordance accessibilityRole="button" testID={`remove-reported-${report.id}`} disabled={disabled} onPress={() => void resolveReport(report, "content_removed")} style={[styles.dangerSolid, { flex: 1 }]}><Text style={styles.dangerSolidText}>{t("REMOVE CONTENT")}</Text></Affordance>
         </View>
       </View>) : <Text style={styles.empty}>{t("Nothing reported. The queue is clear.")}</Text>}
     </> : null}
 
-    <Text style={styles.section}>{t("JOIN REQUESTS")}</Text>{pending.length ? pending.map(member => <View key={member.id} style={styles.row}><Avatar user={member.user} size={32} /><View style={{ flex: 1 }}><Text style={styles.name}>{member.user?.full_name || t("Member")}</Text><Text style={styles.meta}>{t("Awaiting review")}</Text></View><Pressable accessibilityRole="button" disabled={reviewing} accessibilityLabel={t("Reject")} onPress={() => void review(member.id, "rejected")} style={[styles.icon, { opacity: reviewing ? 0.4 : 1 }]}><Ionicons name="close" size={20} color={colors.error} /></Pressable><Pressable accessibilityRole="button" disabled={reviewing} accessibilityLabel={t("Approve")} onPress={() => void review(member.id, "active")} style={[styles.approve, { opacity: reviewing ? 0.4 : 1 }]}><Ionicons name="checkmark" size={20} color={colors.brandOn} /></Pressable></View>) : !loading && !error ? <Text style={styles.empty}>{t("No pending requests")}</Text> : null}
+    <Text style={styles.section}>{t("JOIN REQUESTS")}</Text>{pending.length ? pending.map(member => <View key={member.id} style={styles.row}><Avatar user={member.user} size={32} /><View style={{ flex: 1 }}><Text style={styles.name}>{member.user?.full_name || t("Member")}</Text><Text style={styles.meta}>{t("Awaiting review")}</Text></View><Affordance accessibilityRole="button" disabled={reviewing} accessibilityLabel={t("Reject")} onPress={() => void review(member.id, "rejected")} style={[styles.icon, { opacity: reviewing ? 0.4 : 1 }]}><Ionicons name="close" size={20} color={colors.error} /></Affordance><Affordance signal="brand" accessibilityRole="button" disabled={reviewing} accessibilityLabel={t("Approve")} onPress={() => void review(member.id, "active")} style={[styles.approve, { opacity: reviewing ? 0.4 : 1 }]}><Ionicons name="checkmark" size={20} color={colors.brandOn} /></Affordance></View>) : !loading && !error ? <Text style={styles.empty}>{t("No pending requests")}</Text> : null}
 
     <Text style={styles.section}>{t("INVITE LINKS")}</Text>
     <Text style={styles.meta}>{t("A standard link still goes through approval. A direct link admits people straight in.")}</Text>
@@ -476,21 +477,21 @@ export default function ManageCommunity() {
         <Text selectable numberOfLines={1} style={styles.name}>{Linking.createURL(`/invite/${invite.code}`)}</Text>
         <Text style={styles.meta}>{t(invite.skip_approval ? "Direct" : "Standard")} · {t("{count} used").replace("{count}", String(invite.uses))}{invite.max_uses ? ` / ${invite.max_uses}` : ""}{invite.unusable_reason ? ` · ${t(invite.unusable_reason)}` : ""}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Revoke")} testID={`revoke-${invite.code}`} disabled={disabled} onPress={() => void revokeInvite(invite.code)} style={styles.icon}><Ionicons name="close-circle-outline" size={20} color={colors.error} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Revoke")} testID={`revoke-${invite.code}`} disabled={disabled} onPress={() => void revokeInvite(invite.code)} style={styles.icon}><Ionicons name="close-circle-outline" size={20} color={colors.error} /></Affordance>
     </View>)}
     <View style={styles.addRow}>
-      <Pressable accessibilityRole="button" testID="create-invite-standard" disabled={disabled} onPress={() => void createInvite(false)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("NEW LINK")}</Text></Pressable>
-      <Pressable accessibilityRole="button" testID="create-invite-direct" disabled={disabled} onPress={() => void createInvite(true)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("NEW DIRECT LINK")}</Text></Pressable>
+      <Affordance accessibilityRole="button" testID="create-invite-standard" disabled={disabled} onPress={() => void createInvite(false)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("NEW LINK")}</Text></Affordance>
+      <Affordance accessibilityRole="button" testID="create-invite-direct" disabled={disabled} onPress={() => void createInvite(true)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("NEW DIRECT LINK")}</Text></Affordance>
     </View>
 
     <Text style={styles.section}>{t("ROLES")}</Text>
     <Text style={styles.meta}>{t("Roles grant baseline powers. Channels can override them below. You can only grant powers you hold, to roles below your own.")}</Text>
     {roles.map(role => <View key={role.id}>
-      <Pressable accessibilityRole="button" testID={`role-${role.id}`} onPress={() => { setOpenRole(openRole === role.id ? null : role.id); setRoleEdit({ name: role.name, rank: String(role.rank) }); }} style={styles.row}>
+      <Affordance accessibilityRole="button" testID={`role-${role.id}`} onPress={() => { setOpenRole(openRole === role.id ? null : role.id); setRoleEdit({ name: role.name, rank: String(role.rank) }); }} style={styles.row}>
         <View style={[styles.swatch, { backgroundColor: role.color }]} />
         <View style={{ flex: 1 }}><Text style={styles.name}>{role.name}</Text><Text style={styles.meta}>{role.is_default ? t("Applies to everyone") : `${t("Rank")} ${role.rank}`}</Text></View>
         <Ionicons name={openRole === role.id ? "chevron-up" : "chevron-down"} size={16} color={colors.textDim} />
-      </Pressable>
+      </Affordance>
       {openRole === role.id ? <View style={styles.panel} testID={`role-panel-${role.id}`}>
         {!role.is_default ? <>
           <View style={styles.addRow}>
@@ -498,30 +499,30 @@ export default function ManageCommunity() {
             <TextInput value={roleEdit.rank} onChangeText={rank => setRoleEdit(current => ({ ...current, rank: rank.replace(/[^0-9]/g, "") }))} maxLength={3} keyboardType="number-pad" style={[styles.input, { flex: 0, width: 64 }]} testID={`role-rank-${role.id}`} />
             {confirmMark(`role-${role.id}`, t("Save this role"), disabled || roleEdit.name.trim().length < 2, () => void saveRole(role, { name: roleEdit.name.trim(), rank: Math.max(1, Number(roleEdit.rank) || role.rank) }, `role-${role.id}`), `role-save-${role.id}`)}
           </View>
-          <View style={styles.chipRow}>{ROLE_COLORS.map(color => <Pressable key={color} accessibilityRole="button" accessibilityLabel={color} testID={`role-color-${role.id}-${color}`} onPress={() => void saveRole(role, { color })} style={[styles.colorDot, { backgroundColor: color }, role.color === color && styles.colorOn]} />)}</View>
+          <View style={styles.chipRow}>{ROLE_COLORS.map(color => <Affordance key={color} accessibilityRole="button" accessibilityLabel={color} testID={`role-color-${role.id}-${color}`} onPress={() => void saveRole(role, { color })} style={[styles.colorDot, { backgroundColor: color }, role.color === color && styles.colorOn]} />)}</View>
         </> : null}
-        {PERMISSION_LIST.map(entry => <Pressable key={entry.key} accessibilityRole="checkbox" accessibilityState={{ checked: can(role.permissions, entry.bit) }} testID={`role-${role.id}-${entry.key}`} disabled={disabled} onPress={() => void flipPermission(role, entry.bit)} style={styles.checkRow}>
+        {PERMISSION_LIST.map(entry => <Affordance key={entry.key} accessibilityRole="checkbox" accessibilityState={{ checked: can(role.permissions, entry.bit) }} testID={`role-${role.id}-${entry.key}`} disabled={disabled} onPress={() => void flipPermission(role, entry.bit)} style={styles.checkRow}>
           <Ionicons name={can(role.permissions, entry.bit) ? "checkbox" : "square-outline"} size={17} color={can(role.permissions, entry.bit) ? colors.text : colors.textDim} />
           <Text style={styles.checkLabel}>{t(entry.label)}</Text>
-        </Pressable>)}
+        </Affordance>)}
         {role.is_default
           ? <Text style={styles.meta}>{t("The default role cannot be deleted.")}</Text>
-          : <Pressable accessibilityRole="button" testID={`delete-role-${role.id}`} disabled={disabled} onPress={() => void removeRole(role)} style={styles.danger}><Ionicons name="trash-outline" size={15} color={colors.error} /><Text style={styles.dangerText}>{t("Delete role")}</Text></Pressable>}
+          : <Affordance accessibilityRole="button" testID={`delete-role-${role.id}`} disabled={disabled} onPress={() => void removeRole(role)} style={styles.danger}><Ionicons name="trash-outline" size={15} color={colors.error} /><Text style={styles.dangerText}>{t("Delete role")}</Text></Affordance>}
       </View> : null}
     </View>)}
-    <View style={styles.addRow}><TextInput value={roleName} onChangeText={setRoleName} maxLength={32} editable={!disabled} placeholder={t("new-role")} placeholderTextColor={colors.textDim} style={styles.input} testID="new-role-name" /><Pressable accessibilityRole="button" testID="create-role" disabled={disabled || roleName.trim().length < 2} accessibilityLabel={t("Create role")} onPress={() => void addRole()} style={[styles.approve, { opacity: disabled || roleName.trim().length < 2 ? 0.4 : 1 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View>
+    <View style={styles.addRow}><TextInput value={roleName} onChangeText={setRoleName} maxLength={32} editable={!disabled} placeholder={t("new-role")} placeholderTextColor={colors.textDim} style={styles.input} testID="new-role-name" /><Affordance signal="brand" accessibilityRole="button" testID="create-role" disabled={disabled || roleName.trim().length < 2} accessibilityLabel={t("Create role")} onPress={() => void addRole()} style={[styles.approve, { opacity: disabled || roleName.trim().length < 2 ? 0.4 : 1 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Affordance></View>
 
     <Text style={styles.section}>{t("CHANNELS")}</Text>
     <Text style={styles.meta}>{t("Publish channel name and opted-in contributor count in rankings. Messages remain members-only. Public communities only.")}</Text>
     {channels.map((channel, index) => <View key={channel.id}>
       <View style={styles.row}>
         <Text style={styles.hash}>#</Text>
-        <Pressable accessibilityRole="button" testID={`channel-${channel.id}`} onPress={() => { setOpenChannel(openChannel === channel.id ? null : channel.id); setOverwriteRole(null); setChannelEdit({ description: channel.description ?? "", category: channel.category ?? "" }); }} style={{ flex: 1 }}>
+        <Affordance accessibilityRole="button" testID={`channel-${channel.id}`} onPress={() => { setOpenChannel(openChannel === channel.id ? null : channel.id); setOverwriteRole(null); setChannelEdit({ description: channel.description ?? "", category: channel.category ?? "" }); }} style={{ flex: 1 }}>
           <Text style={styles.name}>{channel.name}</Text>
           <Text style={styles.meta}>{channel.is_default ? t("DEFAULT") : t((channel.kind ?? "text").toUpperCase())}{channel.category ? ` · ${channel.category}` : ""}{channel.slowmode_sec ? ` · ${t("slow {n}s").replace("{n}", String(channel.slowmode_sec))}` : ""}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Move up")} testID={`move-up-${channel.id}`} disabled={disabled || index === 0} onPress={() => void moveChannel(channel, -1)} style={[styles.small, index === 0 && { opacity: 0.3 }]}><Ionicons name="chevron-up" size={16} color={colors.text} /></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Move down")} testID={`move-down-${channel.id}`} disabled={disabled || index === channels.length - 1} onPress={() => void moveChannel(channel, 1)} style={[styles.small, index === channels.length - 1 && { opacity: 0.3 }]}><Ionicons name="chevron-down" size={16} color={colors.text} /></Pressable>
+        </Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Move up")} testID={`move-up-${channel.id}`} disabled={disabled || index === 0} onPress={() => void moveChannel(channel, -1)} style={[styles.small, index === 0 && { opacity: 0.3 }]}><Ionicons name="chevron-up" size={16} color={colors.text} /></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Move down")} testID={`move-down-${channel.id}`} disabled={disabled || index === channels.length - 1} onPress={() => void moveChannel(channel, 1)} style={[styles.small, index === channels.length - 1 && { opacity: 0.3 }]}><Ionicons name="chevron-down" size={16} color={colors.text} /></Affordance>
         <Switch testID={`ranking-${channel.id}`} accessibilityLabel={t("Publish channel in rankings")} value={channel.ranking_opt_in ?? false} disabled={disabled} onValueChange={value => void publishChannel(channel, value)} trackColor={{ true: colors.text }} />
       </View>
       {openChannel === channel.id ? <View style={styles.panel} testID={`channel-panel-${channel.id}`}>
@@ -535,50 +536,50 @@ export default function ManageCommunity() {
           {confirmMark(`channel-${channel.id}`, t("Save the channel topic"), disabled, () => void saveChannelDetails(channel), `channel-save-${channel.id}`)}
         </View>
         <Text style={styles.meta}>{t("Slow mode")}</Text>
-        <View style={styles.chipRow}>{SLOWMODES.map(seconds => <Pressable key={seconds} accessibilityRole="button" {...selectedControl((channel.slowmode_sec ?? 0) === seconds)} testID={`slowmode-${channel.id}-${seconds}`} disabled={disabled} onPress={() => void setSlowmode(channel, seconds)} style={[styles.chip, (channel.slowmode_sec ?? 0) === seconds && styles.chipOn]}><Text style={styles.chipText}>{seconds === 0 ? t("OFF") : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}</Text></Pressable>)}</View>
+        <View style={styles.chipRow}>{SLOWMODES.map(seconds => <Affordance key={seconds} accessibilityRole="button" {...selectedControl((channel.slowmode_sec ?? 0) === seconds)} testID={`slowmode-${channel.id}-${seconds}`} disabled={disabled} onPress={() => void setSlowmode(channel, seconds)} style={[styles.chip, (channel.slowmode_sec ?? 0) === seconds && styles.chipOn]}><Text style={styles.chipText}>{seconds === 0 ? t("OFF") : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}</Text></Affordance>)}</View>
         {channel.is_default
           ? <Text style={styles.meta}>{t("The default channel cannot be archived.")}</Text>
-          : <Pressable accessibilityRole="button" testID={`archive-channel-${channel.id}`} disabled={disabled} onPress={() => void archiveChannel(channel)} style={styles.danger}>
+          : <Affordance accessibilityRole="button" testID={`archive-channel-${channel.id}`} disabled={disabled} onPress={() => void archiveChannel(channel)} style={styles.danger}>
               <Ionicons name="archive-outline" size={15} color={colors.error} />
               <Text style={styles.dangerText}>{t("Archive channel")}</Text>
-            </Pressable>}
+            </Affordance>}
         {can(myMask, MANAGE_ROLES) ? <>
           <Text style={styles.meta}>{t("Pick a role, then tap a permission to cycle inherit → allow → deny.")}</Text>
-          <View style={styles.chipRow}>{roles.map(role => <Pressable key={role.id} accessibilityRole="button" testID={`overwrite-role-${channel.id}-${role.id}`} onPress={() => setOverwriteRole(overwriteRole === role.id ? null : role.id)} style={[styles.chip, overwriteRole === role.id && styles.chipOn]}><Text style={styles.chipText}>{role.name}</Text></Pressable>)}</View>
+          <View style={styles.chipRow}>{roles.map(role => <Affordance key={role.id} accessibilityRole="button" testID={`overwrite-role-${channel.id}-${role.id}`} onPress={() => setOverwriteRole(overwriteRole === role.id ? null : role.id)} style={[styles.chip, overwriteRole === role.id && styles.chipOn]}><Text style={styles.chipText}>{role.name}</Text></Affordance>)}</View>
           {overwriteRole ? PERMISSION_LIST.map(entry => {
             const state = triFor(channel, overwriteRole, entry.bit);
-            return <Pressable key={entry.key} accessibilityRole="button" accessibilityLabel={`${t(entry.label)}: ${t(state)}`} testID={`overwrite-${channel.id}-${overwriteRole}-${entry.key}`} disabled={disabled} onPress={() => void cycleOverwrite(channel, overwriteRole, entry.bit)} style={styles.checkRow}>
+            return <Affordance key={entry.key} accessibilityRole="button" accessibilityLabel={`${t(entry.label)}: ${t(state)}`} testID={`overwrite-${channel.id}-${overwriteRole}-${entry.key}`} disabled={disabled} onPress={() => void cycleOverwrite(channel, overwriteRole, entry.bit)} style={styles.checkRow}>
               <Ionicons name={state === "allow" ? "checkmark-circle" : state === "deny" ? "close-circle" : "remove-circle-outline"} size={17} color={state === "allow" ? colors.text : state === "deny" ? colors.error : colors.textDim} />
               <Text style={styles.checkLabel}>{t(entry.label)}</Text>
               <Text style={styles.meta}>{t(state)}</Text>
-            </Pressable>;
+            </Affordance>;
           }) : null}
         </> : <Text style={styles.meta}>{t("Channel permission overrides need the Manage roles permission.")}</Text>}
       </View> : null}
     </View>)}
     <Text style={styles.meta}>{t("Channel type")}</Text>
     <View style={styles.chipRow}>{KINDS.map(kind => (
-      <Pressable key={kind} accessibilityRole="button" testID={`channel-kind-${kind}`} onPress={() => setChannelKind(kind)} style={[styles.chip, channelKind === kind && styles.chipOn]}>
+      <Affordance key={kind} accessibilityRole="button" testID={`channel-kind-${kind}`} onPress={() => setChannelKind(kind)} style={[styles.chip, channelKind === kind && styles.chipOn]}>
         <Text style={styles.chipText}>{t(kind.toUpperCase())}</Text>
-      </Pressable>))}
+      </Affordance>))}
     </View>
     {KIND_HINTS[channelKind] ? <Text style={styles.meta}>{t(KIND_HINTS[channelKind]!)}</Text> : null}
     {channelKind === "challenge" ? <View style={styles.panel} testID="challenge-settings">
       <Text style={styles.meta}>{t("Only members who join are scored, from their finished workouts.")}</Text>
       <View style={styles.chipRow}>{(["workouts", "active_days", "minutes", "tonnage"] as ChallengeMetric[]).map(item => (
-        <Pressable key={item} accessibilityRole="button" testID={`challenge-metric-${item}`} onPress={() => setMetric(item)} style={[styles.chip, metric === item && styles.chipOn]}>
+        <Affordance key={item} accessibilityRole="button" testID={`challenge-metric-${item}`} onPress={() => setMetric(item)} style={[styles.chip, metric === item && styles.chipOn]}>
           <Text style={styles.chipText}>{t(METRIC_LABELS[item])}</Text>
-        </Pressable>))}
+        </Affordance>))}
       </View>
       <View style={styles.chipRow}>{[7, 14, 30].map(days => (
-        <Pressable key={days} accessibilityRole="button" testID={`challenge-length-${days}`} onPress={() => setLengthDays(days)} style={[styles.chip, lengthDays === days && styles.chipOn]}>
+        <Affordance key={days} accessibilityRole="button" testID={`challenge-length-${days}`} onPress={() => setLengthDays(days)} style={[styles.chip, lengthDays === days && styles.chipOn]}>
           <Text style={styles.chipText}>{t("{count} days").replace("{count}", String(days))}</Text>
-        </Pressable>))}
+        </Affordance>))}
       </View>
       <TextInput value={goal} onChangeText={value => setGoal(value.replace(/[^0-9]/g, ""))} keyboardType="number-pad" maxLength={7} placeholder={t("Group goal (optional)")} placeholderTextColor={colors.textDim} style={styles.input} testID="challenge-goal" />
     </View> : null}
     <TextInput value={newCategory} onChangeText={setNewCategory} maxLength={32} editable={!disabled} placeholder={t("Category heading (optional)")} placeholderTextColor={colors.textDim} style={[styles.input, { marginTop: spacing.sm }]} testID="new-channel-category" />
-    <View style={styles.addRow}><TextInput value={channelName} onChangeText={setChannelName} maxLength={50} editable={!disabled} placeholder={t("new-channel")} placeholderTextColor={colors.textDim} style={styles.input} /><Pressable accessibilityRole="button" disabled={disabled || channelName.trim().length < 2} accessibilityLabel={t("Create channel")} onPress={() => void addChannel()} style={[styles.approve, { opacity: disabled || channelName.trim().length < 2 ? 0.4 : 1 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Pressable></View>
+    <View style={styles.addRow}><TextInput value={channelName} onChangeText={setChannelName} maxLength={50} editable={!disabled} placeholder={t("new-channel")} placeholderTextColor={colors.textDim} style={styles.input} /><Affordance signal="brand" accessibilityRole="button" disabled={disabled || channelName.trim().length < 2} accessibilityLabel={t("Create channel")} onPress={() => void addChannel()} style={[styles.approve, { opacity: disabled || channelName.trim().length < 2 ? 0.4 : 1 }]}><Ionicons name="add" size={20} color={colors.brandOn} /></Affordance></View>
 
     <Text style={styles.section}>{t("ALL MEMBERS")}</Text>
     <TextInput value={memberQuery} onChangeText={searchMembers} maxLength={80} placeholder={t("Search members by name")} placeholderTextColor={colors.textDim} style={styles.input} testID="member-search" />
@@ -586,17 +587,17 @@ export default function ManageCommunity() {
     {active.map(member => {
       const assigned = member.role_ids ?? [];
       return <View key={member.id}>
-        <Pressable accessibilityRole="button" testID={`member-${member.id}`} onPress={() => setOpenMember(openMember === member.id ? null : member.id)} style={styles.row}>
+        <Affordance accessibilityRole="button" testID={`member-${member.id}`} onPress={() => setOpenMember(openMember === member.id ? null : member.id)} style={styles.row}>
           <Avatar user={member.user} size={32} />
           <View style={{ flex: 1 }}><Text style={styles.name}>{member.user?.full_name || t("Member")}</Text><Text style={styles.meta}>{t(member.role.toUpperCase())}{assigned.length ? ` · ${assigned.map(roleId => roles.find(role => role.id === roleId)?.name).filter(Boolean).join(", ")}` : ""}{timedOut(member) ? ` · ${t("TIMED OUT")}` : ""}</Text></View>
           <Text style={styles.active}>{t("ACTIVE")}</Text>
-        </Pressable>
+        </Affordance>
         {openMember === member.id ? <View style={styles.panel} testID={`member-panel-${member.id}`}>
           {roles.filter(role => !role.is_default).length
-            ? roles.filter(role => !role.is_default).map(role => <Pressable key={role.id} accessibilityRole="checkbox" accessibilityState={{ checked: assigned.includes(role.id) }} testID={`member-${member.id}-role-${role.id}`} disabled={disabled} onPress={() => void flipMemberRole(member, role.id)} style={styles.checkRow}>
+            ? roles.filter(role => !role.is_default).map(role => <Affordance key={role.id} accessibilityRole="checkbox" accessibilityState={{ checked: assigned.includes(role.id) }} testID={`member-${member.id}-role-${role.id}`} disabled={disabled} onPress={() => void flipMemberRole(member, role.id)} style={styles.checkRow}>
               <Ionicons name={assigned.includes(role.id) ? "checkbox" : "square-outline"} size={17} color={assigned.includes(role.id) ? colors.text : colors.textDim} />
               <Text style={styles.checkLabel}>{role.name}</Text>
-            </Pressable>)
+            </Affordance>)
             : <Text style={styles.meta}>{t("Create a role to assign it here.")}</Text>}
           {member.role === "owner"
             ? <Text style={styles.meta}>{t("The owner cannot be removed.")}</Text>
@@ -604,27 +605,27 @@ export default function ManageCommunity() {
               {can(myMask, KICK_MEMBER) ? <>
                 <Text style={styles.meta}>{t(timedOut(member) ? "Timed out until {date}" : "Time out (read-only for a while)").replace("{date}", member.timeout_until ? formatDate(member.timeout_until, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "")}</Text>
                 <View style={styles.chipRow}>
-                  {TIMEOUTS.map(([minutes, label]) => <Pressable key={minutes} accessibilityRole="button" testID={`timeout-${member.id}-${minutes}`} disabled={disabled} onPress={() => void timeout(member, minutes)} style={styles.chip}><Text style={styles.chipText}>{t(label)}</Text></Pressable>)}
-                  {timedOut(member) ? <Pressable accessibilityRole="button" testID={`timeout-clear-${member.id}`} disabled={disabled} onPress={() => void timeout(member, 0)} style={[styles.chip, styles.chipOn]}><Text style={styles.chipText}>{t("LIFT")}</Text></Pressable> : null}
+                  {TIMEOUTS.map(([minutes, label]) => <Affordance key={minutes} accessibilityRole="button" testID={`timeout-${member.id}-${minutes}`} disabled={disabled} onPress={() => void timeout(member, minutes)} style={styles.chip}><Text style={styles.chipText}>{t(label)}</Text></Affordance>)}
+                  {timedOut(member) ? <Affordance accessibilityRole="button" testID={`timeout-clear-${member.id}`} disabled={disabled} onPress={() => void timeout(member, 0)} style={[styles.chip, styles.chipOn]}><Text style={styles.chipText}>{t("LIFT")}</Text></Affordance> : null}
                 </View>
               </> : null}
-              <Pressable accessibilityRole="button" testID={`remove-member-${member.id}`} disabled={disabled} onPress={() => void removeMember(member)} style={styles.danger}>
+              <Affordance accessibilityRole="button" testID={`remove-member-${member.id}`} disabled={disabled} onPress={() => void removeMember(member)} style={styles.danger}>
                 <Ionicons name="person-remove-outline" size={15} color={colors.error} />
                 <Text style={styles.dangerText}>{t("Remove from community")}</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" testID={`ban-member-${member.id}`} disabled={disabled} onPress={() => void banMember(member)} style={styles.danger}>
+              </Affordance>
+              <Affordance accessibilityRole="button" testID={`ban-member-${member.id}`} disabled={disabled} onPress={() => void banMember(member)} style={styles.danger}>
                 <Ionicons name="ban-outline" size={15} color={colors.error} />
                 <Text style={styles.dangerText}>{t("Ban — they cannot rejoin")}</Text>
-              </Pressable>
+              </Affordance>
               {isOwner ? confirmTransfer === member.id
                 ? <View style={styles.addRow}>
-                    <Pressable accessibilityRole="button" onPress={() => setConfirmTransfer(null)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("Cancel")}</Text></Pressable>
-                    <Pressable accessibilityRole="button" testID={`confirm-transfer-${member.id}`} disabled={disabled} onPress={() => void transfer(member)} style={[styles.dangerSolid, { flex: 1 }]}><Text style={styles.dangerSolidText}>{t("HAND OVER")}</Text></Pressable>
+                    <Affordance accessibilityRole="button" onPress={() => setConfirmTransfer(null)} style={[styles.action, { flex: 1 }]}><Text style={styles.actionText}>{t("Cancel")}</Text></Affordance>
+                    <Affordance accessibilityRole="button" testID={`confirm-transfer-${member.id}`} disabled={disabled} onPress={() => void transfer(member)} style={[styles.dangerSolid, { flex: 1 }]}><Text style={styles.dangerSolidText}>{t("HAND OVER")}</Text></Affordance>
                   </View>
-                : <Pressable accessibilityRole="button" testID={`transfer-${member.id}`} disabled={disabled} onPress={() => setConfirmTransfer(member.id)} style={styles.danger}>
+                : <Affordance accessibilityRole="button" testID={`transfer-${member.id}`} disabled={disabled} onPress={() => setConfirmTransfer(member.id)} style={styles.danger}>
                     <Ionicons name="swap-horizontal" size={15} color={colors.warning} />
                     <Text style={[styles.dangerText, { color: colors.warning }]}>{t("Make owner (you stay on as moderator)")}</Text>
-                  </Pressable> : null}
+                  </Affordance> : null}
             </>}
         </View> : null}
       </View>;
@@ -635,13 +636,13 @@ export default function ManageCommunity() {
       {banned.map(member => <View key={member.id} style={styles.row} testID={`banned-${member.id}`}>
         <Avatar user={member.user} size={32} />
         <Text style={styles.name}>{member.user?.full_name || t("Member")}</Text>
-        <Pressable accessibilityRole="button" testID={`unban-${member.id}`} disabled={disabled} onPress={() => void review(member.id, "removed")} style={styles.action}><Text style={styles.actionText}>{t("UNBAN")}</Text></Pressable>
+        <Affordance accessibilityRole="button" testID={`unban-${member.id}`} disabled={disabled} onPress={() => void review(member.id, "removed")} style={styles.action}><Text style={styles.actionText}>{t("UNBAN")}</Text></Affordance>
       </View>)}
     </> : null}
 
     <Text style={styles.section}>{t("AUDIT LOG")}</Text>
     {audit === null
-      ? <Pressable accessibilityRole="button" testID="load-audit" disabled={disabled} onPress={() => void loadAudit()} style={styles.action}><Text style={styles.actionText}>{t("SHOW RECENT ACTIONS")}</Text></Pressable>
+      ? <Affordance accessibilityRole="button" testID="load-audit" disabled={disabled} onPress={() => void loadAudit()} style={styles.action}><Text style={styles.actionText}>{t("SHOW RECENT ACTIONS")}</Text></Affordance>
       : audit.length === 0 ? <Text style={styles.empty}>{t("No moderation actions yet.")}</Text>
       : audit.map(entry => <View key={entry.id} style={styles.auditRow} testID={`audit-${entry.id}`}>
           <Text style={styles.name}>{entry.actor?.full_name || t("Member")} · {entry.action.replace("community.", "").replace(/_/g, " ")}</Text>
@@ -653,17 +654,17 @@ export default function ManageCommunity() {
       <Text style={styles.meta}>{t("Archiving hides the community and its channels. Messages are kept, and you can restore it from the Community tab.")}</Text>
       {confirmArchive
         ? <View style={styles.addRow}>
-            <Pressable accessibilityRole="button" testID="cancel-archive" disabled={disabled} onPress={() => setConfirmArchive(false)} style={[styles.action, { flex: 1 }]}>
+            <Affordance accessibilityRole="button" testID="cancel-archive" disabled={disabled} onPress={() => setConfirmArchive(false)} style={[styles.action, { flex: 1 }]}>
               <Text style={styles.actionText}>{t("Cancel")}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" testID="confirm-archive-community" disabled={disabled} onPress={() => void archiveCommunity()} style={[styles.dangerSolid, disabled && { opacity: 0.4 }]}>
+            </Affordance>
+            <Affordance accessibilityRole="button" testID="confirm-archive-community" disabled={disabled} onPress={() => void archiveCommunity()} style={[styles.dangerSolid, disabled && { opacity: 0.4 }]}>
               <Text style={styles.dangerSolidText}>{t("ARCHIVE")}</Text>
-            </Pressable>
+            </Affordance>
           </View>
-        : <Pressable accessibilityRole="button" testID="archive-community" disabled={disabled} onPress={() => setConfirmArchive(true)} style={styles.danger}>
+        : <Affordance accessibilityRole="button" testID="archive-community" disabled={disabled} onPress={() => setConfirmArchive(true)} style={styles.danger}>
             <Ionicons name="archive-outline" size={15} color={colors.error} />
             <Text style={styles.dangerText}>{t("Archive community")}</Text>
-          </Pressable>}
+          </Affordance>}
     </> : null}
   </ScrollView></SafeAreaView>;
 }

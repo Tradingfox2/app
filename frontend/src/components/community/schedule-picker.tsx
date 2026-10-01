@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "@/src/i18n";
 import { colors, radius, spacing } from "@/src/theme";
@@ -42,19 +43,19 @@ export function SchedulePicker({ value, onChange, testID }: { value: Date; onCha
       {days.map((day, index) => {
         const on = sameDay(day, value);
         const label = index === 0 ? t("Today") : index === 1 ? t("Tomorrow") : formatDate(day.toISOString(), { weekday: "short", day: "numeric" });
-        return <Pressable key={day.toISOString()} accessibilityRole="button" accessibilityState={{ selected: on }} testID={`${testID ?? "picker"}-day-${index}`} onPress={() => set({ day })} style={[styles.day, on && styles.on]}>
+        return <Affordance key={day.toISOString()} accessibilityRole="button" accessibilityState={{ selected: on }} testID={`${testID ?? "picker"}-day-${index}`} onPress={() => set({ day })} style={[styles.day, on && styles.on]}>
           <Text style={[styles.dayText, on && styles.onText]}>{label}</Text>
-        </Pressable>;
+        </Affordance>;
       })}
     </ScrollView>
     <View style={styles.timeRow}>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Earlier hour")} testID={`${testID ?? "picker"}-hour-down`} onPress={() => set({ hour: (hour + 23) % 24 })} style={styles.step}><Ionicons name="remove" size={16} color={colors.text} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Earlier hour")} testID={`${testID ?? "picker"}-hour-down`} onPress={() => set({ hour: (hour + 23) % 24 })} style={styles.step}><Ionicons name="remove" size={16} color={colors.text} /></Affordance>
       <Text style={styles.hour} testID={`${testID ?? "picker"}-hour`}>{String(hour).padStart(2, "0")}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={t("Later hour")} testID={`${testID ?? "picker"}-hour-up`} onPress={() => set({ hour: (hour + 1) % 24 })} style={styles.step}><Ionicons name="add" size={16} color={colors.text} /></Pressable>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Later hour")} testID={`${testID ?? "picker"}-hour-up`} onPress={() => set({ hour: (hour + 1) % 24 })} style={styles.step}><Ionicons name="add" size={16} color={colors.text} /></Affordance>
       <Text style={styles.colon}>:</Text>
-      {MINUTES.map(minute => <Pressable key={minute} accessibilityRole="button" testID={`${testID ?? "picker"}-minute-${minute}`} onPress={() => set({ minute })} style={[styles.minute, value.getMinutes() === minute && styles.on]}>
+      {MINUTES.map(minute => <Affordance key={minute} accessibilityRole="button" testID={`${testID ?? "picker"}-minute-${minute}`} onPress={() => set({ minute })} style={[styles.minute, value.getMinutes() === minute && styles.on]}>
         <Text style={[styles.dayText, value.getMinutes() === minute && styles.onText]}>{String(minute).padStart(2, "0")}</Text>
-      </Pressable>)}
+      </Affordance>)}
     </View>
     <Text style={[styles.summary, inPast && styles.warn]} testID={`${testID ?? "picker"}-summary`}>
       {inPast ? t("That time has already passed.") : t("Starts {date}").replace("{date}", formatDate(value.toISOString(), { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}

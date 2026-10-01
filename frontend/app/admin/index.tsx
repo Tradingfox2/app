@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -101,7 +102,7 @@ function HintedMetric({ value, label, hint, onPress, testID }: {
   );
   if (onPress) {
     return (
-      <Pressable
+      <Affordance
         accessibilityRole="button"
         accessibilityHint={hint}
         onPress={onPress}
@@ -110,7 +111,7 @@ function HintedMetric({ value, label, hint, onPress, testID }: {
         {...(Platform.OS === "web" && hint ? { title: hint } : {})}
       >
         {body}
-      </Pressable>
+      </Affordance>
     );
   }
   return (
@@ -319,7 +320,7 @@ export default function AdminConsole() {
       <Ionicons name="lock-closed" size={40} color={colors.textDim} />
       <Text style={styles.lockedText}>{t("This console is for the IronFlow staff team.")}</Text>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-      <Pressable accessibilityRole="button" onPress={leave} style={styles.primary}><Text style={styles.primaryText}>{t("BACK")}</Text></Pressable>
+      <Affordance signal="brand" accessibilityRole="button" onPress={leave} style={styles.primary}><Text style={styles.primaryText}>{t("BACK")}</Text></Affordance>
     </View></SafeAreaView>;
   }
 
@@ -332,7 +333,7 @@ export default function AdminConsole() {
   return (
     <SafeAreaView style={styles.safe} testID="admin-console">
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} hitSlop={8} onPress={leave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Back")} hitSlop={8} onPress={leave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("STAFF CONSOLE")}</Text>
           <Text style={styles.headerMeta}>{user?.email} · {t((overview?.staff_role || "").toUpperCase() || "STAFF")}</Text>
@@ -352,18 +353,18 @@ export default function AdminConsole() {
             : item.id === "support" ? overview?.queues.open_tickets
             : 0;
           return (
-            <Pressable key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => { if (tab === "support" && item.id !== "support") setTicketDetail(null); setTab(item.id); }} style={[styles.tab, tab === item.id && styles.tabActive]}>
+            <Affordance key={item.id} accessibilityRole="button" testID={`admin-tab-${item.id}`} onPress={() => { if (tab === "support" && item.id !== "support") setTicketDetail(null); setTab(item.id); }} style={[styles.tab, tab === item.id && styles.tabActive]}>
               <Ionicons name={item.icon} size={16} color={tab === item.id ? colors.text : colors.textMuted} />
               <Text style={[styles.tabText, tab === item.id && styles.tabTextActive]}>{t(item.label)}</Text>
               {count ? <View style={styles.badge}><Text style={styles.badgeText}>{count}</Text></View> : null}
-            </Pressable>
+            </Affordance>
           );
         })}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? <ActivityIndicator color={colors.text} /> : null}
-        {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { setTicketReload(value => value + 1); void load(); }}><Text style={styles.retry}>{t("Retry")}</Text></Pressable></View> : null}
+        {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" onPress={() => { setTicketReload(value => value + 1); void load(); }}><Text style={styles.retry}>{t("Retry")}</Text></Affordance></View> : null}
 
         {tab === "overview" && overview ? <>
           <Text style={styles.section}>{t("QUEUES")}</Text>
@@ -401,15 +402,15 @@ export default function AdminConsole() {
               ["total", "Total", "all"],
               ["suspended", "Suspended", "suspended"],
             ] as const).map(([key, label, filter]) => (
-              <Pressable key={key} accessibilityRole="button" onPress={() => { setStatus(filter); setTab("users"); void search(filter); }} style={styles.metric}>
+              <Affordance key={key} accessibilityRole="button" onPress={() => { setStatus(filter); setTab("users"); void search(filter); }} style={styles.metric}>
                 <Text style={styles.metricValue}>{formatNumber(overview.users[key])}</Text>
                 <Text style={styles.metricLabel}>{t(label)}</Text>
-              </Pressable>
+              </Affordance>
             ))}
-            <Pressable accessibilityRole="button" onPress={() => { setCoachDirectory(null); setCoachFilter("approved"); setTab("coaches"); }} style={styles.metric}>
+            <Affordance accessibilityRole="button" onPress={() => { setCoachDirectory(null); setCoachFilter("approved"); setTab("coaches"); }} style={styles.metric}>
               <Text style={styles.metricValue}>{formatNumber(overview.users.coaches)}</Text>
               <Text style={styles.metricLabel}>{t("Approved coaches")}</Text>
-            </Pressable>
+            </Affordance>
             <View style={styles.metric}><Text style={styles.metricValue}>{formatNumber(overview.users.new_7d)}</Text><Text style={styles.metricLabel}>{t("New (7 days)")}</Text></View>
           </View>
           <Text style={styles.section} testID="admin-section-stock">{t("STOCK")}</Text>
@@ -433,20 +434,20 @@ export default function AdminConsole() {
         {tab === "reports" ? <>
           <View style={styles.filters}>
             {(["open", "resolved"] as const).map(item => (
-              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: reportStatus === item }} onPress={() => void loadReports(item)} style={[styles.chip, reportStatus === item && styles.chipActive]}>
+              <Affordance key={item} accessibilityRole="button" accessibilityState={{ selected: reportStatus === item }} onPress={() => void loadReports(item)} style={[styles.chip, reportStatus === item && styles.chipActive]}>
                 <Text style={[styles.chipText, reportStatus === item && styles.chipTextActive]}>{t(item === "open" ? "OPEN" : "RESOLVED")}</Text>
-              </Pressable>
+              </Affordance>
             ))}
           </View>
           {reportStatus === "resolved" ? <Text style={styles.hint}>{t("Resolved reports stay here so a decision can be checked later.")}</Text> : null}
           {reportTypes.length > 0 ? <View style={styles.filters}>
-            <Pressable accessibilityRole="button" {...selectedControl(reportType === "all")} testID="report-type-all" onPress={() => setReportType("all")} style={[styles.chip, reportType === "all" && styles.chipActive]}>
+            <Affordance accessibilityRole="button" {...selectedControl(reportType === "all")} testID="report-type-all" onPress={() => setReportType("all")} style={[styles.chip, reportType === "all" && styles.chipActive]}>
               <Text style={[styles.chipText, reportType === "all" && styles.chipTextActive]}>{t("All types")}</Text>
-            </Pressable>
+            </Affordance>
             {reportTypes.map(type => (
-              <Pressable key={type} accessibilityRole="button" {...selectedControl(reportType === type)} testID={`report-type-${type}`} onPress={() => setReportType(type)} style={[styles.chip, reportType === type && styles.chipActive]}>
+              <Affordance key={type} accessibilityRole="button" {...selectedControl(reportType === type)} testID={`report-type-${type}`} onPress={() => setReportType(type)} style={[styles.chip, reportType === type && styles.chipActive]}>
                 <Text style={[styles.chipText, reportType === type && styles.chipTextActive]}>{t(reportTypeLabel(type))}</Text>
-              </Pressable>
+              </Affordance>
             ))}
           </View> : null}
           {reports.length === 0 && !loading ? <Text style={styles.hint}>{t("The moderation queue is empty.")}</Text> : null}
@@ -465,13 +466,13 @@ export default function AdminConsole() {
               {reportStatus === "resolved" && report.resolution ? <Text style={styles.meta}>{t(report.resolution.replace(/_/g, " ").toUpperCase())}</Text> : null}
               {reportStatus === "open" ? (can("reports.resolve") ? <View style={styles.actions}>
                 {RESOLUTIONS.map(option => (
-                  <Pressable key={option.key} accessibilityRole="button" testID={`resolve-${option.key}-${report.id}`} disabled={working} onPress={() => void resolve(report, option.key)} style={[styles.action, working && styles.disabled]}>
+                  <Affordance key={option.key} accessibilityRole="button" testID={`resolve-${option.key}-${report.id}`} disabled={working} onPress={() => void resolve(report, option.key)} style={[styles.action, working && styles.disabled]}>
                     <Ionicons name={option.icon} size={15} color={option.key === "content_removed" ? colors.error : colors.text} />
                     <Text style={styles.actionText}>{t(option.label)}</Text>
-                  </Pressable>
+                  </Affordance>
                 ))}
               </View> : <Text style={styles.hint}>{t("Read-only: resolving reports needs the moderator role.")}</Text>) : null}
-              {report.reported_user ? <Pressable accessibilityRole="button" onPress={() => void openUser(report.reported_user!.id)}><Text style={styles.link}>{t("Open account")}</Text></Pressable> : null}
+              {report.reported_user ? <Affordance accessibilityRole="button" onPress={() => void openUser(report.reported_user!.id)}><Text style={styles.link}>{t("Open account")}</Text></Affordance> : null}
             </View>
           ))}
         </> : null}
@@ -484,9 +485,9 @@ export default function AdminConsole() {
               ["suspended", "Banned coaches"],
               ["rejected", "Rejected coaches"],
             ] as const).map(([item, label]) => (
-              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: coachFilter === item }} onPress={() => { setCoachDirectory(null); setCoachFilter(item); }} style={[styles.chip, coachFilter === item && styles.chipActive]}>
+              <Affordance key={item} accessibilityRole="button" accessibilityState={{ selected: coachFilter === item }} onPress={() => { setCoachDirectory(null); setCoachFilter(item); }} style={[styles.chip, coachFilter === item && styles.chipActive]}>
                 <Text style={[styles.chipText, coachFilter === item && styles.chipTextActive]}>{t(label)}</Text>
-              </Pressable>
+              </Affordance>
             ))}
           </View>
           {coachFilter === "suspended" ? <Text style={styles.hint}>{t("A banned coach has a suspended account. Open the account to suspend or reinstate.")}</Text> : null}
@@ -508,16 +509,16 @@ export default function AdminConsole() {
               {coach.review_note ? <Text style={styles.meta}>{coach.review_note}</Text> : null}
               {!coach.application_id ? <Text style={styles.hint}>{t("No application on file.")}</Text> : null}
               {coachFilter === "pending" && coach.application_id ? (can("coaches.review") ? <View style={styles.actions}>
-                <Pressable accessibilityRole="button" testID={`reject-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "rejected")} style={[styles.action, working && styles.disabled]}>
+                <Affordance accessibilityRole="button" testID={`reject-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "rejected")} style={[styles.action, working && styles.disabled]}>
                   <Ionicons name="close" size={15} color={colors.error} />
                   <Text style={styles.actionText}>{t("Reject")}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" testID={`approve-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "approved")} style={[styles.action, working && styles.disabled]}>
+                </Affordance>
+                <Affordance accessibilityRole="button" testID={`approve-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "approved")} style={[styles.action, working && styles.disabled]}>
                   <Ionicons name="checkmark" size={15} color={colors.text} />
                   <Text style={styles.actionText}>{t("Approve")}</Text>
-                </Pressable>
+                </Affordance>
               </View> : <Text style={styles.hint}>{t("Read-only: reviewing coaches needs the admin role.")}</Text>) : null}
-              <Pressable accessibilityRole="button" onPress={() => void openUser(coach.user_id)}><Text style={styles.link}>{t("Open account")}</Text></Pressable>
+              <Affordance accessibilityRole="button" onPress={() => void openUser(coach.user_id)}><Text style={styles.link}>{t("Open account")}</Text></Affordance>
             </View>
           ))}
         </> : null}
@@ -525,17 +526,17 @@ export default function AdminConsole() {
         {tab === "users" ? <>
           <View style={styles.searchRow}>
             <TextInput value={query} onChangeText={setQuery} onSubmitEditing={() => void search()} maxLength={80} placeholder={t("Search by name, email or ID")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-user-search" />
-            <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => void search()} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Pressable>
+            <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => void search()} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Affordance>
           </View>
           <View style={styles.filters}>
             {(["all", "active", "suspended", "staff"] as Status[]).map(item => (
-              <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => { setStatus(item); void search(item); }} style={[styles.chip, status === item && styles.chipActive]}>
+              <Affordance key={item} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => { setStatus(item); void search(item); }} style={[styles.chip, status === item && styles.chipActive]}>
                 <Text style={[styles.chipText, status === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
-              </Pressable>
+              </Affordance>
             ))}
           </View>
           {users.map(account => (
-            <Pressable key={account.id} accessibilityRole="button" testID={`admin-user-${account.id}`} onPress={() => void openUser(account.id)} style={styles.row}>
+            <Affordance key={account.id} accessibilityRole="button" testID={`admin-user-${account.id}`} onPress={() => void openUser(account.id)} style={styles.row}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.name}>{account.full_name || account.email}</Text>
                 <Text style={styles.meta}>{account.email}</Text>
@@ -543,7 +544,7 @@ export default function AdminConsole() {
               {account.staff_role ? <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(account.staff_role.toUpperCase())}</Text></View> : null}
               {account.suspended_at ? <View style={styles.suspendedTag}><Text style={styles.suspendedTagText}>{t("SUSPENDED")}</Text></View> : null}
               <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
-            </Pressable>
+            </Affordance>
           ))}
           {selected ? <View style={styles.card} testID="admin-user-detail">
             <Text style={styles.section}>{selected.full_name || selected.email}</Text>
@@ -556,14 +557,14 @@ export default function AdminConsole() {
             {selected.suspended_at ? <Text style={styles.suspendedNote}>{t("Suspended:")} {selected.suspension_reason}</Text> : null}
             <TextInput value={reason} onChangeText={setReason} maxLength={500} placeholder={t("Reason (required, saved to the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} testID="admin-reason" />
             <View style={styles.actions}>
-              {can("users.suspend") ? <Pressable accessibilityRole="button" testID="admin-suspend" disabled={suspendDisabled} onPress={() => void suspend(selected)} style={[styles.action, suspendDisabled && styles.disabled]}>
+              {can("users.suspend") ? <Affordance accessibilityRole="button" testID="admin-suspend" disabled={suspendDisabled} onPress={() => void suspend(selected)} style={[styles.action, suspendDisabled && styles.disabled]}>
                 <Ionicons name={selected.suspended_at ? "lock-open-outline" : "lock-closed-outline"} size={15} color={selected.suspended_at ? colors.success : colors.error} />
                 <Text style={styles.actionText}>{t(selected.suspended_at ? "REINSTATE" : "SUSPEND")}</Text>
-              </Pressable> : null}
+              </Affordance> : null}
               {can("staff.manage") ? ([null, "support", "moderator", "admin"] as (StaffRole | null)[]).map(role => (
-                <Pressable key={role ?? "none"} accessibilityRole="button" testID={`admin-role-${role ?? "none"}`} disabled={working || reason.trim().length < 5 || selected.staff_role === role} onPress={() => void setRole(selected, role)} style={[styles.action, (working || reason.trim().length < 5 || selected.staff_role === role) && styles.disabled]}>
+                <Affordance key={role ?? "none"} accessibilityRole="button" testID={`admin-role-${role ?? "none"}`} disabled={working || reason.trim().length < 5 || selected.staff_role === role} onPress={() => void setRole(selected, role)} style={[styles.action, (working || reason.trim().length < 5 || selected.staff_role === role) && styles.disabled]}>
                   <Text style={styles.actionText}>{t((role ?? "no staff").toUpperCase())}</Text>
-                </Pressable>
+                </Affordance>
               )) : null}
             </View>
             <Text style={styles.section}>{t("STAFF NOTES")}</Text>
@@ -571,19 +572,19 @@ export default function AdminConsole() {
               ? selected.notes.map(note => <View key={note.id} style={styles.note}><Text style={styles.meta}>{note.author_email} · {formatDate(note.created_at, { dateStyle: "short" })}</Text><Text style={styles.noteText}>{note.note}</Text></View>)
               : <Text style={styles.hint}>{t("No notes on this account yet.")}</Text>}
             <TextInput value={note} onChangeText={setNote} maxLength={1000} placeholder={t("Add a note for the team")} placeholderTextColor={colors.textDim} style={styles.input} testID="admin-note" />
-            <Pressable accessibilityRole="button" testID="admin-add-note" disabled={working || note.trim().length < 3} onPress={() => void addNote(selected)} style={[styles.action, (working || note.trim().length < 3) && styles.disabled]}>
+            <Affordance accessibilityRole="button" testID="admin-add-note" disabled={working || note.trim().length < 3} onPress={() => void addNote(selected)} style={[styles.action, (working || note.trim().length < 3) && styles.disabled]}>
               <Ionicons name="create-outline" size={15} color={colors.text} />
               <Text style={styles.actionText}>{t("Save note")}</Text>
-            </Pressable>
+            </Affordance>
           </View> : null}
         </> : null}
 
         {tab === "joins" ? <>
           <View style={styles.filters}>
             {MEMBERSHIP_STATUSES.map(item => (
-              <Pressable key={item} accessibilityRole="button" {...selectedControl(joinStatus === item)} testID={`membership-filter-${item}`} onPress={() => setJoinStatus(item)} style={[styles.chip, joinStatus === item && styles.chipActive]}>
+              <Affordance key={item} accessibilityRole="button" {...selectedControl(joinStatus === item)} testID={`membership-filter-${item}`} onPress={() => setJoinStatus(item)} style={[styles.chip, joinStatus === item && styles.chipActive]}>
                 <Text style={[styles.chipText, joinStatus === item && styles.chipTextActive]}>{t(membershipStatusLabel(item))}</Text>
-              </Pressable>
+              </Affordance>
             ))}
           </View>
           {joinStatus === "pending" ? <Text style={styles.hint} testID="membership-waiting-hint">{t("Accept or decline a waiting request. Paid communities still need verified billing.")}</Text> : null}
@@ -595,18 +596,18 @@ export default function AdminConsole() {
               <Text style={styles.meta}>{row.user?.email}</Text>
               <Text style={styles.meta}>{row.community?.name || t("Unknown")} · {formatDate(row.created_at, { day: "numeric", month: "short" })}</Text>
               {joinStatus === "pending" ? (can("content.moderate") ? <View style={styles.actions}>
-                <Pressable accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "rejected")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
+                <Affordance accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "rejected")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
                   <Ionicons name="close" size={15} color={colors.error} />
                   <Text style={styles.actionText}>{t("Reject")}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "active")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
+                </Affordance>
+                <Affordance accessibilityRole="button" disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "active")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
                   <Ionicons name="checkmark" size={15} color={colors.text} />
                   <Text style={styles.actionText}>{t("Approve")}</Text>
-                </Pressable>
+                </Affordance>
               </View> : <Text style={styles.hint}>{t("Read-only: reviewing requests needs the moderator role.")}</Text>) : null}
               <View style={styles.actions}>
-                <Pressable accessibilityRole="button" onPress={() => void openUser(row.user_id)} style={styles.action}><Text style={styles.actionText}>{t("Open account")}</Text></Pressable>
-                {row.community ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/community/[id]", params: { id: row.community_id } })} style={styles.action}><Text style={styles.actionText}>{t("OPEN COMMUNITY")}</Text></Pressable> : null}
+                <Affordance accessibilityRole="button" onPress={() => void openUser(row.user_id)} style={styles.action}><Text style={styles.actionText}>{t("Open account")}</Text></Affordance>
+                {row.community ? <Affordance accessibilityRole="button" onPress={() => router.push({ pathname: "/community/[id]", params: { id: row.community_id } })} style={styles.action}><Text style={styles.actionText}>{t("OPEN COMMUNITY")}</Text></Affordance> : null}
               </View>
             </View>
           ))}
@@ -615,37 +616,37 @@ export default function AdminConsole() {
         {tab === "communities" ? <>
           {communities.length === 0 && !loading ? <Text style={styles.hint}>{t("No communities yet")}</Text> : null}
           {communities.map(group => (
-            <Pressable key={group.id} accessibilityRole="button" accessibilityHint={t("Active members only")} {...(Platform.OS === "web" ? { title: t("Active members only") } : {})} testID={`admin-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
+            <Affordance key={group.id} accessibilityRole="button" accessibilityHint={t("Active members only")} {...(Platform.OS === "web" ? { title: t("Active members only") } : {})} testID={`admin-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.name}>{group.name}</Text>
                 <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {t(group.status.toUpperCase())} · {t("{n} members", { n: formatNumber(group.member_count) })}{group.pending_count ? ` · ${t("{n} waiting to join", { n: formatNumber(group.pending_count) })}` : ""}</Text>
                 <Text style={styles.metricHint}>{t("Active members only")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
-            </Pressable>
+            </Affordance>
           ))}
         </> : null}
 
         {tab === "team" ? <>
           {team.length === 0 && !loading ? <Text style={styles.hint}>{t("No staff yet. Open a member and assign Support, Moderator or Admin.")}</Text> : null}
-          <Pressable accessibilityRole="button" onPress={() => setTab("users")} style={styles.action}><Text style={styles.actionText}>{t("HIRE")}</Text></Pressable>
+          <Affordance accessibilityRole="button" onPress={() => setTab("users")} style={styles.action}><Text style={styles.actionText}>{t("HIRE")}</Text></Affordance>
           {team.map(account => (
-            <Pressable key={account.id} accessibilityRole="button" onPress={() => { setTab("users"); void openUser(account.id); }} style={styles.row}>
+            <Affordance key={account.id} accessibilityRole="button" onPress={() => { setTab("users"); void openUser(account.id); }} style={styles.row}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.name}>{account.full_name || account.email}</Text>
                 <Text style={styles.meta}>{account.email}</Text>
               </View>
               {account.staff_role ? <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(account.staff_role.toUpperCase())}</Text></View> : null}
-            </Pressable>
+            </Affordance>
           ))}
         </> : null}
 
         {tab === "support" && can("tickets.read") ? <>
           {ticketDetail ? <View testID="ticket-thread">
-            <Pressable accessibilityRole="button" testID="ticket-back" onPress={() => setTicketDetail(null)} style={styles.action}>
+            <Affordance accessibilityRole="button" testID="ticket-back" onPress={() => setTicketDetail(null)} style={styles.action}>
               <Ionicons name="arrow-back" size={15} color={colors.text} />
               <Text style={styles.actionText}>{t("BACK TO QUEUE")}</Text>
-            </Pressable>
+            </Affordance>
             <View style={styles.card}>
               <View style={styles.cardHead}>
                 <Text style={styles.tag}>{t(ticketDetail.category.replace(/_/g, " ").toUpperCase())}</Text>
@@ -666,43 +667,43 @@ export default function AdminConsole() {
                 <Text style={styles.section}>{t("STATUS")}</Text>
                 <View style={styles.filters}>
                   {TICKET_STATUSES.map(item => (
-                    <Pressable key={item} accessibilityRole="button" {...selectedControl(draftStatus === item)} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} style={[styles.chip, draftStatus === item && styles.chipActive]}>
+                    <Affordance key={item} accessibilityRole="button" {...selectedControl(draftStatus === item)} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} style={[styles.chip, draftStatus === item && styles.chipActive]}>
                       <Text style={[styles.chipText, draftStatus === item && styles.chipTextActive]}>{staffTicketStatusLabel(item, t)}</Text>
-                    </Pressable>
+                    </Affordance>
                   ))}
                 </View>
-                <Pressable accessibilityRole="button" testID="ticket-save-status" disabled={working || draftStatus === ticketDetail.status} onPress={() => void saveTicketStatus()} style={[styles.action, (working || draftStatus === ticketDetail.status) && styles.disabled]}>
+                <Affordance accessibilityRole="button" testID="ticket-save-status" disabled={working || draftStatus === ticketDetail.status} onPress={() => void saveTicketStatus()} style={[styles.action, (working || draftStatus === ticketDetail.status) && styles.disabled]}>
                   <Text style={styles.actionText}>{t("SAVE STATUS")}</Text>
-                </Pressable>
+                </Affordance>
                 <Text style={styles.section}>{t("REPLY")}</Text>
                 <TextInput value={reply} onChangeText={setReply} maxLength={5000} multiline placeholder={t("Reply to the member")} placeholderTextColor={colors.textDim} style={[styles.input, styles.replyInput]} testID="ticket-reply" />
-                <Pressable accessibilityRole="button" testID="ticket-send-reply" disabled={working || reply.trim().length === 0} onPress={() => void sendReply()} style={[styles.action, (working || reply.trim().length === 0) && styles.disabled]}>
+                <Affordance accessibilityRole="button" testID="ticket-send-reply" disabled={working || reply.trim().length === 0} onPress={() => void sendReply()} style={[styles.action, (working || reply.trim().length === 0) && styles.disabled]}>
                   <Ionicons name="send-outline" size={15} color={colors.text} />
                   <Text style={styles.actionText}>{t("SEND REPLY")}</Text>
-                </Pressable>
+                </Affordance>
                 <Text style={styles.hint}>{t("A reply marks the ticket pending so the member knows staff has answered.")}</Text>
               </> : <Text style={styles.hint}>{t("Read-only: replying to tickets needs the support role.")}</Text>}
             </View>
           </View> : <>
             <View style={styles.filters}>
               {TICKET_STATUSES.map(item => (
-                <Pressable key={item} accessibilityRole="button" {...selectedControl(ticketStatus === item)} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} style={[styles.chip, ticketStatus === item && styles.chipActive]}>
+                <Affordance key={item} accessibilityRole="button" {...selectedControl(ticketStatus === item)} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} style={[styles.chip, ticketStatus === item && styles.chipActive]}>
                   <Text style={[styles.chipText, ticketStatus === item && styles.chipTextActive]}>{staffTicketStatusLabel(item, t)}</Text>
-                </Pressable>
+                </Affordance>
               ))}
-              <Pressable accessibilityRole="button" {...selectedControl(unassignedOnly)} testID="ticket-filter-unassigned" onPress={() => setUnassignedOnly(value => !value)} style={[styles.chip, unassignedOnly && styles.chipActive]}>
+              <Affordance accessibilityRole="button" {...selectedControl(unassignedOnly)} testID="ticket-filter-unassigned" onPress={() => setUnassignedOnly(value => !value)} style={[styles.chip, unassignedOnly && styles.chipActive]}>
                 <Text style={[styles.chipText, unassignedOnly && styles.chipTextActive]}>{t("Unassigned")}</Text>
-              </Pressable>
+              </Affordance>
             </View>
             <View style={styles.searchRow}>
               <TextInput value={ticketQuery} onChangeText={setTicketQuery} onSubmitEditing={() => setTicketSearch(ticketQuery.trim())} maxLength={80} placeholder={t("Search by subject, email, or ticket id")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-ticket-search" />
-              <Pressable accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => setTicketSearch(ticketQuery.trim())} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Pressable>
+              <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => setTicketSearch(ticketQuery.trim())} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Affordance>
             </View>
             {!can("tickets.read") ? <Text style={styles.hint}>{t("Reading tickets needs the support role.")}</Text> : null}
             {tickets === null && !error ? <ActivityIndicator color={colors.text} /> : null}
             {can("tickets.read") && tickets && visibleTickets.length === 0 && !error ? <Text style={styles.hint}>{t(unassignedOnly && tickets.length > 0 ? "No unassigned tickets." : "The support queue is empty.")}</Text> : null}
             {visibleTickets.map(ticket => (
-              <Pressable key={ticket.id} accessibilityRole="button" testID={`admin-ticket-${ticket.id}`} onPress={() => void openTicket(ticket.id)} style={styles.row}>
+              <Affordance key={ticket.id} accessibilityRole="button" testID={`admin-ticket-${ticket.id}`} onPress={() => void openTicket(ticket.id)} style={styles.row}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.name}>{ticket.subject}</Text>
                   <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())}</Text>
@@ -710,7 +711,7 @@ export default function AdminConsole() {
                 </View>
                 <View style={styles.staffTag}><Text style={styles.staffTagText}>{staffTicketStatusLabel(ticket.status, t)}</Text></View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
-              </Pressable>
+              </Affordance>
             ))}
           </>}
         </> : null}

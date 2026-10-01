@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { api, type ModerationReport } from "@/src/api";
 import { useI18n } from "@/src/i18n";
 import { colors, radius, spacing } from "@/src/theme";
@@ -42,22 +43,22 @@ export function ReportSheet({ target, onClose, onReported }: { target: ReportTar
   };
 
   return <Modal visible={!!target} transparent animationType="slide" onRequestClose={close}>
-    <Pressable style={styles.backdrop} onPress={close} accessibilityLabel={t("Close")} />
+    <Affordance signal="none" style={styles.backdrop} onPress={close} accessibilityLabel={t("Close")} />
     <View style={styles.sheet} testID="report-sheet">
       {done ? <>
         <Text style={styles.title}>{t("Thanks for letting us know")}</Text>
         <Text style={styles.body}>{t("A moderator will review it. The person you reported is not told who reported them.")}</Text>
-        <Pressable accessibilityRole="button" onPress={close} style={styles.primary} testID="report-done"><Text style={styles.primaryText}>{t("DONE")}</Text></Pressable>
+        <Affordance signal="brand" accessibilityRole="button" onPress={close} style={styles.primary} testID="report-done"><Text style={styles.primaryText}>{t("DONE")}</Text></Affordance>
       </> : <>
         <Text style={styles.title}>{t("Why are you reporting this?")}</Text>
-        {REASONS.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: reason === value }} testID={`report-reason-${value}`} onPress={() => setReason(value)} style={[styles.reason, reason === value && styles.reasonOn]}>
+        {REASONS.map(([value, label]) => <Affordance key={value} accessibilityRole="radio" accessibilityState={{ checked: reason === value }} testID={`report-reason-${value}`} onPress={() => setReason(value)} style={[styles.reason, reason === value && styles.reasonOn]}>
           <Text style={[styles.reasonText, reason === value && styles.reasonTextOn]}>{t(label)}</Text>
-        </Pressable>)}
+        </Affordance>)}
         <TextInput value={detail} onChangeText={setDetail} maxLength={1000} multiline placeholder={t("Add detail (optional)")} placeholderTextColor={colors.textDim} style={styles.input} testID="report-detail" />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable accessibilityRole="button" disabled={!reason || busy} onPress={() => void submit()} style={[styles.primary, (!reason || busy) && styles.disabled]} testID="report-submit">
+        <Affordance signal="brand" accessibilityRole="button" disabled={!reason || busy} onPress={() => void submit()} style={[styles.primary, (!reason || busy) && styles.disabled]} testID="report-submit">
           {busy ? <ActivityIndicator color={colors.brandOn} /> : <Text style={styles.primaryText}>{t("SEND REPORT")}</Text>}
-        </Pressable>
+        </Affordance>
       </>}
     </View>
   </Modal>;

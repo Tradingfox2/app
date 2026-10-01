@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -173,15 +174,15 @@ export default function LiveRoomScreen() {
   return <SafeAreaView style={styles.safe}>
     <KeyboardAvoidingView behavior="padding" style={styles.safe}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} onPress={back} style={styles.icon} testID="live-room-back">
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Back")} onPress={back} style={styles.icon} testID="live-room-back">
           <Ionicons name="arrow-back" size={20} color={colors.text} />
-        </Pressable>
+        </Affordance>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1} testID="live-room-title">{session?.title || t("LIVE ROOM")}</Text>
           <Text style={styles.meta}>{t("{count} here").replace("{count}", String(participants.length))}</Text>
         </View>
         {live ? <View style={styles.badge} testID="live-room-badge"><View style={styles.liveDot} /><Text style={styles.badgeText}>{t("LIVE")}</Text></View> : null}
-        {canEnd && live ? <Pressable accessibilityRole="button" onPress={() => void end()} style={styles.end} testID="live-room-end"><Text style={styles.endText}>{t("END")}</Text></Pressable> : null}
+        {canEnd && live ? <Affordance accessibilityRole="button" onPress={() => void end()} style={styles.end} testID="live-room-end"><Text style={styles.endText}>{t("END")}</Text></Affordance> : null}
       </View>
 
       <View style={styles.room} testID="live-room">
@@ -213,9 +214,9 @@ export default function LiveRoomScreen() {
           )}
         />
 
-        {session?.join_url ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.external} testID="live-room-external">
+        {session?.join_url ? <Affordance accessibilityRole="link" onPress={() => void Linking.openURL(session.join_url!)} style={styles.external} testID="live-room-external">
           <Text style={styles.externalText}>{t("OPEN LINK")}</Text>
-        </Pressable> : null}
+        </Affordance> : null}
 
         {live && joined ? <View style={styles.composer}>
           <TextInput
@@ -228,9 +229,9 @@ export default function LiveRoomScreen() {
             style={styles.input}
             testID="live-composer"
           />
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Send message")} disabled={!draft.trim() || sending} onPress={() => void send()} style={[styles.send, (!draft.trim() || sending) && styles.disabled]} testID="live-send">
+          <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t("Send message")} disabled={!draft.trim() || sending} onPress={() => void send()} style={[styles.send, (!draft.trim() || sending) && styles.disabled]} testID="live-send">
             <Ionicons name="send" size={16} color={colors.brandOn} />
-          </Pressable>
+          </Affordance>
         </View> : null}
       </View>
     </KeyboardAvoidingView>

@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
@@ -136,9 +129,9 @@ export default function Settings() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="settings-screen">
       <View style={styles.header}>
-        <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.headerIcon}>
+        <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.headerIcon}>
           <Ionicons name="arrow-back" size={20} color={colors.text} />
-        </Pressable>
+        </Affordance>
         <Text style={styles.headerTitle}>{t("SETTINGS")}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -150,17 +143,17 @@ export default function Settings() {
           <Text style={styles.heroRole}>{user?.role?.toUpperCase()}</Text>
           {user?.bio ? <Text style={styles.refMeta} testID="my-bio">{user.bio}</Text> : null}
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
-            <Pressable accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.logoutBtn}>
+            <Affordance accessibilityRole="button" testID="edit-profile" onPress={() => router.push("/profile-edit")} style={styles.logoutBtn}>
               <Ionicons name="create-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("EDIT PROFILE")}</Text>
-            </Pressable>
-            {user ? <Pressable accessibilityRole="button" testID="view-my-profile" onPress={() => router.push({ pathname: "/user/[id]", params: { id: user.id } })} style={styles.logoutBtn}>
+            </Affordance>
+            {user ? <Affordance accessibilityRole="button" testID="view-my-profile" onPress={() => router.push({ pathname: "/user/[id]", params: { id: user.id } })} style={styles.logoutBtn}>
               <Ionicons name="person-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("VIEW PROFILE")}</Text>
-            </Pressable> : null}
-            {user ? <Pressable accessibilityRole="button" testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.logoutBtn}>
+            </Affordance> : null}
+            {user ? <Affordance accessibilityRole="button" testID="open-friends-feed" onPress={() => router.push("/friends" as Href)} style={styles.logoutBtn}>
               <Ionicons name="people-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("FRIENDS")}</Text>
-            </Pressable> : null}
+            </Affordance> : null}
           </View>
-          <Pressable
+          <Affordance
             testID="logout-btn"
             accessibilityRole="button"
             accessibilityLabel="Sign out"
@@ -188,12 +181,12 @@ export default function Settings() {
             <Text style={styles.logoutTxt} pointerEvents="none">
               {signingOut ? t("SIGNING OUT…") : t("SIGN OUT")}
             </Text>
-          </Pressable>
+          </Affordance>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("COACH & COMMUNITY")}</Text>
-          <Pressable
+          <Affordance
             style={styles.refCard}
             onPress={() => router.push((user?.role === "coach" ? "/partner" : "/coach/onboarding") as Href)}
           >
@@ -202,52 +195,52 @@ export default function Settings() {
               <Text style={styles.refMeta}>{t(user?.role === "coach" ? "Manage communities, members, and verified earnings." : "Apply to create communities and paid memberships.")}</Text>
             </View>
             <Ionicons name={user?.role === "coach" ? "analytics" : "ribbon"} size={28} color={colors.text} />
-          </Pressable>
-          <Pressable testID="open-follow-requests" style={styles.refCard} onPress={() => router.push("/follow-requests")}>
+          </Affordance>
+          <Affordance testID="open-follow-requests" style={styles.refCard} onPress={() => router.push("/follow-requests")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("FOLLOW REQUESTS")}</Text>
               <Text style={styles.refMeta}>{t("People asking to follow your private account.")}</Text>
             </View>
             {requestCount > 0 ? <View testID="follow-request-badge" style={styles.badge}><Text style={styles.badgeText}>{requestCount > 99 ? "99+" : requestCount}</Text></View> : null}
             <Ionicons name="person-add" size={28} color={colors.text} />
-          </Pressable>
-          <Pressable testID="open-notifications" style={styles.refCard} onPress={() => router.push("/notifications")}>
+          </Affordance>
+          <Affordance testID="open-notifications" style={styles.refCard} onPress={() => router.push("/notifications")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("NOTIFICATIONS")}</Text>
               <Text style={styles.refMeta}>{t("Mentions, moderation decisions and lab results.")}</Text>
             </View>
             {unreadCount > 0 ? <View testID="notification-badge" style={styles.badge}><Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text></View> : null}
             <Ionicons name="notifications" size={28} color={colors.text} />
-          </Pressable>
-          <Pressable testID="open-notification-settings" style={styles.refCard} onPress={() => router.push("/notification-settings")}>
+          </Affordance>
+          <Affordance testID="open-notification-settings" style={styles.refCard} onPress={() => router.push("/notification-settings")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("NOTIFICATION SETTINGS")}</Text>
               <Text style={styles.refMeta}>{t("Choose what reaches you, in the app and on your phone.")}</Text>
             </View>
             <Ionicons name="options" size={28} color={colors.text} />
-          </Pressable>
-          <Pressable testID="open-saved" style={styles.refCard} onPress={() => router.push("/saved")}>
+          </Affordance>
+          <Affordance testID="open-saved" style={styles.refCard} onPress={() => router.push("/saved")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("SAVED POSTS")}</Text>
               <Text style={styles.refMeta}>{t("Posts you bookmarked. Only you can see this list.")}</Text>
             </View>
             <Ionicons name="bookmark" size={28} color={colors.text} />
-          </Pressable>
-          <Pressable testID="open-support" style={styles.refCard} onPress={() => router.push("/support")}>
+          </Affordance>
+          <Affordance testID="open-support" style={styles.refCard} onPress={() => router.push("/support")}>
             <View style={{ flex: 1 }}>
               <Text style={styles.refLabel}>{t("SUPPORT")}</Text>
               <Text style={styles.refMeta}>{t("Questions about billing, your account, or the app.")}</Text>
             </View>
             <Ionicons name="help-buoy" size={28} color={colors.text} />
-          </Pressable>
+          </Affordance>
           {user?.staff_role ? (
-            <Pressable testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>
+            <Affordance testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.refLabel}>{t("STAFF CONSOLE")}</Text>
                 <Text style={styles.refMeta}>{t("Moderation queue, accounts and audit log.")}</Text>
               </View>
               <Ionicons name="shield-checkmark" size={28} color={colors.text} />
-            </Pressable>
+            </Affordance>
           ) : null}
         </View>
 
@@ -257,7 +250,7 @@ export default function Settings() {
             {LANGUAGES.map((language) => {
               const active = (user?.preferred_locale ?? "fr") === language.code;
               return (
-                <Pressable
+                <Affordance
                   key={language.code}
                   testID={`language-${language.code}`}
                   accessibilityRole="radio"
@@ -270,7 +263,7 @@ export default function Settings() {
                     {language.label}
                   </Text>
                   {active ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
-                </Pressable>
+                </Affordance>
               );
             })}
           </View>
@@ -304,7 +297,7 @@ export default function Settings() {
           {PLANS.map((p) => {
             const active = (sub?.plan ?? "free") === p.key;
             return (
-              <Pressable
+              <Affordance
                 key={p.key}
                 testID={`plan-${p.key}-btn`}
                 onPress={() => selectPlan(p.key)}
@@ -332,7 +325,7 @@ export default function Settings() {
                     ))}
                   </View>
                 </View>
-              </Pressable>
+              </Affordance>
             );
           })}
         </View>
@@ -349,7 +342,7 @@ export default function Settings() {
           </View>
         </View>
 
-        <Pressable
+        <Affordance
           testID="logout-btn-bottom"
           accessibilityRole="button"
           accessibilityLabel="Sign out"
@@ -377,7 +370,7 @@ export default function Settings() {
           <Text style={styles.logoutTxt} pointerEvents="none">
             {signingOut ? t("SIGNING OUT…") : t("SIGN OUT")}
           </Text>
-        </Pressable>
+        </Affordance>
       </ScrollView>
     </SafeAreaView>
   );

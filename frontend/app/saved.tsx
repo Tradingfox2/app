@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -39,7 +40,7 @@ export default function SavedScreen() {
   const patch = (id: string, next: Post) => setPosts(current => (current || []).map(row => row.id === id ? next : row));
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.title}>{t("SAVED")}</Text>
     </View>
     <ScrollView>
@@ -49,7 +50,7 @@ export default function SavedScreen() {
       {/* An unsaved post stays until the next visit, so a mis-tap can be undone in place. */}
       {(posts || []).map(post => <PostCard key={post.id} post={post} onChange={next => patch(post.id, next)}
         onRemoved={() => setPosts(current => (current || []).filter(row => row.id !== post.id))} onReposted={() => undefined} />)}
-      {hasMore ? <Pressable accessibilityRole="button" onPress={() => void more()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Pressable> : null}
+      {hasMore ? <Affordance accessibilityRole="button" onPress={() => void more()} style={styles.more}><Text style={styles.moreText}>{t("LOAD MORE")}</Text></Affordance> : null}
     </ScrollView>
   </SafeAreaView>;
 }

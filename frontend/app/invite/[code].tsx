@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -67,7 +68,7 @@ export default function InviteScreen() {
 
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityLabel={t("Back")} onPress={() => router.canGoBack() ? router.back() : router.replace("/community")} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
+      <Affordance accessibilityLabel={t("Back")} onPress={() => router.canGoBack() ? router.back() : router.replace("/community")} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <Text style={styles.headerTitle}>{t("INVITATION")}</Text>
     </View>
     <ScrollView contentContainerStyle={styles.scroll}>
@@ -86,15 +87,15 @@ export default function InviteScreen() {
 
         {status === "active" ? <>
           <Text style={styles.note}>{t("You are already a member.")}</Text>
-          <Pressable accessibilityRole="button" testID="invite-open" onPress={() => router.replace({ pathname: "/community/[id]", params: { id: community.id } })} style={styles.primary}><Text style={styles.primaryText}>{t("OPEN COMMUNITY")}</Text></Pressable>
+          <Affordance signal="brand" accessibilityRole="button" testID="invite-open" onPress={() => router.replace({ pathname: "/community/[id]", params: { id: community.id } })} style={styles.primary}><Text style={styles.primaryText}>{t("OPEN COMMUNITY")}</Text></Affordance>
         </> : status === "pending" ? <Text style={styles.note} testID="invite-pending">{t("Your request is waiting for a manager's approval.")}</Text>
           : status === "banned" ? <Text style={styles.note}>{t("You cannot join this community.")}</Text>
           : blockedReason ? <Text style={styles.note} testID="invite-unusable">{blockedReason}</Text>
           : <>
             {paid ? <Text style={styles.note} testID="invite-paid">{t("Monthly, by card through Stripe. Leave any time and the subscription stops.")}</Text> : null}
-            <Pressable accessibilityRole="button" testID="invite-accept" disabled={busy} onPress={() => void (paid ? subscribe() : redeem())} style={[styles.primary, busy && { opacity: 0.5 }]}>
+            <Affordance signal="brand" accessibilityRole="button" testID="invite-accept" disabled={busy} onPress={() => void (paid ? subscribe() : redeem())} style={[styles.primary, busy && { opacity: 0.5 }]}>
               <Text style={styles.primaryText}>{t(paid ? "SUBSCRIBE" : preview?.skip_approval || community.join_policy === "open" ? "JOIN" : "REQUEST TO JOIN")}</Text>
-            </Pressable>
+            </Affordance>
           </>}
       </View> : null}
     </ScrollView>

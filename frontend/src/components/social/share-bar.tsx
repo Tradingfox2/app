@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { buildPostUrl, copyPostLink, openShareTarget, sharePost, type ShareTarget } from "@/src/share";
 import { useI18n } from "@/src/i18n";
@@ -42,18 +43,18 @@ export function ShareBar({ postId, title, message }: { postId: string; title?: s
   return (
     <View style={styles.wrap} testID={`post-share-bar-${postId}`}>
       <View style={styles.row}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Share")} testID={`post-share-sheet-${postId}`} onPress={() => void systemShare()} style={styles.chip}>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Share")} testID={`post-share-sheet-${postId}`} onPress={() => void systemShare()} style={styles.chip}>
           <Ionicons name="share-outline" size={16} color={colors.text} />
           <Text style={styles.chipText}>{t("Share")}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("Copied") : t("Copy link")} testID={`post-copy-link-${postId}`} onPress={() => void copy()} style={styles.chip}>
+        </Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={copied ? t("Copied") : t("Copy link")} testID={`post-copy-link-${postId}`} onPress={() => void copy()} style={styles.chip}>
           <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color={colors.text} />
           <Text style={styles.chipText}>{copied ? t("Copied") : t("Copy link")}</Text>
-        </Pressable>
+        </Affordance>
         {TARGETS.map(target => (
-          <Pressable key={target.key} accessibilityRole="button" accessibilityLabel={t(target.label)} testID={`post-share-${target.key}-${postId}`} onPress={() => void openTarget(target.key)} style={styles.iconChip}>
+          <Affordance key={target.key} accessibilityRole="button" accessibilityLabel={t(target.label)} testID={`post-share-${target.key}-${postId}`} onPress={() => void openTarget(target.key)} style={styles.iconChip}>
             <Ionicons name={target.icon} size={16} color={colors.text} />
-          </Pressable>
+          </Affordance>
         ))}
       </View>
       <Text selectable style={styles.url} testID={`post-share-url-${postId}`}>{url}</Text>

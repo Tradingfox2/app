@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api, type StoryGroup } from "@/src/api";
@@ -24,24 +25,24 @@ export function StoriesTray() {
 
   return <View testID="community-stories">
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tray}>
-      <Pressable accessibilityRole="button" testID="community-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
+      <Affordance accessibilityRole="button" testID="community-create-story" onPress={() => router.push("/story-new" as Href)} style={styles.add}>
         <Ionicons name="add" size={18} color={colors.text} />
         <Text style={styles.addText}>{t("YOUR STORY")}</Text>
-      </Pressable>
+      </Affordance>
       {groups.map(group => {
         const authorId = group.author?.id;
         if (!authorId) return null;
         const latest = group.stories[group.stories.length - 1];
-        return <Pressable key={authorId} accessibilityRole="button" testID={`community-story-${authorId}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId, kind: "stories" } })} style={styles.bubble}>
+        return <Affordance key={authorId} accessibilityRole="button" testID={`community-story-${authorId}`} onPress={() => router.push({ pathname: "/story/[authorId]", params: { authorId, kind: "stories" } })} style={styles.bubble}>
           <Avatar user={group.author} size={52} />
           <Text style={styles.bubbleName} numberOfLines={1}>{group.author?.full_name || t("Member")}</Text>
           {latest?.workout_summary?.title ? <Text style={styles.bubbleMeta} numberOfLines={1}>{latest.workout_summary.title}</Text> : null}
-        </Pressable>;
+        </Affordance>;
       })}
     </ScrollView>
     {error ? <View accessibilityRole="alert" testID="community-stories-error">
       <Text style={styles.error}>{error}</Text>
-      <Pressable accessibilityRole="button" testID="community-stories-retry" onPress={load}><Text style={styles.retry}>{t("Retry")}</Text></Pressable>
+      <Affordance accessibilityRole="button" testID="community-stories-retry" onPress={load}><Text style={styles.retry}>{t("Retry")}</Text></Affordance>
     </View> : null}
     {!error && groups.length === 0 ? <Text style={styles.hint}>{t("No stories from people you follow.")}</Text> : null}
   </View>;
