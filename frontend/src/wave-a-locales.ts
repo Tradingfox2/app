@@ -4,7 +4,16 @@ type Messages = Record<string, string>;
 
 /** Copy introduced with the home / workout honesty pass. English falls through as the key. */
 export const waveAMessages: Record<SupportedLocale, Messages> = {
-  en: {},
+  en: {
+    "Tell your coach how you slept.": "Tell your coach how you slept.",
+    "HOW YOU SLEPT": "HOW YOU SLEPT",
+    "Sleep hours": "Sleep hours",
+    Soreness: "Soreness",
+    Mood: "Mood",
+    "SAVE CHECK-IN": "SAVE CHECK-IN",
+    "Skip for today": "Skip for today",
+    "Could not save how you slept": "Could not save how you slept",
+  },
   fr: {
     "TRAINING PLAN": "PROGRAMME",
     "Open your training plan": "Ouvrir votre programme",
@@ -59,6 +68,14 @@ export const waveAMessages: Record<SupportedLocale, Messages> = {
     "{day}, trained, today": "{day}, entraîné, aujourd'hui",
     "{day}, rest, today": "{day}, repos, aujourd'hui",
     LOAD: "CHARGE",
+    "Tell your coach how you slept.": "Dites à votre coach comment vous avez dormi.",
+    "HOW YOU SLEPT": "COMMENT VOUS AVEZ DORMI",
+    "Sleep hours": "Heures de sommeil",
+    Soreness: "Courbatures",
+    Mood: "Humeur",
+    "SAVE CHECK-IN": "ENREGISTRER",
+    "Skip for today": "Passer pour aujourd'hui",
+    "Could not save how you slept": "Impossible d'enregistrer votre nuit",
   },
   de: {
     "TRAINING PLAN": "TRAININGSPLAN",

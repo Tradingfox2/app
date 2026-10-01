@@ -21,6 +21,7 @@ from typing import Optional
 import requests as http
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from server import clean, current_user, db, new_id, now, require_pro
 from terra_labs import verify_webhook_signature
@@ -123,7 +124,10 @@ METRIC_UNITS = {
     "vo2max": "ml/kg/min",
     "strain": "",
     "recovery": "%",
+    "soreness": "1-5",
+    "mood": "1-5",
 }
+MANUAL_DEVICE = "manual"
 
 # Terra payload field -> normalized metric
 TERRA_FIELD_MAP = {
@@ -190,6 +194,76 @@ def _terra_item_key(event_type: str, item: dict) -> str:
     if event_type in {"activity", "sleep"}:
         return str(metadata.get("summary_id") or f"{metadata.get('start_time')}:{metadata.get('end_time')}")
     return str(item.get("timestamp") or f"{metadata.get('start_time')}:{metadata.get('end_time')}")
+
+
+class ManualMorningIn(BaseModel):
+    """Sleep, soreness, and mood for one local day. No score field."""
+
+    model_config = ConfigDict(extra="forbid")
+    sleep_hours: float = Field(ge=3, le=12)
+    soreness: int = Field(ge=1, le=5)
+    mood: int = Field(ge=1, le=5)
+    local_day: str
+
+    @field_validator("local_day")
+    @classmethod
+    def _local_day(cls, value: str) -> str:
+        try:
+            day = datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError("local day must be YYYY-MM-DD") from exc
+        if abs((day - now().date()).days) > 1:
+            raise ValueError("local day must be yesterday, today, or tomorrow")
+        return value
+
+
+@router.post("/wearables/manual")
+async def manual_morning(body: ManualMorningIn, user: dict = Depends(current_user)):
+    """Upsert this athlete's morning check-in for one local day.
+
+    Writes ``sleep_hours``, ``soreness``, and ``mood`` on ``wearable_metrics``
+    with ``device`` ``manual`` and ``simulated`` false. A second submit the
+    same local day updates those rows. It does not write a recovery or
+    readiness score. Skipping the screen does not call this route.
+    """
+    recorded_at = now()
+    values = {
+        "sleep_hours": round(float(body.sleep_hours), 1),
+        "soreness": float(body.soreness),
+        "mood": float(body.mood),
+    }
+    for metric, value in values.items():
+        await db.wearable_metrics.update_one(
+            {
+                "user_id": user["id"],
+                "device": MANUAL_DEVICE,
+                "metric": metric,
+                "local_day": body.local_day,
+            },
+            {
+                "$set": {
+                    "value": value,
+                    "unit": METRIC_UNITS.get(metric),
+                    "recorded_at": recorded_at,
+                    "simulated": False,
+                },
+                "$setOnInsert": {
+                    "id": new_id(),
+                    "user_id": user["id"],
+                    "metric": metric,
+                    "device": MANUAL_DEVICE,
+                    "local_day": body.local_day,
+                    "created_at": recorded_at,
+                },
+            },
+            upsert=True,
+        )
+    return {
+        "local_day": body.local_day,
+        "device": MANUAL_DEVICE,
+        "simulated": False,
+        "metrics": list(values),
+    }
 
 
 # --------------------------------------------------------------------------- #

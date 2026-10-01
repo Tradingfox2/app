@@ -67,7 +67,7 @@ class AdjustIn(BaseModel):
 # Context gathering                                                           #
 # --------------------------------------------------------------------------- #
 async def recovery_snapshot(uid: str) -> dict:
-    """Latest HRV / sleep / recovery vs 7-day HRV baseline -> fatigue gate."""
+    """Latest HRV, sleep, recovery, and manual soreness/mood. No invented score."""
     week_ago = now() - timedelta(days=7)
 
     async def latest(metric: str):
@@ -78,6 +78,8 @@ async def recovery_snapshot(uid: str) -> dict:
     hrv = await latest("hrv")
     sleep = await latest("sleep_hours")
     rec = await latest("recovery")
+    soreness = await latest("soreness")
+    mood = await latest("mood")
     hrv_vals = [
         m["value"]
         async for m in db.wearable_metrics.find(
@@ -101,6 +103,8 @@ async def recovery_snapshot(uid: str) -> dict:
         "hrv_baseline_7d": baseline,
         "sleep_hours": sleep["value"] if sleep else None,
         "recovery_score": rec["value"] if rec else None,
+        "soreness": soreness["value"] if soreness else None,
+        "mood": mood["value"] if mood else None,
         "fatigue_high": len(reasons) > 0,
         "reasons": reasons,
         "reason_codes": reason_codes,
@@ -222,7 +226,7 @@ async def generate_program(body: GenerateIn, user: dict = Depends(current_user))
 Goal: {body.goal} | Level: {body.level} | Days/week: {body.days_per_week} | Weeks: {body.weeks_count}
 Equipment: {', '.join(body.equipment) or 'anything'}
 FATIGUE IS {'HIGH — ' + '; '.join(recovery['reasons']) if recovery['fatigue_high'] else 'NORMAL'}
-Recovery: HRV {recovery['hrv']}ms (baseline {recovery['hrv_baseline_7d']}ms), sleep {recovery['sleep_hours']}h, score {recovery['recovery_score']}%
+Recovery: HRV {recovery['hrv']}ms (baseline {recovery['hrv_baseline_7d']}ms), sleep {recovery['sleep_hours']}h, soreness {recovery['soreness']}, mood {recovery['mood']}, score {recovery['recovery_score']}%
 Recent training (14d): {'; '.join(history) or 'no recent history'}
 Recent biomarkers: {'; '.join(markers) or 'none'}
 
@@ -303,7 +307,7 @@ async def adjust_today(body: AdjustIn, user: dict = Depends(current_user)):
     catalog = [e async for e in db.exercises.find({}, {"_id": 0, "slug": 1, "name": 1})]
     slugs = {e["slug"] for e in catalog}
     prompt = f"""RECOVERY (LOW): {'; '.join(recovery['reasons'])}
-HRV {recovery['hrv']}ms (baseline {recovery['hrv_baseline_7d']}ms), sleep {recovery['sleep_hours']}h, score {recovery['recovery_score']}%
+HRV {recovery['hrv']}ms (baseline {recovery['hrv_baseline_7d']}ms), sleep {recovery['sleep_hours']}h, soreness {recovery['soreness']}, mood {recovery['mood']}, score {recovery['recovery_score']}%
 
 TODAY'S PLANNED SESSION (week {week_index}, phase {week['phase']}):
 {day}

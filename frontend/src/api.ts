@@ -1435,6 +1435,11 @@ export const api = {
     request<any>(`/wearables/sources/${provider}/disconnect`, { method: "POST" }),
   syncSource: (provider: string) =>
     request<any>(`/wearables/sources/${provider}/sync`, { method: "POST" }),
+  morningCheckin: (payload: { sleep_hours: number; soreness: number; mood: number; local_day: string }) =>
+    request<{ local_day: string; device: string; simulated: boolean; metrics: string[] }>("/wearables/manual", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   gyms: () => request<any[]>("/gyms"),
   gymCheckin: (qr_payload: string, workout_id?: string) =>
     request<any>("/gyms/checkin", {

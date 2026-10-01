@@ -469,3 +469,64 @@ test("check-in shows loading, empty, server detail, reward countdown, and sends 
   await expect(page.getByTestId("visits-until-reward")).toContainText("7");
   await expect(page.getByTestId("checkin-next")).toContainText("RESUME SESSION");
 });
+
+test("home opens the morning check-in only below half confidence and does not post it on first paint", async ({ page }) => {
+  const hits: string[] = [];
+  const morningPosts: { sleep_hours: number; soreness: number; mood: number; local_day: string }[] = [];
+  let confidence = 0.5;
+  await signIn(page);
+  await page.route("**/api/**", async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    const method = route.request().method();
+    hits.push(`${method} ${path}`);
+    if (path === "/auth/me") return route.fulfill({ json: me });
+    if (path === "/home/today") {
+      return route.fulfill({
+        json: { ...todayBase, readiness: { score: null, verdict: null, confidence, components: {}, missing: ["hrv", "resting_hr", "sleep", "training_load"] } },
+      });
+    }
+    if (path === "/wearables/manual" && method === "POST") {
+      morningPosts.push(route.request().postDataJSON());
+      return route.fulfill({ json: { local_day: "2026-10-01", device: "manual", simulated: false, metrics: ["sleep_hours", "soreness", "mood"] } });
+    }
+    if (path === "/muscle-heatmap") return route.fulfill({ json: { volumes: {}, max: 0 } });
+    if (path === "/dm/unread-count" || path === "/notifications/unread-count") return route.fulfill({ json: { count: 0 } });
+    if (path === "/tips/daily") return route.fulfill({ json: { date: "2026-10-01", tips: [] } });
+    return route.fulfill({ json: [] });
+  });
+
+  await page.goto("/home");
+  await expect(page.getByTestId("home-screen")).toBeVisible();
+  await expect(page.getByTestId("home-morning")).toHaveCount(0);
+  expect(hits.filter((hit) => hit.includes("/wearables/manual"))).toEqual([]);
+
+  confidence = 0.49;
+  await page.reload();
+  await expect(page.getByTestId("home-morning")).toBeVisible();
+  expect(hits.filter((hit) => hit.includes("/wearables/manual"))).toEqual([]);
+  const entryPaint = await page.getByTestId("home-morning").evaluate((node) => getComputedStyle(node).backgroundColor);
+  expect(entryPaint).not.toBe("rgb(214, 227, 90)");
+
+  await page.getByTestId("home-morning").click();
+  await expect(page.getByTestId("morning-line")).toHaveText("Tell your coach how you slept.");
+  const pagePaint = await page.getByTestId("morning-screen").evaluate((node) => getComputedStyle(node).backgroundColor);
+  expect(pagePaint).toBe("rgb(16, 20, 24)");
+  await page.getByTestId("morning-skip").click();
+  await expect(page).toHaveURL(/\/home/);
+  expect(morningPosts).toEqual([]);
+
+  await page.getByTestId("home-morning").click();
+  await page.getByTestId("morning-sleep").fill("6");
+  await expect(page.getByTestId("morning-sleep-value")).toHaveText("6 h");
+  await page.getByTestId("morning-soreness-2").click();
+  await page.getByTestId("morning-mood-4").click();
+  const brand = "rgb(214, 227, 90)";
+  await expect(page.getByTestId("morning-mood-4")).toHaveCSS("background-color", brand);
+  await expect(page.getByTestId("morning-soreness-2")).toHaveCSS("background-color", brand);
+  await expect(page.getByTestId("morning-mood-1")).not.toHaveCSS("background-color", brand);
+  await expect(page.getByTestId("morning-save")).toHaveCSS("background-color", brand);
+  await page.getByTestId("morning-save").click();
+  await expect.poll(() => morningPosts.length).toBe(1);
+  expect(morningPosts[0]).toMatchObject({ sleep_hours: 6, soreness: 2, mood: 4 });
+  expect(morningPosts[0].local_day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});

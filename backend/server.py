@@ -355,6 +355,11 @@ async def lifespan(app: FastAPI):
         [("user_id", 1), ("metric", 1), ("recorded_at", -1)]
     )
     await db.wearable_metrics.create_index(
+        [("user_id", 1), ("device", 1), ("metric", 1), ("local_day", 1)],
+        unique=True,
+        partialFilterExpression={"device": "manual", "local_day": {"$type": "string"}},
+    )
+    await db.wearable_metrics.create_index(
         [("terra_user_id", 1), ("terra_event_type", 1), ("terra_item_key", 1), ("metric", 1)],
         unique=True,
         partialFilterExpression={"terra_user_id": {"$type": "string"}},
