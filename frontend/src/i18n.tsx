@@ -4,6 +4,7 @@ import { createInstance } from "i18next";
 import { initReactI18next, useTranslation } from "react-i18next";
 import { useAuth } from "./auth-context";
 import type { SupportedLocale } from "./api";
+import { accountingMessages } from "./accounting-locales";
 import { analyticsMessages } from "./analytics-locales";
 import { communityMessages } from "./community-locales";
 import { personalSpaceMessages } from "./personal-space-locales";
@@ -185,7 +186,7 @@ void i18n.use(initReactI18next).init({
   resources: Object.fromEntries(
     Object.entries(messages).map(([locale, translation]) => [
       locale,
-      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...activityDayMessages[locale as SupportedLocale], ...recorderMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale] } },
+      { translation: { ...translation, ...sharedMessages[locale as SupportedLocale], ...communityMessages[locale as SupportedLocale], ...analyticsMessages[locale as SupportedLocale], ...personalSpaceMessages[locale as SupportedLocale], ...supportMessages[locale as SupportedLocale], ...waveAMessages[locale as SupportedLocale], ...activityDayMessages[locale as SupportedLocale], ...recorderMessages[locale as SupportedLocale], ...accountingMessages[locale as SupportedLocale], ...visualLabels[locale as SupportedLocale] } },
     ]),
   ),
   lng: initialLocale,

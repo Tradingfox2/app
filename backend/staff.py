@@ -25,7 +25,7 @@ PERMISSIONS: dict[str, set[str]] = {
     "admin": {"users.read", "reports.read", "audit.read", "analytics.read",
               "tickets.read", "tickets.write",
               "reports.resolve", "content.moderate", "users.suspend", "staff.manage",
-              "coaches.review"},
+              "coaches.review", "accounting.read"},
 }
 STAFF_ROLES = tuple(PERMISSIONS)
 

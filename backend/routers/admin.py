@@ -7,12 +7,13 @@ never returned here — moderation works from what the reporter submitted.
 from __future__ import annotations
 
 import re
-from datetime import timedelta
-from typing import Literal
+from datetime import date, timedelta
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+import accounting
 import moderation
 import notifications
 import ratelimit
@@ -531,3 +532,25 @@ async def audit_log(
 ):
     query = {key: value for key, value in (("actor_id", actor_id), ("target_id", target_id)) if value}
     return [clean(row) async for row in db.audit_log.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)]
+
+
+@router.get("/admin/accounting/summary")
+async def accounting_summary(
+    user: dict = Depends(staff.require("accounting.read")),
+    from_: Annotated[date | None, Query(alias="from")] = None,
+    to: Annotated[date | None, Query(alias="to")] = None,
+):
+    """Money already on file, grouped by the currency stored on each row."""
+    if "accounting.read" not in staff.permissions_for(user):
+        raise HTTPException(403, "Staff permission required")
+    try:
+        start_day, end_day, start, end = accounting.resolve_period(from_, to)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    report = await accounting.summary(start, end, start_day, end_day)
+    await staff.audit(
+        user, "accounting.viewed",
+        target_type="report", target_id="accounting_summary",
+        metadata={"from": start_day.isoformat(), "to": end_day.isoformat()},
+    )
+    return report
