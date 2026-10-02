@@ -1422,6 +1422,7 @@ from routers.analytics import router as analytics_router  # noqa: E402
 from routers.notifications import router as notifications_router  # noqa: E402
 from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
+from revenuecat import router as revenuecat_router  # noqa: E402
 
 
 async def home_today_for(uid: str) -> dict:
@@ -1454,6 +1455,7 @@ api.include_router(wearables_router)
 api.include_router(gyms_router)
 api.include_router(muscles_router)
 api.include_router(tips_router)
+api.include_router(revenuecat_router)
 
 app.include_router(api)
 if not media_storage.s3_enabled():
