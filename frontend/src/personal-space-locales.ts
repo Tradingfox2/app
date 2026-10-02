@@ -48,6 +48,7 @@ export const personalSpaceMessages: Record<SupportedLocale, Messages> = {
     Next: "Suivant",
     "{sets} sets · {kg} kg": "{sets} séries · {kg} kg",
     "Remove {name}": "Retirer {name}",
+    "COACH & COMMUNITY": "COACH ET COMMUNAUTÉ",
   },
   de: {
     FRIENDS: "FREUNDE",

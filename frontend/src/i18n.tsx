@@ -31,7 +31,7 @@ const messages: Record<SupportedLocale, Messages> = {
     "Biomarker uploads": "Import de biomarqueurs", "Wearable sync": "Synchronisation des appareils", "AI insights": "Analyses IA",
     "1:1 coach": "Coach individuel", "Group sessions": "Séances de groupe", "Priority support": "Support prioritaire",
     "Something went wrong": "Une erreur est survenue", "Welcome back.": "Bon retour.", "Own your performance.": "Maîtrisez vos performances.",
-    "Full name": "Nom complet", "Your name": "Votre nom", ATHLETE: "ATHLÈTE", COACH: "COACH", Password: "Mot de passe",
+    "Full name": "Nom complet", "Your name": "Votre nom", ATHLETE: "ATHLÈTE", COACH: "COACH", Email: "E-mail", Password: "Mot de passe",
     "At least 8 characters": "Au moins 8 caractères", "SIGN IN": "SE CONNECTER", "CREATE ACCOUNT": "CRÉER UN COMPTE",
     "New here? Create an account": "Nouveau ici ? Créez un compte", "Already registered? Sign in": "Déjà inscrit ? Connectez-vous",
     "READY TO TRAIN": "PRÊT À S'ENTRAÎNER", "THIS WEEK": "CETTE SEMAINE", workouts: "entraînements", TODAY: "AUJOURD'HUI",

@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   ImageBackground,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -62,7 +61,7 @@ export default function AuthScreen() {
 
       <KeyboardAvoidingView
         style={styles.form}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
       >
         <ScrollView
           contentContainerStyle={{ paddingBottom: spacing.xxl }}

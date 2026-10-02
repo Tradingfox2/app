@@ -290,7 +290,7 @@ test("overview keeps community stock out of the last 24 hours", async ({ page })
 });
 
 test("memberships and community rows use waiting copy", async ({ page }) => {
-  const commentReport = { ...report, id: "rep-2", target_type: "comment", content_snapshot: "A comment", created_at: "2026-09-28T07:00:00Z" };
+  const commentReport = { ...report, id: "rep-2", target_type: "comment", content_snapshot: "A comment", created_at: "2026-09-28T07:00:00Z", reviewed_at: "2026-09-29T08:00:00Z" };
   await fixtures(page, moderator, async (route, path) => {
     if (path === "/admin/reports") {
       await route.fulfill({ json: [report, commentReport] });
@@ -324,10 +324,13 @@ test("memberships and community rows use waiting copy", async ({ page }) => {
   await page.getByTestId("admin-tab-reports").click();
   await expect(page.getByTestId("report-rep-1")).toBeVisible();
   await expect(page.getByTestId("report-rep-2")).toBeVisible();
+  await expect(page.getByTestId("report-age-rep-1")).toContainText(/Opened /);
+  await expect(page.getByTestId("report-age-rep-1")).not.toContainText("Updated");
   await page.getByTestId("report-type-comment").click();
   await expect(page.getByTestId("report-rep-2")).toBeVisible();
   await expect(page.getByTestId("report-rep-1")).toHaveCount(0);
   await expect(page.getByTestId("report-age-rep-2")).toContainText(/Opened /);
+  await expect(page.getByTestId("report-age-rep-2")).toContainText(/Updated /);
 });
 
 test("support queue can hide assigned tickets", async ({ page }) => {

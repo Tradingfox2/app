@@ -258,6 +258,10 @@ const communityWindowMessages: Record<Exclude<SupportedLocale, "en">, Messages> 
     EARLIER: "PLUS TÔT",
     ENDED: "TERMINÉE",
     CANCELLED: "ANNULÉE",
+    "Add rule": "Ajouter une règle",
+    "new-channel": "nouveau-salon",
+    "Could not load dashboard": "Impossible de charger le tableau de bord",
+    "Could not submit application": "Impossible d’envoyer la candidature",
   },
   de: {
     "Open join": "Offener Beitritt",

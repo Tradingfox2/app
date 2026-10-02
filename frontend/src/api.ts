@@ -86,6 +86,8 @@ export type ModerationReport = {
   status: "open" | "resolved";
   resolution: string | null;
   created_at: string;
+  /** Set when staff closes the report. Absent on an open row. */
+  reviewed_at?: string | null;
   reporter: { id: string; full_name: string | null; email: string } | null;
   reported_user: { id: string; full_name: string | null; email: string } | null;
 };

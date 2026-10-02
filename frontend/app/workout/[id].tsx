@@ -4,7 +4,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -475,7 +474,7 @@ export default function WorkoutLogger() {
       )}
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }}>

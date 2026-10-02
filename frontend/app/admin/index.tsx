@@ -88,6 +88,17 @@ function agePhrase(iso: string, t: (key: string, values?: Record<string, string 
   return t("{n}d ago", { n: Math.floor(hours / 24) });
 }
 
+/** Same opened / updated line the support queue uses. No update time means the row was never closed or edited. */
+function queueAge(
+  createdAt: string,
+  updatedAt: string | null | undefined,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  const opened = t("Opened {age}", { age: agePhrase(createdAt, t) });
+  if (!updatedAt) return opened;
+  return `${opened} · ${t("Updated {age}", { age: agePhrase(updatedAt, t) })}`;
+}
+
 function HintedMetric({ value, label, hint, onPress, testID }: {
   value: string;
   label: string;
@@ -462,7 +473,7 @@ export default function AdminConsole() {
                 <Text style={styles.tag}>{t(report.reason.replace(/_/g, " ").toUpperCase())}</Text>
                 <Text style={styles.time}>{formatDate(report.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
               </View>
-              {reportStatus === "open" ? <Text style={styles.meta} testID={`report-age-${report.id}`}>{t("Opened {age}", { age: agePhrase(report.created_at, t) })}</Text> : null}
+              <Text style={styles.meta} testID={`report-age-${report.id}`}>{queueAge(report.created_at, report.reviewed_at, t)}</Text>
               <Text style={styles.meta}>{t("{type} by {name}", { type: t(isReportTargetType(report.target_type) ? reportTypeLabel(report.target_type) : report.target_type), name: report.reported_user?.full_name || report.reported_user?.email || t("Unknown") })}</Text>
               {report.content_snapshot ? <Text style={styles.snapshot}>“{report.content_snapshot}”</Text> : null}
               {report.detail ? <Text style={styles.meta}>{t("Reporter said:")} {report.detail}</Text> : null}
@@ -658,7 +669,7 @@ export default function AdminConsole() {
               </View>
               <Text style={styles.name}>{ticketDetail.subject}</Text>
               <Text style={styles.meta}>{ticketLabel(ticketDetail.user, ticketDetail.user_id)} · {staffTicketStatusLabel(ticketDetail.status, t)}</Text>
-              <Text style={styles.meta}>{t("Opened {age}", { age: agePhrase(ticketDetail.created_at, t) })} · {t("Updated {age}", { age: agePhrase(ticketDetail.updated_at, t) })}</Text>
+              <Text style={styles.meta}>{queueAge(ticketDetail.created_at, ticketDetail.updated_at, t)}</Text>
               {ticketDetail.assignee_id ? <Text style={styles.meta}>{t("Assigned to {name}", { name: ticketLabel(ticketDetail.assignee, ticketDetail.assignee_id) })}</Text> : <Text style={styles.meta}>{t("Unassigned")}</Text>}
               {ticketDetail.messages.length === 0 ? <Text style={styles.hint}>{t("No messages on this ticket yet.")}</Text> : null}
               {ticketDetail.messages.map((message: SupportMessage) => (
@@ -711,7 +722,7 @@ export default function AdminConsole() {
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.name}>{ticket.subject}</Text>
                   <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())}</Text>
-                  <Text style={styles.meta}>{t("Opened {age}", { age: agePhrase(ticket.created_at, t) })} · {t("Updated {age}", { age: agePhrase(ticket.updated_at, t) })}{ticket.assignee_id ? "" : ` · ${t("Unassigned")}`}</Text>
+                  <Text style={styles.meta}>{queueAge(ticket.created_at, ticket.updated_at, t)}{ticket.assignee_id ? "" : ` · ${t("Unassigned")}`}</Text>
                 </View>
                 <View style={styles.staffTag}><Text style={styles.staffTagText}>{staffTicketStatusLabel(ticket.status, t)}</Text></View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
