@@ -99,6 +99,17 @@ If the phone cannot count steps, the figure stays **Not measured**. A zero from 
 
 Elevation uses the barometer's relative altitude when that reading exists. A pressure-only sensor does not become elevation. There is no extra permission for the barometer beyond motion on the phones that expose it.
 
+## Health
+
+Not read yet. `frontend/plugins/withHealth.js` is listed in `app.json` so a native build carries the store capability. Nothing in the app calls HealthKit or Health Connect, and no screen asks for this access.
+
+| | |
+| --- | --- |
+| iOS | HealthKit entitlement. `NSHealthShareUsageDescription`: "IronFlow can read heart rate, sleep, steps, and workouts from Apple Health after you connect that source." `NSHealthUpdateUsageDescription`: "IronFlow does not write to Apple Health." No background delivery. |
+| Android | Health Connect read permissions for heart rate, resting heart rate, heart-rate variability, sleep, steps, and active calories. The permission-rationale alias is on the main activity so Android 14 can open the app from the Health Connect privacy link. No write permission. |
+
+The sources screen still connects watches through the existing provider list. It does not open a health permission prompt.
+
 ## Microphone
 
 Not used.
@@ -111,4 +122,4 @@ Not used.
 
 ## What a rebuild is for
 
-`app.json` `scheme` and the permission strings are native config. Expo Go still opens the project with the `exp://` scheme. `ironflow://` links and the real notification prompt need a development build (`npx expo run:ios` / `npx expo run:android`, or an EAS development build) after this config change. This repo does not submit that build to the stores.
+`app.json` `scheme` and the permission strings are native config. Expo Go still opens the project with the `exp://` scheme. `ironflow://` links and the real notification prompt need a development build (`npx expo run:ios` / `npx expo run:android`, or an EAS development build) after this config change. Store upload is the one-time account setup in `docs/RELEASE.md`.
