@@ -434,7 +434,8 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.getByTestId("admin-tab-accounting").click();
     const gross = page.getByTestId("accounting-section-gross_collected");
     await expect(gross).toContainText("$12.50");
-    await expect(gross).toContainText("XOF");
+    await expect(gross).toContainText("CFA");
+    await expect(gross).toContainText("5,000");
     await expect(gross).not.toContainText("€");
   });
 });
