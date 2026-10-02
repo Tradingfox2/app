@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import type { NutritionProduct } from "./nutrition";
 import { storage } from "./utils/storage";
 import type {
   MuscleHeatmapData,
@@ -985,6 +986,12 @@ export const api = {
       body: JSON.stringify({ exercise_slugs }),
     }),
   finishWorkout: (id: string) => request<any>(`/workouts/${id}/finish`, { method: "POST" }),
+  saveSessionNutrition: (id: string, body: { protein_g: number | null; water_ml: number | null }) =>
+    request<{ protein_g: number | null; water_ml: number | null }>(`/workouts/${id}/nutrition`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  nutritionProduct: (barcode: string) => request<NutritionProduct>(`/nutrition/products/${encodeURIComponent(barcode)}`),
   recordWorkout: (body: Record<string, unknown>) =>
     request<any>("/workouts/recorded", { method: "POST", body: JSON.stringify(body) }),
   workoutRoute: (id: string) => request<{ workout_id: string; segments: unknown[] }>(`/workouts/${id}/route`),

@@ -493,3 +493,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 ## Added 2026-10-02 (observability)
 
 - **Sentry and CI.** `backend/observability.py` calls `sentry_sdk.init` only when `SENTRY_DSN` is non-empty and the process is not pytest, so an unset DSN does not boot a client and tests do not send events. Uvicorn logs JSON via `backend/log_config.json`. The Expo app (`frontend/src/sentry.ts`, `@sentry/react-native` 7.2.0, the SDK 54 pin) initializes only when `EXPO_PUBLIC_SENTRY_DSN` is set and the run is not Node `test`, `EXPO_PUBLIC_SENTRY_DISABLED=1`, or `navigator.webdriver`. No Expo config plugin, so release builds do not need `SENTRY_AUTH_TOKEN`. CI already runs eslint; it also builds `backend/Dockerfile`. The nightly `preview-e2e` job runs Playwright against `PREVIEW_URL` only when that secret is set.
+
+## Added 2026-10-02 (session nutrition)
+
+- **Session nutrition.** `backend/nutrition.py` owns typed protein and water (`PUT /api/workouts/{id}/nutrition`) and one Open Food Facts product read (`GET /api/nutrition/products/{barcode}`, custom User-Agent, no search). Unentered amounts stay absent, never 0. A nutrient is shown only when that basis has a value; `no_nutrition_data` and a failed read invent nothing. Sodium or salt, sugars, and fibre can carry one general WHO opinion, labeled as an opinion on `SessionNutrition` in the workout finish panel. No calorie target and no blood reading. The lookup is not on first paint.

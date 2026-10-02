@@ -13,7 +13,8 @@
     "test:community": "playwright test community.spec.ts",
     "test:activity-day": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/activity-day.test.ts",
     "test:recorder": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/recorder-math.test.ts",
-    "test:sentry-gate": "node --experimental-strip-types src/sentry-gate.test.ts"
+    "test:sentry-gate": "node --experimental-strip-types src/sentry-gate.test.ts",
+    "test:nutrition": "node --experimental-strip-types src/nutrition.test.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "6.1.2",

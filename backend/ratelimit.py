@@ -59,6 +59,8 @@ LIMITS: dict[str, tuple[int, int]] = {
     "gym_redeem": (15, 600),
     # Coach chat: 40 messages per user per day.
     "coach_chat": (40, 86400),
+    # One Open Food Facts product read per scan. Not a search.
+    "product_read": (60, 3600),
 }
 
 
