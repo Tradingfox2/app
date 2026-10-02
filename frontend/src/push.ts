@@ -16,6 +16,7 @@ import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { router } from "expo-router";
 import { api } from "./api";
+import { missedSessionRoute } from "./missed-session";
 import { loadNotifications, notificationApi } from "./notification-api";
 
 let registeredToken: string | null = null;
@@ -124,6 +125,8 @@ export async function unregisterPush(): Promise<void> {
 
 /** Where a tapped notification should land — the same routing as the centre. */
 function open(data: Record<string, unknown>) {
+  const plan = missedSessionRoute(data);
+  if (plan) return router.push(plan);
   const target = typeof data.target_id === "string" ? data.target_id : null;
   if (typeof data.channel_id === "string") return router.push({ pathname: "/channel/[id]", params: { id: data.channel_id } });
   if (!target) return router.push("/notifications");

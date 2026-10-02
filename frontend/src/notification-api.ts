@@ -7,6 +7,7 @@
  * Expo Go, so the require stays inside the first call.
  */
 import { Platform } from "react-native";
+import { presentationFor } from "./missed-session";
 
 type NotificationsModule = typeof import("expo-notifications");
 
@@ -17,9 +18,10 @@ export function loadNotifications(): NotificationsModule | null {
   if (!loaded) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy on purpose, see header
     loaded = require("expo-notifications") as NotificationsModule;
-    // A DM, a live session, or the end of a rest all show while the app is open.
+    // Must resolve immediately. Expo drops a notification whose handler is
+    // still running after 3 seconds, so this does no network, storage, or GPS.
     loaded.setNotificationHandler({
-      handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true }),
+      handleNotification: (notification) => Promise.resolve(presentationFor(notification.request.content.data)),
     });
   }
   return loaded;

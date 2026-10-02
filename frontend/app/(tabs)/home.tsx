@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -35,6 +36,7 @@ import {
   readTrainingTotals,
   readWorkoutCount,
 } from "@/src/training-week";
+import { syncMissedSessionNote } from "@/src/missed-session-note";
 import { weeklyReviewDue, type WeeklyReview } from "@/src/weekly-review";
 
 function unreadLabel(count: number): string | null {
@@ -205,6 +207,34 @@ export default function Home() {
       clearTimeout(timer);
     };
   }, [dashSettled, opened]);
+
+  // After Today has painted. One local note for a missed planned session.
+  // Web has no native scheduler. The plan on screen does not move.
+  const userId = user?.id;
+  useEffect(() => {
+    if (Platform.OS === "web" || !dashSettled || !userId || !workoutStamps) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void api.programs().then((rows) => {
+        if (cancelled) return;
+        return syncMissedSessionNote({
+          programs: rows,
+          workouts: workoutStamps,
+          now: new Date(),
+          userId,
+          copy: {
+            title: t("Your week is still open"),
+            body: t("One planned session did not happen. The plan stays put. Come back when you can."),
+            channelName: t("Missed session"),
+          },
+        });
+      }).catch(() => undefined);
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [dashSettled, userId, workoutStamps, t]);
 
   const strain = data?.strain?.value ?? 0;
   const trainingLoad = readTrainingLoad(data);
