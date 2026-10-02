@@ -13,8 +13,10 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
+import notifications  # noqa: E402
 import permissions as p  # noqa: E402
 import server  # noqa: E402
+import social_graph  # noqa: E402
 import staff  # noqa: E402
 from routers import community  # noqa: E402
 
@@ -40,6 +42,12 @@ async def seed(db, monkeypatch):
     monkeypatch.setattr(community, "db", db)
     monkeypatch.setattr(staff, "db", db)
     monkeypatch.setattr(server, "db", db)
+    # Membership review notifies the applicant. That path reads blocks and
+    # preferences through these modules' own `db` bindings, which are copies of
+    # the process-wide Motor client. Leaving them unbound makes the call use a
+    # client attached to an event loop that `asyncio.run` already closed.
+    monkeypatch.setattr(notifications, "db", db)
+    monkeypatch.setattr(social_graph, "db", db)
     await db.users.insert_many([account("owner"), account("mod"), account("mem"), account("out")])
     await db.communities.insert_one({
         "id": "c-1", "owner_id": "owner", "name": "Iron Club",

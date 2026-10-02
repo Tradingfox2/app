@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ai import active_model_label, llm_json
+from ai import active_model_label, llm_json, provider_configured
 from locales import content_language_instruction, normalize_locale
 from server import can_access_user_data, clean, current_user, db, new_id, now
 
@@ -299,6 +299,17 @@ async def adjust_today(body: AdjustIn, user: dict = Depends(current_user)):
         return {
             "adjusted": False,
             "reason": "Recovery is OK — session unchanged",
+            "recovery": recovery,
+            "week_index": week_index,
+            "day": day,
+        }
+    # CI and local dev set LLM_PROVIDER=none. That is not a configured model
+    # (provider_configured is false) even though resolve_provider falls back to
+    # Ollama. Calling it would 502. Leave the planned session in place.
+    if not provider_configured():
+        return {
+            "adjusted": False,
+            "reason": "No coaching model is configured — session unchanged",
             "recovery": recovery,
             "week_index": week_index,
             "day": day,
