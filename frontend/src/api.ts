@@ -1410,6 +1410,14 @@ export const api = {
     request<{ role: "user" | "assistant"; content: string }[]>("/coach/chat"),
   coachChat: (message: string) =>
     requestText("/coach/chat", { method: "POST", body: JSON.stringify({ message }) }),
+  weeklyReview: () =>
+    request<{
+      iso_week: string;
+      headline: string;
+      wins: string;
+      watch: string;
+      next_week_change: string;
+    }>("/coach/weekly-review", { method: "POST" }),
 
   // Daily did-you-know tips (5-10, stable per user per day)
   dailyTips: (count = 7) =>

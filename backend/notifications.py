@@ -38,6 +38,7 @@ COMMENT_REPLY = "comment_reply"
 COMMENT_LIKE = "comment_like"
 JOIN_REQUEST = "join_request"
 GYM_REWARD = "gym_reward"
+WEEKLY_REVIEW = "weekly_review"
 
 #: Repeated events on the same object collapse into one row instead of
 #: flooding the list — "X and 4 others liked your post". Only unread rows
@@ -95,7 +96,7 @@ MANDATORY = {MEMBERSHIP, COACH_DECISION, "moderation_action", "lab_report_ready"
 CONFIGURABLE = (
     FOLLOW, FOLLOW_REQUEST, FOLLOW_ACCEPTED, POST_LIKE, POST_KUDOS, POST_COMMENT, POST_REPOST,
     POST_MENTION, MENTION, COMMENT_REPLY, COMMENT_LIKE, DIRECT_MESSAGE,
-    LIVE_SESSION, PROGRAM_ADOPTED, JOIN_REQUEST,
+    LIVE_SESSION, PROGRAM_ADOPTED, JOIN_REQUEST, WEEKLY_REVIEW,
 )
 
 

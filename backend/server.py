@@ -477,6 +477,7 @@ async def lifespan(app: FastAPI):
     await analytics.ensure_indexes(db)
     # Bound at the bottom of this module (gyms imports wearables, which imports server).
     await ensure_gym_indexes(db)
+    await ensure_weekly_indexes(db)
     await db.user_notes.create_index([("user_id", 1), ("created_at", -1)])
     # Read by _roles() on every permission resolve — the hot path for each
     # channel read and message write, so it must never be a collection scan.
@@ -1399,8 +1400,10 @@ from routers.community import router as community_router  # noqa: E402
 from routers.muscles import router as muscles_router  # noqa: E402
 from routers.program import next_planned_session, router as program_router  # noqa: E402
 from routers.coach_chat import router as coach_chat_router  # noqa: E402
+from weekly_review import router as weekly_review_router  # noqa: E402
 from routers.wearables import router as wearables_router  # noqa: E402
 from routers.gyms import ensure_indexes as ensure_gym_indexes  # noqa: E402
+from weekly_review import ensure_indexes as ensure_weekly_indexes  # noqa: E402
 from routers.gyms import router as gyms_router  # noqa: E402
 from routers.social import router as social_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
@@ -1426,6 +1429,7 @@ async def home_today_for(uid: str) -> dict:
 
 api.include_router(program_router)
 api.include_router(coach_chat_router)
+api.include_router(weekly_review_router)
 api.include_router(community_router)
 api.include_router(social_router)
 api.include_router(admin_router)
