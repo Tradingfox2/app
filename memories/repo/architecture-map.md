@@ -61,13 +61,14 @@ reconcile when connected. Dormant until `CENTRIFUGO_URL` and
 - `frontend/src/api.ts` is the **only** HTTP boundary. A backend capability is
   unreachable unless it has both a method there and a caller under
   `frontend/app/` or `frontend/src/`.
+- **Staff site (2026-10-02).** The staff console is a second Expo web export of `frontend/`, with routes in `frontend/staff/` (`_layout.tsx`, `auth.tsx`, `index.tsx`). `IRONFLOW_WEB_TARGET=staff` in `frontend/app.config.js` sets the `expo-router` root to `./staff`. It reuses `src/api.ts`, `src/auth-context.tsx`, `src/i18n.tsx`, and `src/components/admin/*`. The member app has no `/admin` route and no Settings entry. `staff.require` on the existing `/api/admin/*` routes stays the gate, the bearer token stays in that origin's `localStorage`, and member routes import nothing from `staff/`. Callers of `api.ts` may also live under `frontend/staff/`.
 - Expo Router: `frontend/app/user/[id].tsx` is a leaf with no sibling
   directory. New user sub-screens must be static siblings
   (`user/connections.tsx`), never `user/[id]/*`.
-- **`expo-router`'s `typedRoutes` generator is unreliable here.** It emits
-  `/admin/index` for `app/admin/index.tsx` while the runtime serves `/admin`,
-  and lists non-routes such as `/../e2e/community.spec` as valid paths. Trust
-  the runtime; call sites carry a documented `as Href` cast.
+- **`expo-router`'s `typedRoutes` generator is unreliable here.** It has emitted
+  paths the runtime does not serve, and lists non-routes such as
+  `/../e2e/community.spec` as valid paths. Trust the runtime; call sites carry
+  a documented `as Href` cast.
 - Mentions are stored as `<@user_id>` tokens, never `@name`. Names are neither
   unique nor stable, and parsing them invites impersonation.
 - **Workout affordances (2026-10-01).** Session history is the Sessions segment

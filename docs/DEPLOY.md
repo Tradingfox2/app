@@ -202,8 +202,8 @@ so a stranger cannot promote themselves.
    On Render that is the service shell. The script prints
    `you@example.com -> staff_role=admin`.
 
-3. Sign out and sign in again so the new role is on the session you use next.
-4. Later admins are granted in the app. The same script still works:
+3. Open the staff site and sign in so the new role is on that session.
+4. Later admins are granted on the staff site. The same script still works:
 
    | Command | Effect |
    | --- | --- |
@@ -233,3 +233,26 @@ docker run --rm -p 8001:8001 \
 `GET http://127.0.0.1:8001/api/health` returns `mongo: true` when the ping
 works. The process listens on `PORT` (default `8001`) as a non-root user.
 The image's health check calls the same path.
+
+## 5. Staff site
+
+Staff use a separate web app. The member app has no admin screen. Both talk
+to the same API. There is no second database.
+
+From `frontend/`, with `EXPO_PUBLIC_BACKEND_URL` set to the API origin (no
+`/api` suffix):
+
+```sh
+yarn export:staff
+```
+
+That is `IRONFLOW_WEB_TARGET=staff expo export --platform web --output-dir dist/staff`.
+Publish `frontend/dist/staff` as a static site and rewrite every path to
+`/index.html`. `render.yaml` defines the `staff-web` service. Set
+`EXPO_PUBLIC_BACKEND_URL` on that service before the build. Set
+`EXPO_PUBLIC_WEB_ORIGIN` to the member web origin when community links should
+open the member app. Host the staff site on its own origin so its
+`localStorage` token is not the member app's token.
+
+Locally: `yarn web:staff`. Browser tests start this export's dev server on
+port 8083 and the member app on 8082.

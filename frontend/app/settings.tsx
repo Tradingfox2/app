@@ -335,15 +335,6 @@ export default function Settings() {
             </View>
             <Ionicons name="help-buoy" size={28} color={colors.text} />
           </Affordance>
-          {user?.staff_role ? (
-            <Affordance testID="open-admin-console" style={styles.refCard} onPress={() => router.push("/admin" as Href)}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.refLabel}>{t("STAFF CONSOLE")}</Text>
-                <Text style={styles.refMeta}>{t("Moderation queue, accounts and audit log.")}</Text>
-              </View>
-              <Ionicons name="shield-checkmark" size={28} color={colors.text} />
-            </Affordance>
-          ) : null}
         </View>
 
         <View style={styles.section}>

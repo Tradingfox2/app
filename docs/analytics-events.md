@@ -42,7 +42,7 @@ health data are not accepted.
 |---|---|---|---|
 | `screen_view` | `screen` (route name, no query string) | Client, on navigation. Owner: screenwright. | Taxonomy only |
 | `ticket_created` | `ticket_id` | Client, after `POST /api/tickets` returns an id. Owner: opsdesk. | **Yes.** `frontend/src/components/support/ticket-form.tsx` calls `track("ticket_created", …)`. The opening note is not also `ticket_replied`. |
-| `ticket_replied` | `ticket_id` | Client, after a member or staff reply succeeds. Owner: opsdesk. | **Yes.** Member replies in `ticket-detail.tsx` and staff replies in `frontend/app/admin/index.tsx`. |
+| `ticket_replied` | `ticket_id` | Client, after a member or staff reply succeeds. Owner: opsdesk. | **Yes.** Member replies in `ticket-detail.tsx` and staff replies in `frontend/staff/index.tsx`. |
 | `post_created` | `post_id`, `has_media`, `has_poll`, `community_id` (omit when the post is public) | Client, after `POST /api/posts` succeeds. | **Yes.** Feed composer in `frontend/src/components/social/feed.tsx`, and workout share in `frontend/app/workout/[id].tsx`, each call `track("post_created", …)` once. |
 | `post_shared` | `post_id`, `channel` (`system_share`, `copy`, `x`, `facebook`, `whatsapp`, `linkedin`) | Client, after a share succeeds. Owner: socialgraph. | **Yes.** `frontend/src/share.ts` calls `track("post_shared", { post_id, channel })` when the system sheet completes (`system_share`), a copy succeeds (`copy`), or a network composer opens. Dismiss, cancel, and failure do not emit. |
 | `live_session_started` | `session_id`, `channel_id` | Server, inside `start_live_session`, source `server`. Owner: community. | **Yes.** `analytics.record` from `_emit_live`. Not written to `insight_events`. |
@@ -112,7 +112,7 @@ Every taxonomy name is present. The number is the count of stored rows in
 that window. The last 24 hours are included in the last 7 days. Rows older
 than 7 days are not counted. The staff console tab **ANALYTICS**
 (`frontend/src/components/admin/analytics-panel.tsx`, mounted from
-`frontend/app/admin/index.tsx`) renders this payload and nothing else.
+`frontend/staff/index.tsx`) renders this payload and nothing else.
 
 Coaches who are not staff keep using `GET /api/partner/dashboard` for their
 own communities. That screen is not this rollup.

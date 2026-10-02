@@ -43,6 +43,21 @@ services:
       - key: CENTRIFUGO_CLIENT_ALLOWED_ORIGINS
         sync: false
 
+  - type: web
+    name: staff-web
+    runtime: static
+    buildCommand: cd frontend && yarn install --frozen-lockfile && yarn export:staff
+    staticPublishPath: frontend/dist/staff
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: EXPO_PUBLIC_BACKEND_URL
+        sync: false
+      - key: EXPO_PUBLIC_WEB_ORIGIN
+        sync: false
+
 envVarGroups:
   - name: ironflow-backend
     envVars:

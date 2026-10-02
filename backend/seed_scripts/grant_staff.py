@@ -1,7 +1,7 @@
 """Grant or revoke a staff role from the server console.
 
 The first admin must be created here: there is deliberately no API path to
-self-grant staff powers. After that, admins manage the team in the app.
+self-grant staff powers. After that, admins manage the team on the staff site.
 
     python seed_scripts/grant_staff.py alice@example.com admin
     python seed_scripts/grant_staff.py alice@example.com none

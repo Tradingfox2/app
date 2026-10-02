@@ -2,6 +2,14 @@ import { defineConfig } from "@playwright/test";
 
 const previewUrl = (process.env.PREVIEW_URL ?? "").trim().replace(/\/+$/, "");
 
+function serverEnv(extra: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string") env[key] = value;
+  }
+  return { ...env, ...extra };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 45_000,
@@ -21,14 +29,28 @@ export default defineConfig({
   ...(previewUrl
     ? {}
     : {
-        webServer: {
-          command: "npx expo start --web --port 8082",
-          url: "http://localhost:8082",
-          reuseExistingServer: !process.env.CI,
-          timeout: 120_000,
-          env: {
-            EXPO_PUBLIC_SENTRY_DISABLED: "1",
+        webServer: [
+          {
+            command: "npx expo start --web --port 8082",
+            url: "http://localhost:8082",
+            reuseExistingServer: !process.env.CI,
+            timeout: 180_000,
+            env: serverEnv({
+              EXPO_PUBLIC_SENTRY_DISABLED: "1",
+              METRO_CACHE_ROOT: ".metro-cache/member",
+            }),
           },
-        },
+          {
+            command: "npx expo start --web --port 8083",
+            url: "http://localhost:8083",
+            reuseExistingServer: !process.env.CI,
+            timeout: 180_000,
+            env: serverEnv({
+              EXPO_PUBLIC_SENTRY_DISABLED: "1",
+              IRONFLOW_WEB_TARGET: "staff",
+              METRO_CACHE_ROOT: ".metro-cache/staff",
+            }),
+          },
+        ],
       }),
 });
