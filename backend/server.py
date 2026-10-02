@@ -485,6 +485,16 @@ async def lifespan(app: FastAPI):
     await db.community_roles.create_index("id", unique=True)
     await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("read_at", 1)])
+    # Hot reads: posts by author, channel history, unread notifications,
+    # a member's communities, and a member's wearable history. The posts,
+    # messages, and notifications pairs are also created earlier in this
+    # lifespan with the same keys. community_members (user_id, status) and
+    # wearable_metrics (user_id, recorded_at) are not a prefix of those.
+    await db.posts.create_index([("author_id", 1), ("created_at", -1)])
+    await db.messages.create_index([("channel_id", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("read_at", 1)])
+    await db.community_members.create_index([("user_id", 1), ("status", 1)])
+    await db.wearable_metrics.create_index([("user_id", 1), ("recorded_at", -1)])
     # Support tickets. user_id + status are the member list and the staff queue;
     # ticket_id is how a thread is loaded. id is the public key.
     await db.tickets.create_index("id", unique=True)

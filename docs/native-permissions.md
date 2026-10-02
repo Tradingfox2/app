@@ -6,7 +6,7 @@ A denied permission must leave the screen usable. None of these flows crash, ret
 
 Microphone is not requested. Do not add `NSMicrophoneUsageDescription`, `RECORD_AUDIO`, or the `expo-camera` config plugin until a screen actually records audio. The gym scanner only reads QR codes. Livestream video, if it needs a microphone, should add the string in the same change that calls the capture API.
 
-The custom URL scheme is `ironflow` (`frontend/app.json`), set with the post share helper in `frontend/src/share.ts`. See `docs/post-deep-links.md` for the share sheet. This page is only the operating-system permission checklist.
+The custom URL scheme is `ironflow` (`frontend/app.json`), set with the post share helper in `frontend/src/share.ts`. See `docs/post-deep-links.md` for the share sheet. This page is the operating-system permission checklist. The Terra key names in the Health section are server environment names, not a phone permission.
 
 ## Camera
 
@@ -109,6 +109,8 @@ Not read yet. `frontend/plugins/withHealth.js` is listed in `app.json` so a nati
 | Android | Health Connect read permissions for heart rate, resting heart rate, heart-rate variability, sleep, steps, and active calories. The permission-rationale alias is on the main activity so Android 14 can open the app from the Health Connect privacy link. No write permission. |
 
 The sources screen still connects watches through the existing provider list. It does not open a health permission prompt.
+
+Live Garmin and Whoop data is not a phone permission. The API reads two environment names, `TERRA_API_KEY` and `TERRA_DEV_ID`. Those names are listed in `.env.production.example` with no values. Set them on the host. A member who is not the demo account never receives sample wearable numbers. With the names empty, the source stays pending until Terra authorises it, and sync writes nothing.
 
 ## Microphone
 
