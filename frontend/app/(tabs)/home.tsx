@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -35,6 +35,7 @@ import {
   readTrainingTotals,
   readWorkoutCount,
 } from "@/src/training-week";
+import { weeklyReviewDue, type WeeklyReview } from "@/src/weekly-review";
 
 function unreadLabel(count: number): string | null {
   if (count <= 0) return null;
@@ -138,6 +139,8 @@ export default function Home() {
   const [workoutStamps, setWorkoutStamps] = useState<ActivityWorkout[] | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [calendarSettled, setCalendarSettled] = useState(false);
+  const [opened, setOpened] = useState(0);
+  const [review, setReview] = useState<WeeklyReview | null>(null);
 
   const load = useCallback(async () => {
     const [todayResult, heatResult, workoutsResult] = await Promise.allSettled([
@@ -185,7 +188,23 @@ export default function Home() {
 
   useFocusEffect(useCallback(() => {
     void load();
+    setOpened((count) => count + 1);
   }, [load]));
+
+  // After Today has painted. Sunday is before Monday, so that open does not call.
+  useEffect(() => {
+    if (!dashSettled || opened === 0 || !weeklyReviewDue(new Date())) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void api.weeklyReview().then((row) => {
+        if (!cancelled) setReview(row);
+      }).catch(() => undefined);
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [dashSettled, opened]);
 
   const strain = data?.strain?.value ?? 0;
   const trainingLoad = readTrainingLoad(data);
@@ -367,6 +386,19 @@ export default function Home() {
             </>
           ) : null}
         </View>
+
+        {review ? (
+          <View style={styles.statsCard} testID="weekly-review-card">
+            <Text style={styles.cardTitle}>{t("WEEKLY REVIEW")}</Text>
+            <Text style={styles.todayMeta} testID="weekly-review-headline">{review.headline}</Text>
+            <Text style={styles.weekEmpty}>{t("WINS")}</Text>
+            <Text style={styles.todayMeta}>{review.wins}</Text>
+            <Text style={styles.weekEmpty}>{t("WATCH")}</Text>
+            <Text style={styles.todayMeta}>{review.watch}</Text>
+            <Text style={styles.weekEmpty}>{t("NEXT WEEK")}</Text>
+            <Text style={styles.todayMeta}>{review.next_week_change}</Text>
+          </View>
+        ) : null}
 
         {showMorning ? (
           <Pressable

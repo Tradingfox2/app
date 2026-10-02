@@ -33,6 +33,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   program_adopted: "barbell-outline",
   join_request: "person-add-outline",
   gym_reward: "gift-outline",
+  weekly_review: "calendar-outline",
 };
 
 const PAGE = 30;
