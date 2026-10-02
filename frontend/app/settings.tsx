@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,6 +10,7 @@ import { buildJoinUrl, shareLink } from "@/src/share";
 import { card, colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { Avatar } from "@/src/components/social/avatar";
+import { managementUrl } from "@/src/purchases";
 
 const PLANS: { key: string; name: string; price: string; features: string[] }[] = [
   { key: "free", name: "FREE", price: "€0", features: ["Workout tracker", "50 exercises", "Community feed"] },
@@ -148,9 +149,9 @@ export default function Settings() {
     finally { setRefLoading(false); }
   };
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(useCallback(() => {
+    void load();
+  }, [load]));
 
   const selectPlan = async (plan: string) => {
     if (plan === (sub?.plan ?? "free")) return;
@@ -162,14 +163,26 @@ export default function Settings() {
   const fail = (cause: unknown, fallback: string) => {
     setPlanError(cause instanceof Error ? cause.message : t(fallback));
   };
-  const webOnly = () => {
-    if (Platform.OS === "web") return false;
-    setPlanError(t("Pro is available on the web app."));
-    return true;
-  };
   const openPortal = async () => {
-    if (billingBusy.current || webOnly()) return;
+    if (billingBusy.current) return;
     setPlanError("");
+    if (Platform.OS !== "web") {
+      if (sub?.provider !== "revenuecat" || !user) {
+        setPlanError(t("Manage billing for a web subscription in the browser."));
+        return;
+      }
+      billingBusy.current = true;
+      try {
+        const url = await managementUrl(user.id);
+        if (url) await Linking.openURL(url);
+        else setPlanError(t("Manage this subscription in the App Store or Play Store."));
+      } catch {
+        setPlanError(t("Could not open the store subscription."));
+      } finally {
+        billingBusy.current = false;
+      }
+      return;
+    }
     billingBusy.current = true;
     try {
       const portal = await api.subscriptionPortal();
@@ -179,7 +192,12 @@ export default function Settings() {
   };
   const openPro = async () => {
     setPlanError("");
-    if (isPro(sub?.plan) || webOnly() || prices || pricesLoading) return;
+    if (isPro(sub?.plan)) return;
+    if (Platform.OS !== "web") {
+      router.push("/pro");
+      return;
+    }
+    if (prices || pricesLoading) return;
     setPricesLoading(true);
     try { setPrices((await api.subscriptionPlans()).plans ?? []); }
     catch (cause) { fail(cause, "Payments are not set up yet."); }

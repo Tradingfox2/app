@@ -89,6 +89,8 @@ envVarGroups:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: REVENUECAT_WEBHOOK_SECRET
+        sync: false
       - key: EMERGENT_LLM_KEY
         sync: false
       - key: INTEGRATION_PROXY_URL

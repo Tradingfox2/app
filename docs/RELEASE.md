@@ -14,7 +14,7 @@ Store identity for the Expo app in `frontend/`. These steps are done once per Ap
 
 Register only `com.ironflow.app`.
 
-Billing stays on the existing Stripe web checkout. This setup does not add RevenueCat, and it does not change Stripe.
+Web Pro stays on Stripe Checkout (`POST /api/subscriptions/checkout`). iOS and Android Pro use RevenueCat. The app build reads the public keys `EXPO_PUBLIC_REVENUECAT_IOS_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`. The API reads `REVENUECAT_WEBHOOK_SECRET` and accepts `POST /api/webhooks/revenuecat`. A product id containing `year` or `annual` is the yearly plan. The entitlement identifier is `pro`. A real charge needs a dev client or a store build.
 
 `expo.extra.eas.projectId` in `frontend/app.json` is the placeholder `00000000-0000-0000-0000-000000000000`. `frontend/src/push.ts` ignores that placeholder and still uses `EXPO_PUBLIC_EAS_PROJECT_ID` when the real id is not in the app config yet.
 

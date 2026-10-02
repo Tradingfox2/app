@@ -160,6 +160,7 @@ not remove the routes.
 | --- | --- |
 | `STRIPE_SECRET_KEY` | Community checkout. Stripe is called over HTTP; the Python `stripe` package is not required. |
 | `STRIPE_WEBHOOK_SECRET` | Verifies `POST /api/billing/stripe/webhook`. |
+| `REVENUECAT_WEBHOOK_SECRET` | Full `Authorization` value for `POST /api/webhooks/revenuecat`. Empty is 503 and does not grant Pro. |
 | `EMERGENT_LLM_KEY` | Private lab-report files in `backend/storage.py`. |
 | `INTEGRATION_PROXY_URL` | Optional override. Default `https://integrations.emergentagent.com`. |
 | `TERRA_DEV_ID` | Terra wearable and lab connection. |
