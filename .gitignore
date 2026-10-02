@@ -91,5 +91,11 @@ memory/test_credentials.md
 android-sdk/
 backend/media/
 
+# Store and push credentials. Upload to EAS. Do not commit.
+google-services.json
+GoogleService-Info.plist
+*.p8
+*service-account*.json
+
 # Local screenshot scratch
 frontend/.tmp-*

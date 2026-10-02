@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "IronFlow",
+    "slug": "ironflow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.workoutstack.amt12d",
+      "bundleIdentifier": "com.ironflow.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan gym QR codes to log your visits",
         "NSPhotoLibraryUsageDescription": "Upload photos of your blood panels",
@@ -21,10 +21,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#101418"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.workoutstack.amt12d",
+      "package": "com.ironflow.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
@@ -44,9 +44,9 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-image.png",
-          "imageWidth": 200,
+          "imageWidth": 112,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#101418"
         }
       ],
       [
@@ -57,8 +57,14 @@
       ],
       "expo-localization",
       "expo-video",
-      "expo-notifications"
+      "expo-notifications",
+      "./plugins/withHealth"
     ],
+    "extra": {
+      "eas": {
+        "projectId": "00000000-0000-0000-0000-000000000000"
+      }
+    },
     "experiments": {
       "typedRoutes": true
     }

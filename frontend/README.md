@@ -31,9 +31,11 @@ Push goes through Expo's free push service; the backend needs no key for it. Pus
 **development or store build**. Expo Go dropped remote push on Android in SDK 53, so there
 `src/push.ts` does nothing and the in-app notification centre is used instead.
 
-1. `npx eas-cli init` links the app to an EAS project and writes `expo.extra.eas.projectId`
-   into `app.json`. You can instead set `EXPO_PUBLIC_EAS_PROJECT_ID=<uuid>` in the build environment;
-   `src/push.ts` reads app config first, then that variable.
+1. `npx eas-cli init` links the app to an EAS project and replaces the placeholder
+   `expo.extra.eas.projectId` in `app.json` (`00000000-0000-0000-0000-000000000000`).
+   You can instead set `EXPO_PUBLIC_EAS_PROJECT_ID=<uuid>` in the build environment.
+   `src/push.ts` reads app config first, skips that placeholder, then that variable.
+   Build profiles are in `eas.json`. Store setup is in `docs/RELEASE.md`.
 2. Android: create a Firebase project, add `google-services.json` and set
    `expo.android.googleServicesFile`, then upload the FCM V1 service-account key with
    `npx eas-cli credentials` (Android → Push Notifications).

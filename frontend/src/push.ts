@@ -32,11 +32,15 @@ function notifications() {
   return notificationApi;
 }
 
+/** Committed stand-in in app.json. `eas init` replaces it with the real project id. */
+const EAS_PROJECT_PLACEHOLDER = "00000000-0000-0000-0000-000000000000";
+
 /** The EAS project id, from app config or the build environment. */
 function projectId(): string | undefined {
-  return (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
-    ?? (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId
-    ?? process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
+  const configured = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
+    ?? (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId;
+  const fromConfig = configured && configured !== EAS_PROJECT_PLACEHOLDER ? configured : undefined;
+  return fromConfig ?? process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
 }
 
 /**
