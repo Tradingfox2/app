@@ -22,6 +22,7 @@
     "src/training-week.test.ts",
     "src/activity-day.test.ts",
     "src/recorder-math.test.ts",
-    "src/weekly-review.test.ts"
+    "src/weekly-review.test.ts",
+    "src/sentry-gate.test.ts"
   ]
 }

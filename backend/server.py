@@ -43,7 +43,11 @@ load_dotenv(ROOT_DIR / ".env")
 # --------------------------------------------------------------------------- #
 # Motor client lives in db.py (tz_aware). Same objects as before; scripts
 # import that module so they do not load this file's routers.
+import observability  # noqa: E402
 from db import client, db, db_name, mongo_url  # noqa: E402
+
+observability.configure_logging()
+observability.init_sentry()
 
 JWT_SECRET = os.environ.get("JWT_SECRET") or secrets.token_hex(32)
 JWT_ALG = "HS256"
@@ -55,7 +59,6 @@ HEALTH_MONGO_TIMEOUT_SEC = 2.0
 bearer = HTTPBearer(auto_error=False)
 
 logger = logging.getLogger("ironflow")
-logging.basicConfig(level=logging.INFO)
 
 
 def now() -> datetime:

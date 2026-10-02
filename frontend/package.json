@@ -12,7 +12,8 @@
     "lint": "expo lint",
     "test:community": "playwright test community.spec.ts",
     "test:activity-day": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/activity-day.test.ts",
-    "test:recorder": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/recorder-math.test.ts"
+    "test:recorder": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/recorder-math.test.ts",
+    "test:sentry-gate": "node --experimental-strip-types src/sentry-gate.test.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "6.1.2",
@@ -20,6 +21,7 @@
     "@gorhom/bottom-sheet": "5.2.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
+    "@sentry/react-native": "~7.2.0",
     "centrifuge": "5.7.4",
     "date-fns": "4.1.0",
     "dayjs": "1.11.13",
