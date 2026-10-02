@@ -75,6 +75,49 @@ test.describe("staff site", () => {
       await expect(page.getByText("Connexion équipe", { exact: true })).toBeVisible();
       await expect(page.getByText("Connectez-vous avec votre compte IronFlow. Le support, le modérateur et l’admin ouvrent la console.", { exact: true })).toBeVisible();
     });
+
+    test("shows French accounting labels and the stored yen amount", async ({ page }) => {
+      const empty = { state: "none_in_period" as const };
+      await fixtures(page, { ...support, staff_role: "admin", preferred_locale: "fr" }, async (route, path) => {
+        if (path === "/admin/overview") {
+          await route.fulfill({ json: {
+            users: { total: 1, new_7d: 0, suspended: 0, coaches: 0 },
+            queues: { open_reports: 0, pending_coach_applications: 0, pending_memberships: 0, open_tickets: 0, pending_tickets: 0 },
+            activity: { workouts_24h: 0, posts_24h: 0, messages_24h: 0, communities: 0 },
+            permissions: [...PERMISSIONS.support, "accounting.read"],
+            staff_role: "admin",
+          } });
+          return true;
+        }
+        if (path === "/admin/accounting/summary") {
+          await route.fulfill({ json: {
+            period: { from: "2026-09-01", to: "2026-09-30" },
+            generated_at: "2026-09-30T12:00:00Z",
+            sections: {
+              gross_collected: empty, platform_fees: empty, owed_to_coaches: empty, refunds: empty, chargebacks: empty,
+              commissions: { pending: empty, paid: empty, clawed_back: empty },
+              referrals: { pending: empty, paid: empty },
+              subscription_amounts: {
+                stripe: { pro_monthly: empty, pro_yearly: empty, other: empty },
+                revenuecat: { pro_monthly: empty, pro_yearly: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 500000, currency: "JPY" }] }, other: empty },
+              },
+              gym_partner_plans: empty,
+              active_subscriptions: empty,
+            },
+            recent_lines: [],
+          } });
+          return true;
+        }
+        return false;
+      });
+      await page.goto("/");
+      await page.getByTestId("admin-tab-accounting").click();
+      await expect(page.getByText("Abonnements enregistrés — App Store et Google Play", { exact: true })).toBeVisible();
+      await expect(page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly")).toContainText("JPY");
+      await expect(page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly")).toContainText("500");
+      await expect(page.getByTestId("accounting-section-gym_partner_plans")).toContainText("Aucun montant d'abonnement salle n'est enregistré.");
+      await expect(page.getByTestId("accounting-panel")).not.toContainText("€");
+    });
   });
 
   test("non-staff users cannot open the console", async ({ page }) => {
@@ -82,6 +125,8 @@ test.describe("staff site", () => {
     await page.goto("/");
     await expect(page.getByText("This console is for the IronFlow staff team.", { exact: true })).toBeVisible();
     await expect(page.getByTestId("admin-tab-users")).toHaveCount(0);
+    await expect(page.getByTestId("admin-tab-accounting")).toHaveCount(0);
+    await expect(page.getByTestId("accounting-panel")).toHaveCount(0);
     await expect(page.getByTestId("admin-console")).toHaveCount(0);
   });
 
@@ -102,6 +147,7 @@ test("support sees the queue read-only and cannot suspend", async ({ page }) => 
   await expect(page.getByTestId("admin-suspend")).toHaveCount(0);
   await expect(page.getByTestId("admin-role-admin")).toHaveCount(0);
   await expect(page.getByTestId("admin-tab-analytics")).toHaveCount(0);
+  await expect(page.getByTestId("admin-tab-accounting")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
@@ -418,10 +464,19 @@ test("support queue can hide assigned tickets", async ({ page }) => {
           period: { from: "2026-09-01", to: "2026-09-30" },
           generated_at: "2026-09-30T12:00:00Z",
           sections: {
-            gross_collected: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 1250, currency: "USD" }, { amount_cents: 500000, currency: "XOF" }] },
+            gross_collected: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 1250, currency: "USD" }, { amount_cents: 500000, currency: "JPY" }] },
             platform_fees: empty, owed_to_coaches: empty, refunds: empty, chargebacks: empty,
-            commissions: { pending: empty, paid: empty },
+            commissions: { pending: empty, paid: empty, clawed_back: empty },
             referrals: { pending: empty, paid: empty },
+            subscription_amounts: {
+              stripe: { pro_monthly: empty, pro_yearly: empty, other: empty },
+              revenuecat: {
+                pro_monthly: empty,
+                pro_yearly: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 500000, currency: "JPY" }] },
+                other: empty,
+              },
+            },
+            gym_partner_plans: empty,
             active_subscriptions: empty,
           },
           recent_lines: [],
@@ -434,8 +489,12 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.getByTestId("admin-tab-accounting").click();
     const gross = page.getByTestId("accounting-section-gross_collected");
     await expect(gross).toContainText("$12.50");
-    await expect(gross).toContainText("CFA");
-    await expect(gross).toContainText("5,000");
+    await expect(gross).toContainText("¥500,000");
     await expect(gross).not.toContainText("€");
+    const yearly = page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly");
+    await expect(yearly).toContainText("¥500,000");
+    await expect(yearly).not.toContainText("€");
+    await expect(page.getByTestId("accounting-section-gym_partner_plans")).toContainText("No gym plan amount is stored.");
+    await expect(page.getByTestId("accounting-section-commissions-clawed_back")).toContainText("Nothing in this period.");
   });
 });

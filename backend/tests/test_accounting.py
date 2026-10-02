@@ -47,12 +47,25 @@ def test_summary_keeps_currencies_and_skips_empty_totals(monkeypatch):
         await db.commissions.insert_many([
             {"id": "com_pending", "status": "pending", "amount_cents": 200, "currency": "usd", "created_at": moment, "stripe_id": "tr_com"},
             {"id": "com_paid", "status": "paid", "amount_cents": 300, "currency": "sek", "paid_at": moment},
+            {"id": "com_claw", "status": "clawed_back", "amount_cents": 80, "currency": "eur", "clawed_back_at": moment},
         ])
         await db.subscriptions.insert_many([
             {"id": "sub-row", "status": "active", "provider": "stripe", "provider_subscription_id": "sub_1", "plan": "pro",
              "current_period_start": moment, "current_period_end": moment + timedelta(days=20)},
             {"id": "sub-old", "status": "active", "provider": "stripe", "current_period_start": outside, "current_period_end": outside + timedelta(days=5)},
             {"id": "sub-cancel", "status": "canceled", "provider": "stripe", "current_period_start": moment, "current_period_end": moment + timedelta(days=10)},
+            {"id": "sub-web", "status": "active", "plan": "pro_monthly", "currency": "usd", "amount_cents": 999,
+             "stripe_subscription_id": "sub_web", "current_period_start": moment, "current_period_end": moment + timedelta(days=20)},
+            {"id": "sub-store", "status": "active", "provider": "revenuecat", "plan": "pro_yearly", "currency": "jpy",
+             "amount_cents": 500000, "provider_subscription_id": "rc_jpy",
+             "current_period_start": moment, "current_period_end": moment + timedelta(days=20)},
+            {"id": "sub-unknown", "status": "active", "provider": "other", "plan": "pro_monthly", "currency": "eur",
+             "amount_cents": 100, "current_period_start": moment, "current_period_end": moment + timedelta(days=10)},
+        ])
+        await db.gyms.insert_many([
+            {"id": "gym-1", "plan": "partner", "billing": {"amount_cents": 4900, "currency": "usd", "stripe_subscription_id": "sub_gym"}},
+            {"id": "gym-paused", "plan": "free", "billing": {"amount_cents": 1500, "currency": "jpy"}},
+            {"id": "gym-free", "plan": "free"},
         ])
         admin = account("boss", staff_role="admin")
         for caller in (
@@ -77,14 +90,32 @@ def test_summary_keeps_currencies_and_skips_empty_totals(monkeypatch):
         assert report["sections"]["chargebacks"] == {"state": "none_in_period"}
         assert report["sections"]["commissions"]["pending"]["totals"] == [{"amount_cents": 200, "currency": "USD"}]
         assert report["sections"]["commissions"]["paid"]["totals"] == [{"amount_cents": 300, "currency": "SEK"}]
+        assert report["sections"]["commissions"]["clawed_back"]["totals"] == [{"amount_cents": 80, "currency": "EUR"}]
         assert report["sections"]["referrals"]["pending"] == {"state": "none_in_period"}
         assert report["sections"]["referrals"]["paid"]["totals"] == [{"amount_cents": 1500, "currency": "GBP"}]
-        assert report["sections"]["active_subscriptions"]["counts"] == [{"currency": None, "count": 1}]
+        amounts = report["sections"]["subscription_amounts"]
+        assert amounts["stripe"]["pro_monthly"]["totals"] == [{"amount_cents": 999, "currency": "USD"}]
+        assert amounts["stripe"]["pro_yearly"] == {"state": "none_in_period"}
+        assert amounts["stripe"]["other"]["state"] == "recorded" and amounts["stripe"]["other"]["amounts_stored"] is False
+        assert "totals" not in amounts["stripe"]["other"]
+        assert amounts["revenuecat"]["pro_yearly"]["totals"] == [{"amount_cents": 500000, "currency": "JPY"}]
+        assert amounts["revenuecat"]["pro_monthly"] == {"state": "none_in_period"}
+        assert amounts["revenuecat"]["other"] == {"state": "none_in_period"}
+        gym = {(row["currency"], row["amount_cents"]) for row in report["sections"]["gym_partner_plans"]["totals"]}
+        assert gym == {("USD", 4900), ("JPY", 1500)}
+        assert report["sections"]["active_subscriptions"]["counts"] == [
+            {"currency": "JPY", "count": 1}, {"currency": "USD", "count": 1}, {"currency": None, "count": 1},
+        ]
         refund_line = next(line for line in report["recent_lines"] if line["stripe_id"] == "evt_refund")
         assert refund_line["cents"] is None and refund_line["currency"] is None
         assert refund_line["kind"] == "billing_event" and refund_line["status"] == "charge.refunded"
         blank = next(line for line in report["recent_lines"] if line["stripe_id"] == "cs_blank")
         assert blank["currency"] is None and blank["cents"] == 400
+        store_line = next(line for line in report["recent_lines"] if line["kind"] == "store_subscription")
+        assert store_line["cents"] == 500000 and store_line["currency"] == "JPY" and store_line["stripe_id"] is None
+        web_line = next(line for line in report["recent_lines"] if line["stripe_id"] == "sub_web")
+        assert web_line["kind"] == "subscription" and web_line["cents"] == 999 and web_line["currency"] == "USD"
+        assert not any(line["kind"] == "subscription" and line["cents"] == 100 for line in report["recent_lines"])
         assert any(line["stripe_id"] == "cs_open" and line["status"] == "open" for line in report["recent_lines"])
         entry = await db.audit_log.find_one({"action": "accounting.viewed"})
         assert entry["actor_id"] == "boss" and entry["target_type"] == "report"
@@ -96,6 +127,11 @@ def test_summary_keeps_currencies_and_skips_empty_totals(monkeypatch):
         empty = await accounting_summary(admin, date(2026, 1, 1), date(2026, 1, 31))
         assert empty["sections"]["gross_collected"] == {"state": "none_in_period"}
         assert empty["sections"]["active_subscriptions"] == {"state": "none_in_period"}
+        assert empty["sections"]["subscription_amounts"]["stripe"]["pro_monthly"] == {"state": "none_in_period"}
+        assert empty["sections"]["subscription_amounts"]["revenuecat"]["pro_yearly"] == {"state": "none_in_period"}
+        assert empty["sections"]["commissions"]["clawed_back"] == {"state": "none_in_period"}
+        january_gym = {(row["currency"], row["amount_cents"]) for row in empty["sections"]["gym_partner_plans"]["totals"]}
+        assert january_gym == {("USD", 4900), ("JPY", 1500)}
         assert empty["recent_lines"] == []
         assert await db.audit_log.count_documents({"action": "accounting.viewed"}) == 2
     run_isolated(scenario)
