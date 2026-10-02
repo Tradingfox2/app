@@ -80,6 +80,15 @@ scheme, with no `/api` suffix. Share links use `EXPO_PUBLIC_WEB_ORIGIN` or
 `EXPO_PUBLIC_WEB_URL` when you have a real web host. Those are client build
 variables, not API process variables.
 
+### Observability
+
+`SENTRY_DSN` turns on the API Sentry SDK. Leave it empty and the process never
+calls `sentry_sdk.init`, so boot does not need a DSN. Pytest does not send
+events even if the variable is set. Uvicorn writes one JSON object per line
+(`backend/log_config.json`). The Expo app reads `EXPO_PUBLIC_SENTRY_DSN` the
+same way: unset means `@sentry/react-native` is not initialized. Playwright
+and the nightly preview run do not send events.
+
 ### AI
 
 `LLM_PROVIDER` chooses the coach: `auto` (default), `anthropic`, `openrouter`,

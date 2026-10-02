@@ -4,14 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Nightly preview browser run. The other jobs skip this event.
+    - cron: "17 5 * * *"
 
 concurrency:
   # A new push supersedes an in-flight run on the same ref.
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # The event name keeps a nightly run from being cancelled by a push to main.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   backend:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     services:
       mongo:
@@ -52,7 +57,7 @@ jobs:
         run: |
           # Part of the suite drives a live server over HTTP rather than calling
           # the routers directly, so CI has to run one.
-          uvicorn server:app --host 127.0.0.1 --port 8001 &
+          uvicorn server:app --host 127.0.0.1 --port 8001 --log-config log_config.json &
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8001/api/ >/dev/null 2>&1 && exit 0
             sleep 1
@@ -67,6 +72,7 @@ jobs:
         run: python -m pytest -q
 
   frontend:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +94,22 @@ jobs:
         working-directory: frontend
         run: npx eslint .
 
+      - name: Sentry gate
+        working-directory: frontend
+        run: node --experimental-strip-types src/sentry-gate.test.ts
+
+  api-image:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the API image
+        run: docker build -t ironflow-api backend
+      - name: Boot the image without a DSN
+        run: docker run --rm ironflow-api python -c "import observability; observability.configure_logging(); observability.init_sentry()"
+
   e2e:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -118,5 +139,57 @@ jobs:
         if: failure()
         with:
           name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+  preview-e2e:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decide whether the preview suite runs
+        id: preview
+        env:
+          PREVIEW_URL: ${{ secrets.PREVIEW_URL }}
+        run: |
+          url=$(printf '%s' "$PREVIEW_URL" | tr -d '[:space:]')
+          case "$url" in
+            http://*|https://*)
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              ;;
+            "")
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              echo "PREVIEW_URL is unset; skipping Playwright."
+              ;;
+            *)
+              echo "PREVIEW_URL is set but is not an http(s) URL." >&2
+              exit 1
+              ;;
+          esac
+      - uses: actions/setup-node@v4
+        if: steps.preview.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install dependencies
+        if: steps.preview.outputs.run == 'true'
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+      - name: Install Chromium
+        if: steps.preview.outputs.run == 'true'
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright against the preview
+        if: steps.preview.outputs.run == 'true'
+        working-directory: frontend
+        env:
+          PREVIEW_URL: ${{ secrets.PREVIEW_URL }}
+          CI: "true"
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.preview.outputs.run == 'true'
+        with:
+          name: playwright-preview-report
           path: frontend/playwright-report/
           retention-days: 7

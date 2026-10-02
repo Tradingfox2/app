@@ -52,6 +52,8 @@ envVarGroups:
         value: ironflow
       - key: JWT_SECRET
         generateValue: true
+      - key: SENTRY_DSN
+        sync: false
       - key: PUBLIC_APP_URL
         sync: false
       - key: APP_PUBLIC_URL

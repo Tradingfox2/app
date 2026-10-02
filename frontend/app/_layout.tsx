@@ -9,12 +9,13 @@ import { StatusBar } from "expo-status-bar";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth-context";
 import { I18nProvider } from "@/src/i18n";
+import { wrapRoot } from "@/src/sentry";
 import { colors } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayout() {
   const [loaded, error] = useIconFonts();
 
   useEffect(() => {
@@ -49,3 +50,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapRoot(RootLayout);
