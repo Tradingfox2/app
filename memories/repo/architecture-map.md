@@ -380,7 +380,7 @@ The activity-day screen landed from `cursor/home-activity-day-d3c3` and is on ma
   `duration_sec` against the busiest day in the seven, or a center dot when a
   session exists but duration does not. Chartreuse stays off this card.
 - **Activity day:** `frontend/app/activity.tsx` plus `frontend/src/activity-day.ts`.
-  No new endpoint and no HealthKit. `api.wearable` is called for `steps` and
+  No new endpoint. `api.wearable` is called for `steps` and
   `calories`. Finished `duration_sec` is split across the local hours it
   occupied; hours with none are omitted. Tonnage and distance come from
   `GET /workouts/{id}/sets` (`weight_kg × reps`, `distance_m`) for sessions
@@ -480,7 +480,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 
 ## Added 2026-10-01 (store identity)
 
-- **EAS and store identity:** `frontend/app.json` names the app IronFlow (`slug` `ironflow`, iOS bundle and Android package `com.ironflow.app`, version `1.0.0`). `expo.extra.eas.projectId` is the placeholder `00000000-0000-0000-0000-000000000000`; `frontend/src/push.ts` still reads that field, skips the placeholder, then `EXPO_PUBLIC_EAS_PROJECT_ID`. `frontend/eas.json` defines `development` (dev client, internal), `preview` (internal apk), and `production` (Android app bundle; `submit.production` track `internal` with `releaseStatus` `completed` for `--auto-submit`). `frontend/plugins/withHealth.js` adds the HealthKit entitlement and Health Connect manifest entries only. No health reads. One-time store steps are `docs/RELEASE.md`.
+- **EAS and store identity:** `frontend/app.json` names the app IronFlow (`slug` `ironflow`, iOS bundle and Android package `com.ironflow.app`, version `1.0.0`). `expo.extra.eas.projectId` is the placeholder `00000000-0000-0000-0000-000000000000`; `frontend/src/push.ts` still reads that field, skips the placeholder, then `EXPO_PUBLIC_EAS_PROJECT_ID`. `frontend/eas.json` defines `development` (dev client, internal), `preview` (internal apk), and `production` (Android app bundle; `submit.production` track `internal` with `releaseStatus` `completed` for `--auto-submit`). `frontend/plugins/withHealth.js` adds the HealthKit entitlement and Health Connect manifest entries. One-time store steps are `docs/RELEASE.md`.
 
 ## Added 2026-10-02 (Terra live path)
 
@@ -489,6 +489,10 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 ## Added 2026-10-02 (known defects)
 
 - **Keyboard, report age, French copy.** `auth.tsx` and `workout/[id].tsx` set `KeyboardAvoidingView` `behavior` to `padding` on iOS and Android (`edgeToEdgeEnabled` otherwise covers the inputs). Staff report cards use the same opened/updated age line as tickets; `reviewed_at` is that update time when the report was closed, and an open report with no `reviewed_at` shows only the opened age. French catalogs cover the `t()` strings those screens were still missing. Store ids stay `com.ironflow.app`.
+
+## Added 2026-10-02 (phone health)
+
+- **Phone health reads:** `frontend/src/phone-health.ts` reads steps, heart rate, and workouts already on the phone, in the foreground, and does not post them. Apple calls `isHealthDataAvailable()` first, reads cumulative `stepCount`, heart rate as count/time, and one `HKWorkout` type, and shares nothing. Health Connect aggregates `Steps` and `HeartRate` and reads `ExerciseSession` without the exercise route. A denied type stays hidden, a granted day with no sample stays blank, and a missing older sample is not proof it never existed. The activity day shows a returned sample. No new tab, no calorie estimate, and no webhook change.
 
 ## Added 2026-10-02 (observability)
 

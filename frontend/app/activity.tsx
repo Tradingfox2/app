@@ -26,6 +26,12 @@ import {
   type DayTraining,
   type SetRollup,
 } from "@/src/activity-day";
+import { readPhoneDay } from "@/src/phone-health";
+import {
+  hiddenPhoneDay,
+  pickStepReading,
+  type PhoneDay,
+} from "@/src/phone-health-read";
 import { ActivityRing } from "@/src/components/activity-ring";
 import { useI18n } from "@/src/i18n";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
@@ -73,6 +79,8 @@ export default function ActivityDayScreen() {
   >({ kind: "pending" });
   const [setsAttempt, setSetsAttempt] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [phone, setPhone] = useState<PhoneDay>(hiddenPhoneDay());
+  const [phoneNonce, setPhoneNonce] = useState(0);
 
   const load = useCallback(async () => {
     const [workoutResult, stepsResult, caloriesResult] = await Promise.allSettled([
@@ -120,6 +128,17 @@ export default function ActivityDayScreen() {
   }, [load]);
 
   useEffect(() => {
+    let cancel = false;
+    setPhone(hiddenPhoneDay());
+    readPhoneDay(dayKey).then((day) => {
+      if (!cancel) setPhone(day);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [dayKey, phoneNonce]);
+
+  useEffect(() => {
     if (!workoutSettled) return undefined;
     if (!workouts) {
       setSetsState({ kind: "pending" });
@@ -151,7 +170,11 @@ export default function ActivityDayScreen() {
     };
   }, [workouts, workoutSettled, dayKey, setsAttempt, t]);
 
-  const steps = stepRows ? readDailyMetric(stepRows, dayKey) : null;
+  const steps = pickStepReading(
+    stepRows ? readDailyMetric(stepRows, dayKey) : null,
+    phone.steps,
+    phone.device,
+  );
   const calories = calorieRows ? readDailyMetric(calorieRows, dayKey) : null;
   const rollup = setsState.kind === "ready" && setsState.day === dayKey ? setsState.rollup : null;
   const setsError = setsState.kind === "error" && setsState.day === dayKey ? setsState.message : null;
@@ -206,6 +229,21 @@ export default function ActivityDayScreen() {
           }
         : { kind: "unavailable", text: t("Not measured") };
 
+  const heart = phone.heartRate;
+  const heartState: FigureState = heart.kind === "value"
+    ? {
+        kind: "value",
+        primary: heart.value.min === heart.value.max
+          ? t("{count} bpm", { count: formatNumber(Math.round(heart.value.min)) })
+          : t("{low}–{high} bpm", {
+              low: formatNumber(Math.round(heart.value.min)),
+              high: formatNumber(Math.round(heart.value.max)),
+            }),
+        note: null,
+        device: phone.device,
+      }
+    : { kind: "unavailable", text: t("Not measured") };
+
   const distanceState: FigureState = !workoutSettled || setsPending
     ? { kind: "loading" }
     : workoutError
@@ -226,6 +264,7 @@ export default function ActivityDayScreen() {
             tintColor={colors.textMuted}
             onRefresh={async () => {
               setRefreshing(true);
+              setPhoneNonce((nonce) => nonce + 1);
               await load();
               setRefreshing(false);
             }}
@@ -305,6 +344,28 @@ export default function ActivityDayScreen() {
           formatNumber={formatNumber}
         />
 
+        {heart.kind === "hidden" ? null : (
+          <View style={styles.stack} testID="activity-heart">
+            <Text style={styles.word}>{t("Heart rate")}</Text>
+            <FigureBody state={heartState} />
+          </View>
+        )}
+
+        {phone.workouts.kind === "hidden" ? null : (
+          <View style={styles.stack} testID="activity-phone-workouts">
+            <Text style={styles.word}>{t("Workouts on this phone")}</Text>
+            {phone.workouts.kind === "empty" ? (
+              <Text style={styles.unavailable}>{t("Not measured")}</Text>
+            ) : (
+              phone.workouts.value.map((row) => (
+                <Text key={row.key} style={styles.note}>
+                  {workoutLine(row.label, row.startedAt, row.endedAt, t, formatDate)}
+                </Text>
+              ))
+            )}
+          </View>
+        )}
+
         <View style={styles.pair}>
           <View style={styles.pairCell} testID="activity-steps">
             <Text style={styles.word}>{t("Steps")}</Text>
@@ -324,6 +385,24 @@ export default function ActivityDayScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function workoutLine(
+  label: string,
+  startedAt: string,
+  endedAt: string | null,
+  t: (source: string, values?: Record<string, string | number>) => string,
+  formatDate: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
+): string {
+  const name = label === "Workout" ? t("Workout") : label;
+  const start = new Date(startedAt);
+  if (Number.isNaN(start.getTime())) return name;
+  const startText = formatDate(start, { hour: "numeric", minute: "2-digit" });
+  const end = endedAt ? new Date(endedAt) : null;
+  const endText = end && !Number.isNaN(end.getTime())
+    ? formatDate(end, { hour: "numeric", minute: "2-digit" })
+    : "";
+  return endText ? `${name} · ${startText}–${endText}` : `${name} · ${startText}`;
 }
 
 function distancePrimary(

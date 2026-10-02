@@ -101,14 +101,12 @@ Elevation uses the barometer's relative altitude when that reading exists. A pre
 
 ## Health
 
-Not read yet. `frontend/plugins/withHealth.js` is listed in `app.json` so a native build carries the store capability. Nothing in the app calls HealthKit or Health Connect, and no screen asks for this access.
+`frontend/src/phone-health.ts` reads steps, heart rate, and workouts that are already on the phone. The prompt runs when the member taps **READ ON THIS PHONE** on the Apple Health card (iOS) or the Health Connect card (Android) in `frontend/app/sources.tsx`. The activity day shows a sample only when one was returned. A granted day with no sample stays **Not measured**. A denied type is omitted. A day outside the default 30-day Health Connect window is not treated as proof the sample never existed. Nothing is written, posted, or used for ads.
 
 | | |
 | --- | --- |
-| iOS | HealthKit entitlement. `NSHealthShareUsageDescription`: "IronFlow can read heart rate, sleep, steps, and workouts from Apple Health after you connect that source." `NSHealthUpdateUsageDescription`: "IronFlow does not write to Apple Health." No background delivery. |
-| Android | Health Connect read permissions for heart rate, resting heart rate, heart-rate variability, sleep, steps, and active calories. The permission-rationale alias is on the main activity so Android 14 can open the app from the Health Connect privacy link. No write permission. |
-
-The sources screen still connects watches through the existing provider list. It does not open a health permission prompt.
+| iOS | `isHealthDataAvailable()` first. Read types are step count (cumulative sum), heart rate in count/min, and one workout type. Share list is empty. `NSHealthShareUsageDescription`: "IronFlow reads heart rate, steps, and workouts already in Apple Health. This data is not used for ads." `NSHealthUpdateUsageDescription`: "IronFlow does not write to Apple Health." No background delivery. A locked phone is not read. |
+| Android | Health Connect read permissions for heart rate, steps, and exercise. Steps and heart rate use `aggregate()`. Exercise sessions use `readRecords` and do not request the route. The permission-rationale alias is on the main activity so Android 14 can open the app from the Health Connect privacy link. No write, background, or history permission. |
 
 Live Garmin and Whoop data is not a phone permission. The API reads two environment names, `TERRA_API_KEY` and `TERRA_DEV_ID`. Those names are listed in `.env.production.example` with no values. Set them on the host. A member who is not the demo account never receives sample wearable numbers. With the names empty, the source stays pending until Terra authorises it, and sync writes nothing.
 

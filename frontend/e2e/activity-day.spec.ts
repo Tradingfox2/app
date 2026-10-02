@@ -119,6 +119,8 @@ test("home week rings open an activity day with logged minutes only", async ({ p
   await expect(page.getByTestId("activity-hours").locator("rect")).toHaveCount(1);
   await expect(page.getByTestId("activity-calories")).toContainText("Not measured");
   await expect(page.getByTestId("activity-steps")).toContainText("Not measured");
+  await expect(page.getByTestId("activity-heart")).toHaveCount(0);
+  await expect(page.getByTestId("activity-phone-workouts")).toHaveCount(0);
   await expect(page.getByTestId("activity-distance")).toContainText("1.5");
   await expect(page.getByTestId("activity-distance")).toContainText("km");
   await expect(page.getByTestId("activity-volume")).toContainText("1,000");
@@ -220,6 +222,8 @@ test("device steps and sample calories stay labeled, and French copy is honest",
   await expect(page.getByTestId("activity-calories")).toContainText("2");
   await expect(page.getByTestId("activity-calories")).toContainText("Données d'exemple");
   await expect(page.getByTestId("activity-distance")).toContainText("Non mesuré");
+  await expect(page.getByTestId("activity-heart")).toHaveCount(0);
+  await expect(page.getByTestId("activity-phone-workouts")).toHaveCount(0);
   await expect(page.getByTestId("activity-hours-empty")).toContainText("Aucune durée enregistrée");
   await expect(page.getByTestId("activity-calories").getByText("0", { exact: true })).toHaveCount(0);
 });

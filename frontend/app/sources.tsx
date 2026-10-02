@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +14,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as WebBrowser from "expo-web-browser";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { api } from "@/src/api";
+import { requestPhoneHealthRead } from "@/src/phone-health";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+
+const PHONE_PROVIDER = Platform.OS === "ios"
+  ? "apple_health"
+  : Platform.OS === "android"
+    ? "health_connect"
+    : null;
 
 const PROVIDER_META: Record<string, { label: string; icon: any }> = {
   garmin: { label: "Garmin", icon: "watch" },
@@ -81,6 +89,22 @@ export default function SourcesScreen() {
     load();
   }, [load]);
 
+  const readOnPhone = async (provider: string) => {
+    setBusy(`${provider}:read`);
+    try {
+      const opened = await requestPhoneHealthRead();
+      if (!opened) {
+        setNotice(t("This phone cannot read health data right now."));
+        return;
+      }
+      router.push("/activity" as Href);
+    } catch (e: any) {
+      Alert.alert(t("Error"), e?.message ?? t("Try again"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const act = async (provider: string, action: "connect" | "disconnect" | "sync" | "import") => {
     setBusy(`${provider}:${action}`);
     try {
@@ -127,6 +151,7 @@ export default function SourcesScreen() {
     const connected = s.status === "connected";
     const pending = s.status === "pending";
     const canImport = Array.isArray(s.import_formats) && s.import_formats.length > 0;
+    const onThisPhone = s.provider === PHONE_PROVIDER;
     const badge = connected ? (s.mode === "import" ? "IMPORTED" : modeLabel(s.mode)) : pending ? "AWAITING AUTHORISATION" : "";
     const provides: string[] = s.provides ?? [];
     return (
@@ -189,13 +214,32 @@ export default function SourcesScreen() {
                 ) : null}
               </Text>
             ) : null}
-            {s.requires_native_build && !canImport ? (
+            {onThisPhone ? (
+              <Text style={styles.noteTxt}>
+                {t("Reads steps, heart rate, and workouts already stored on this phone. IronFlow does not write them and does not use them for ads.")}
+              </Text>
+            ) : null}
+            {s.requires_native_build && !canImport && !onThisPhone ? (
               <Text style={styles.nativeNote}>{t("Requires a native build (not Expo Go)")}</Text>
             ) : null}
           </View>
         </View>
         <View style={styles.btnRow}>
-          {canImport ? (
+          {onThisPhone ? (
+            <Pressable
+              testID={`read-${s.provider}`}
+              onPress={() => void readOnPhone(s.provider)}
+              disabled={busy !== null}
+              style={[styles.btnPrimary, busy === `${s.provider}:read` && { opacity: 0.6 }]}
+            >
+              {busy === `${s.provider}:read` ? (
+                <ActivityIndicator size="small" color={colors.brandOn} />
+              ) : (
+                <Ionicons name="heart-outline" size={14} color={colors.brandOn} />
+              )}
+              <Text style={styles.btnPrimaryTxt}>{t("READ ON THIS PHONE")}</Text>
+            </Pressable>
+          ) : canImport ? (
             <Pressable
               testID={`import-${s.provider}`}
               onPress={() => act(s.provider, "import")}
@@ -210,7 +254,7 @@ export default function SourcesScreen() {
               <Text style={styles.btnPrimaryTxt}>{t("IMPORT EXPORT FILE")}</Text>
             </Pressable>
           ) : null}
-          {connected && !canImport ? (
+          {connected && !canImport && !onThisPhone ? (
             <>
               <Pressable
                 testID={`sync-${s.provider}`}
@@ -234,7 +278,7 @@ export default function SourcesScreen() {
                 <Text style={styles.btnGhostTxt}>{t("DISCONNECT")}</Text>
               </Pressable>
             </>
-          ) : !canImport ? (
+          ) : !canImport && !onThisPhone ? (
             <Pressable
               testID={`connect-${s.provider}`}
               onPress={() => act(s.provider, "connect")}
