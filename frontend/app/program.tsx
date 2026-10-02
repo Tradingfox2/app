@@ -20,6 +20,7 @@ import {
   ProgramDay,
   ProgramSchema,
 } from "@/src/program-schema";
+import { sessionWhy, swapChoices, type CatalogExercise } from "@/src/session-layout";
 import { usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
@@ -61,37 +62,107 @@ function Chip({
   );
 }
 
-function ExerciseRow({ ex }: { ex: any }) {
+function ExerciseRow({
+  ex,
+  testPrefix,
+  open,
+  choices,
+  ready,
+  swapping,
+  onToggle,
+  onPick,
+}: {
+  ex: ProgramDay["exercises"][number];
+  testPrefix: string;
+  open: boolean;
+  choices: CatalogExercise[];
+  ready: boolean;
+  swapping: boolean;
+  onToggle: () => void;
+  onPick: (slug: string) => void;
+}) {
   const { t } = useI18n();
+  const press = usePressFeedback();
   return (
     <View style={styles.exRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.exName}>{ex.name}</Text>
-        <Text style={styles.exMeta}>
-          {ex.sets} × {ex.reps_min === ex.reps_max ? ex.reps_min : `${ex.reps_min}-${ex.reps_max}`} · RPE{" "}
-          {ex.target_rpe} · {t("{seconds}s rest", { seconds: ex.rest_sec })}
-          {ex.load_pct_1rm ? ` · ${ex.load_pct_1rm}% 1RM` : ""}
-        </Text>
+      <View style={styles.exTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.exName}>{ex.name}</Text>
+          <Text style={styles.exMeta}>
+            {ex.sets} × {ex.reps_min === ex.reps_max ? ex.reps_min : `${ex.reps_min}-${ex.reps_max}`} · RPE{" "}
+            {ex.target_rpe} · {t("{seconds}s rest", { seconds: ex.rest_sec })}
+            {ex.load_pct_1rm ? ` · ${ex.load_pct_1rm}% 1RM` : ""}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("Swap {name}", { name: ex.name })}
+          testID={`${testPrefix}-swap-${ex.exercise_slug}`}
+          onPress={onToggle}
+          style={press("ghost", styles.swapBtn)}
+        >
+          <Text style={styles.swapTxt}>{t("SWAP")}</Text>
+        </Pressable>
       </View>
+      {open ? (
+        choices.length > 0 ? (
+          <View style={styles.swapList}>
+            {choices.map((choice) => (
+              <Pressable
+                key={choice.slug}
+                accessibilityRole="button"
+                accessibilityLabel={t("Swap {name}", { name: choice.name })}
+                testID={`${testPrefix}-choice-${ex.exercise_slug}-${choice.slug}`}
+                disabled={swapping}
+                onPress={() => onPick(choice.slug)}
+                style={press("chip", styles.swapChoice, { disabled: swapping })}
+              >
+                <Text style={styles.swapChoiceTxt}>{choice.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : ready ? (
+          <Text style={styles.swapEmpty} testID={`${testPrefix}-empty`}>
+            {t("No other exercise for this muscle.")}
+          </Text>
+        ) : null
+      ) : null}
     </View>
   );
 }
 
 function DayCard({
   day,
+  phase,
   badge,
   onStart,
   starting,
+  catalog,
+  catalogReady,
+  swapTarget,
+  swapping,
+  onToggleSwap,
+  onPickSwap,
 }: {
   day: ProgramDay;
+  phase: string;
   badge?: string;
   onStart?: () => void;
   starting?: boolean;
+  catalog: CatalogExercise[];
+  catalogReady: boolean;
+  swapTarget: string | null;
+  swapping: boolean;
+  onToggleSwap: (slug: string) => void;
+  onPickSwap: (fromSlug: string, toSlug: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, formatNumber } = useI18n();
   const press = usePressFeedback();
+  const why = sessionWhy(phase, day);
+  const idPrefix = badge ? `adjusted-${day.day_index}` : String(day.day_index);
+  const slugs = day.exercises.map((exercise) => exercise.exercise_slug);
   return (
-    <View style={styles.dayCard} testID={`day-card-${day.day_index}`}>
+    <View style={styles.dayCard} testID={`day-card-${idPrefix}`}>
       <View style={styles.dayHead}>
         <Text style={styles.dayTitle}>{t("DAY {day}", { day: day.day_index })}</Text>
         <View style={styles.focusBadge}>
@@ -103,8 +174,27 @@ function DayCard({
           </View>
         ) : null}
       </View>
+      {why ? (
+        <Text numberOfLines={1} style={styles.whyLine} testID={`day-why-${idPrefix}`}>
+          {t(why.key, {
+            focus: t(FOCUS_LABELS[day.focus] ?? day.focus),
+            sets: formatNumber(why.sets),
+            reps: why.reps,
+          })}
+        </Text>
+      ) : null}
       {day.exercises.map((ex, i) => (
-        <ExerciseRow key={`${ex.exercise_slug}-${i}`} ex={ex} />
+        <ExerciseRow
+          key={`${ex.exercise_slug}-${i}`}
+          ex={ex}
+          testPrefix={`day-${idPrefix}`}
+          open={swapTarget === `${idPrefix}:${ex.exercise_slug}`}
+          choices={swapChoices(catalog, ex.exercise_slug, slugs)}
+          ready={catalogReady}
+          swapping={swapping}
+          onToggle={() => onToggleSwap(`${idPrefix}:${ex.exercise_slug}`)}
+          onPick={(slug) => onPickSwap(ex.exercise_slug, slug)}
+        />
       ))}
       {onStart ? (
         <Pressable
@@ -215,9 +305,69 @@ export default function ProgramScreen() {
   // An explicit workout id receives the plan. Another open session is a choice,
   // never a silent merge.
   const [startingDay, setStartingDay] = useState<number | null>(null);
+  const [catalog, setCatalog] = useState<CatalogExercise[] | null>(null);
+  const [swapTarget, setSwapTarget] = useState<string | null>(null);
+  const [swapping, setSwapping] = useState(false);
+  const [swapError, setSwapError] = useState<string | null>(null);
   const [mergePrompt, setMergePrompt] = useState<{ day: ProgramDay; slugs: string[]; openId: string; openTitle: string } | null>(null);
   const [mergeBusy, setMergeBusy] = useState(false);
   const openLogger = (workoutId: string) => router.push(`/workout/${workoutId}` as Href);
+  const toggleSwap = async (key: string) => {
+    setSwapError(null);
+    setSwapTarget((current) => (current === key ? null : key));
+    if (catalog) return;
+    try {
+      const rows = await api.exercises();
+      setCatalog(
+        rows.flatMap((row) =>
+          typeof row?.slug === "string" && typeof row?.name === "string"
+            ? [{
+                slug: row.slug,
+                name: row.name,
+                primary_muscle_slug: typeof row.primary_muscle_slug === "string" ? row.primary_muscle_slug : null,
+              }]
+            : [],
+        ),
+      );
+    } catch (cause) {
+      setSwapError(cause instanceof Error ? cause.message : t("Could not swap this exercise"));
+    }
+  };
+  const pickSwap = async (day: ProgramDay, fromSlug: string, toSlug: string) => {
+    if (!programDoc?.id || !program || swapping) return;
+    setSwapping(true);
+    setSwapError(null);
+    try {
+      const result = await api.swapProgramExercise(programDoc.id, {
+        week_index: weekIdx,
+        day_index: day.day_index,
+        exercise_slug: fromSlug,
+        replacement_slug: toSlug,
+      });
+      const next: Program = {
+        ...program,
+        weeks: program.weeks.map((item) =>
+          item.week_index !== weekIdx
+            ? item
+            : {
+                ...item,
+                days: item.days.map((planned) => (planned.day_index === result.day.day_index ? result.day : planned)),
+              },
+        ),
+      };
+      const parsed = ProgramSchema.safeParse(next);
+      if (!parsed.success) throw new Error(t("Could not swap this exercise"));
+      setProgram(parsed.data);
+      if (result.adjusted_day && adjustResult?.day?.day_index === day.day_index) {
+        setAdjustResult({ ...adjustResult, day: result.adjusted_day });
+      }
+      setSwapTarget(null);
+    } catch (cause) {
+      setSwapError(cause instanceof Error ? cause.message : t("Could not swap this exercise"));
+    } finally {
+      setSwapping(false);
+    }
+  };
   const startDay = async (day: ProgramDay, _adjusted = false) => {
     if (startingDay !== null || !programDoc?.id) return;
     setStartingDay(day.day_index);
@@ -478,12 +628,23 @@ export default function ProgramScreen() {
                 </View>
               )}
 
+              {swapError ? (
+                <Text accessibilityRole="alert" testID="swap-error" style={styles.swapError}>{swapError}</Text>
+              ) : null}
+
               {adjustResult?.adjusted && (
                 <DayCard
                   day={adjustResult.day}
+                  phase={week?.phase ?? ""}
                   badge={t("ADJUSTED")}
                   onStart={() => startDay(adjustResult.day, true)}
                   starting={startingDay === adjustResult.day.day_index}
+                  catalog={catalog ?? []}
+                  catalogReady={catalog !== null}
+                  swapTarget={swapTarget}
+                  swapping={swapping}
+                  onToggleSwap={(key) => void toggleSwap(key)}
+                  onPickSwap={(fromSlug, toSlug) => void pickSwap(adjustResult.day, fromSlug, toSlug)}
                 />
               )}
 
@@ -491,8 +652,15 @@ export default function ProgramScreen() {
                 <DayCard
                   key={d.day_index}
                   day={d}
+                  phase={week.phase}
                   onStart={() => startDay(d)}
                   starting={startingDay === d.day_index}
+                  catalog={catalog ?? []}
+                  catalogReady={catalog !== null}
+                  swapTarget={swapTarget}
+                  swapping={swapping}
+                  onToggleSwap={(key) => void toggleSwap(key)}
+                  onPickSwap={(fromSlug, toSlug) => void pickSwap(d, fromSlug, toSlug)}
                 />
               ))}
             </>
@@ -645,4 +813,21 @@ const styles = StyleSheet.create({
   },
   exName: { color: colors.text, fontWeight: "700", fontSize: 14 },
   exMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  exTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  whyLine: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginBottom: spacing.sm },
+  swapBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radius.sm },
+  swapTxt: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  swapList: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
+  swapChoice: {
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    justifyContent: "center",
+  },
+  swapChoiceTxt: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  swapEmpty: { color: colors.textMuted, fontSize: 12, marginTop: spacing.sm },
+  swapError: { color: colors.error, fontSize: 12, marginBottom: spacing.sm },
 });

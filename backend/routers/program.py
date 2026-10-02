@@ -7,10 +7,11 @@ from datetime import timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from ai import active_model_label, llm_json
 from locales import content_language_instruction, normalize_locale
+from program_layout import SwapError, apply_program_swap
 from server import can_access_user_data, clean, current_user, db, new_id, now
 
 router = APIRouter()
@@ -359,6 +360,13 @@ class StartDayIn(BaseModel):
     day_index: Optional[int] = Field(default=None, ge=1, le=7)
 
 
+class SwapExerciseIn(BaseModel):
+    week_index: int = Field(ge=1, le=12)
+    day_index: int = Field(ge=1, le=7)
+    exercise_slug: str = Field(min_length=1, max_length=80)
+    replacement_slug: str = Field(min_length=1, max_length=80)
+
+
 def resolve_program_day(
     prog: dict,
     week_index: int | None,
@@ -432,6 +440,47 @@ async def next_planned_session(uid: str) -> dict | None:
 def _session_title(focus: str | None, week_index: int, day_index: int) -> str:
     label = (focus or "session").replace("_", " ").strip().title() or "Session"
     return f"{label} · week {week_index} day {day_index}"
+
+
+@router.post("/programs/{program_id}/swap-exercise")
+async def swap_program_exercise(
+    program_id: str,
+    body: SwapExerciseIn,
+    user: dict = Depends(current_user),
+):
+    """Replace one exercise on a stored day. Does not generate a new plan."""
+    prog = await db.programs.find_one({"id": program_id}, {"_id": 0})
+    if not prog:
+        raise HTTPException(404, "Program not found")
+    if not await can_access_user_data(user["id"], prog["user_id"]):
+        raise HTTPException(403, "Not allowed")
+    replacement = await db.exercises.find_one(
+        {"slug": body.replacement_slug},
+        {"_id": 0, "slug": 1, "name": 1},
+    )
+    if not replacement or not replacement.get("name"):
+        raise HTTPException(404, "Exercise not found")
+    try:
+        result = apply_program_swap(
+            prog,
+            body.week_index,
+            body.day_index,
+            body.exercise_slug,
+            replacement["slug"],
+            replacement["name"],
+        )
+        ProgramDay.model_validate(result["day"])
+        if result.get("adjusted_day"):
+            ProgramDay.model_validate(result["adjusted_day"])
+    except SwapError as exc:
+        raise HTTPException(exc.status, exc.detail) from None
+    except ValidationError:
+        raise HTTPException(422, "Could not swap this exercise") from None
+    fields: dict = {"program": prog.get("program")}
+    if "adjustments" in prog:
+        fields["adjustments"] = prog.get("adjustments") or []
+    await db.programs.update_one({"id": program_id}, {"$set": fields})
+    return result
 
 
 @router.post("/programs/{program_id}/start-day", status_code=201)

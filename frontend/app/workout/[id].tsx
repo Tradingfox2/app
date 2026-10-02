@@ -22,6 +22,7 @@ import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/re
 import { useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { beatsShownLastTime } from "@/src/session-layout";
 
 /** Club is `community_id`. `public` and `friends` are the only audience values sent. */
 type ShareAudience =
@@ -248,6 +249,10 @@ export default function WorkoutLogger() {
     const rp = parseFloat(rpe);
     if (!r || Number.isNaN(w)) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const shownLast = lastTime ? { weightKg: lastTime.weight_kg, reps: lastTime.reps } : null;
+    if (beatsShownLastTime({ weightKg: w, reps: r }, shownLast)) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
     const historical = priorSetsRef.current.find((row) => row.set_index === nextSetIndex);
     const restBefore = typeof historical?.rest_sec === "number" ? historical.rest_sec : null;
     // Optimistic local update — sub-3-second UX guarantee
@@ -500,16 +505,27 @@ export default function WorkoutLogger() {
           {selectedEx && (
             <View style={styles.setsCard}>
               <Text style={styles.setsHeader}>{t("SETS · {count}", { count: formatNumber(setsByEx[selectedEx.id]?.length || 0) })}</Text>
-              {(setsByEx[selectedEx.id] || []).map((s) => (
-                <View key={s.id} style={styles.setRow}>
-                  <Text style={styles.setIdx}>#{s.set_index}</Text>
-                  <Text style={styles.setVal}>{t("{count} reps", { count: formatNumber(s.reps) })}</Text>
-                  <Text style={styles.setVal}>{formatNumber(s.weight_kg)} kg</Text>
-                  <Text style={styles.setValDim}>
-                    {s.rpe ? `RPE ${s.rpe}` : "—"}
-                  </Text>
-                </View>
-              ))}
+              {(setsByEx[selectedEx.id] || []).map((s) => {
+                const beat = beatsShownLastTime(
+                  { weightKg: Number(s.weight_kg), reps: Number(s.reps) },
+                  lastTime ? { weightKg: lastTime.weight_kg, reps: lastTime.reps } : null,
+                );
+                return (
+                  <View key={s.id} style={styles.setBlock}>
+                    <View style={styles.setRow}>
+                      <Text style={styles.setIdx}>#{s.set_index}</Text>
+                      <Text style={styles.setVal}>{t("{count} reps", { count: formatNumber(s.reps) })}</Text>
+                      <Text style={styles.setVal}>{formatNumber(s.weight_kg)} kg</Text>
+                      <Text style={styles.setValDim}>
+                        {s.rpe ? `RPE ${s.rpe}` : "—"}
+                      </Text>
+                    </View>
+                    {beat ? (
+                      <Text style={styles.beatLine} testID={`beat-last-${s.set_index}`}>{t("Beat last time")}</Text>
+                    ) : null}
+                  </View>
+                );
+              })}
               {(setsByEx[selectedEx.id] || []).length === 0 && (
                 <Text style={styles.setEmpty}>{t("No sets logged yet.")}</Text>
               )}
@@ -828,14 +844,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: spacing.sm,
   },
-  setRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
+  setBlock: {
     paddingVertical: spacing.sm,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  setRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  beatLine: { color: colors.text, fontSize: 12, fontWeight: "700", marginTop: 4 },
   setIdx: {
     color: colors.success,
     fontWeight: "800",

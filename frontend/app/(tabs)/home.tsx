@@ -24,6 +24,7 @@ import { combinationActivation } from "@/src/components/anatomy/muscle-relations
 import { useI18n } from "@/src/i18n";
 import { FOCUS_LABELS } from "@/src/program-schema";
 import { datedSessionTitle } from "@/src/session-title";
+import { finishedToday, swapChoices, type CatalogExercise } from "@/src/session-layout";
 import {
   weekActivity,
   type ActivityWorkout,
@@ -133,6 +134,10 @@ export default function Home() {
   const [notifUnread, setNotifUnread] = useState(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [swapSlug, setSwapSlug] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<CatalogExercise[] | null>(null);
+  const [swapError, setSwapError] = useState<string | null>(null);
+  const [swapping, setSwapping] = useState(false);
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
   const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
@@ -217,6 +222,7 @@ export default function Home() {
   const workoutCount = readWorkoutCount(data);
   const training = readTrainingTotals(data);
   const calendar = workoutStamps ? weekActivity(workoutStamps) : null;
+  const doneToday = finishedToday(workoutStamps);
   const wearableConnected = Boolean(data?.wearable_connected);
   const readinessConfidence = data?.readiness?.confidence;
   const showMorning = typeof readinessConfidence === "number" && readinessConfidence < 0.5;
@@ -264,6 +270,63 @@ export default function Home() {
       setStarting(false);
     }
   };
+
+  const toggleTodaySwap = async (slug: string) => {
+    setSwapError(null);
+    setSwapSlug((current) => (current === slug ? null : slug));
+    if (catalog) return;
+    try {
+      const rows = await api.exercises();
+      setCatalog(
+        rows.flatMap((row) =>
+          typeof row?.slug === "string" && typeof row?.name === "string"
+            ? [{
+                slug: row.slug,
+                name: row.name,
+                primary_muscle_slug: typeof row.primary_muscle_slug === "string" ? row.primary_muscle_slug : null,
+              }]
+            : [],
+        ),
+      );
+    } catch (cause) {
+      setSwapError(cause instanceof Error ? cause.message : t("Could not swap this exercise"));
+    }
+  };
+
+  const pickTodaySwap = async (fromSlug: string, toSlug: string) => {
+    if (!nextSession?.program_id || swapping) return;
+    setSwapping(true);
+    setSwapError(null);
+    try {
+      const result = await api.swapProgramExercise(nextSession.program_id, {
+        week_index: nextSession.week_index,
+        day_index: nextSession.day_index,
+        exercise_slug: fromSlug,
+        replacement_slug: toSlug,
+      });
+      const exercises = nextSession.adjusted && result.adjusted_day
+        ? result.adjusted_day.exercises
+        : result.day.exercises;
+      setData((current: { next_session?: { exercises?: unknown } } | null) =>
+        current?.next_session
+          ? { ...current, next_session: { ...current.next_session, exercises } }
+          : current,
+      );
+      setSwapSlug(null);
+    } catch (cause) {
+      setSwapError(cause instanceof Error ? cause.message : t("Could not swap this exercise"));
+    } finally {
+      setSwapping(false);
+    }
+  };
+
+  const todayExercises: { exercise_slug: string; name: string }[] = Array.isArray(nextSession?.exercises)
+    ? nextSession.exercises.flatMap((row: { exercise_slug?: unknown; name?: unknown }) =>
+        typeof row?.exercise_slug === "string" && typeof row?.name === "string"
+          ? [{ exercise_slug: row.exercise_slug, name: row.name }]
+          : [],
+      )
+    : [];
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="home-screen">
@@ -431,6 +494,54 @@ export default function Home() {
           ) : data ? (
             <Text style={styles.todayMeta}>{t("No training plan yet")}</Text>
           ) : null}
+          {!activeWorkout && todayExercises.length > 0 ? (
+            <View testID="today-plan-exercises">
+              {todayExercises.map((exercise) => {
+                const open = swapSlug === exercise.exercise_slug;
+                const choices = swapChoices(
+                  catalog ?? [],
+                  exercise.exercise_slug,
+                  todayExercises.map((row) => row.exercise_slug),
+                );
+                return (
+                  <View key={exercise.exercise_slug} style={styles.planEx}>
+                    <Text style={styles.planExName}>{exercise.name}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t("Swap {name}", { name: exercise.name })}
+                      testID={`today-swap-${exercise.exercise_slug}`}
+                      onPress={() => void toggleTodaySwap(exercise.exercise_slug)}
+                      style={(state) => [styles.swapBtn, pressableStyle(state, { variant: "quiet", reduceMotion })]}
+                    >
+                      <Text style={styles.swapTxt}>{t("SWAP")}</Text>
+                    </Pressable>
+                    {open ? (
+                      choices.length > 0 ? (
+                        choices.map((choice) => (
+                          <Pressable
+                            key={choice.slug}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("Swap {name}", { name: choice.name })}
+                            testID={`today-choice-${exercise.exercise_slug}-${choice.slug}`}
+                            disabled={swapping}
+                            onPress={() => void pickTodaySwap(exercise.exercise_slug, choice.slug)}
+                            style={(state) => [styles.swapChoice, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: swapping })]}
+                          >
+                            <Text style={styles.planExName}>{choice.name}</Text>
+                          </Pressable>
+                        ))
+                      ) : catalog ? (
+                        <Text style={styles.weekEmpty}>{t("No other exercise for this muscle.")}</Text>
+                      ) : null
+                    ) : null}
+                  </View>
+                );
+              })}
+              {swapError ? (
+                <Text accessibilityRole="alert" testID="today-swap-error" style={styles.errorTxt}>{swapError}</Text>
+              ) : null}
+            </View>
+          ) : null}
           {activeWorkout ? (
             <Pressable
               accessibilityRole="button"
@@ -496,6 +607,27 @@ export default function Home() {
             </View>
           ) : null}
         </View>
+
+        {doneToday.length > 0 ? (
+          <View style={styles.finishedCard} testID="today-finished">
+            <Text style={styles.cardTitle}>{t("Finished today")}</Text>
+            {doneToday.map((item) => (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={t("Open {name}", { name: item.title })}
+                testID={`today-finished-${item.id}`}
+                onPress={() => router.push((item.recorded ? `/record/${item.id}` : `/workout/${item.id}`) as Href)}
+                style={(state) => [styles.finishedRow, pressableStyle(state, { variant: "quiet", reduceMotion })]}
+              >
+                <Text style={styles.finishedTitle}>{item.title}</Text>
+                {item.minutes != null ? (
+                  <Text style={styles.finishedMeta}>{t("{count} min", { count: formatNumber(item.minutes) })}</Text>
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.statsCard} testID="training-week-card">
           <View style={styles.cardHead}>
@@ -924,6 +1056,15 @@ const styles = StyleSheet.create({
   retryTxt: { color: colors.text, fontWeight: "800" },
   todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md },
   todayMeta: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: spacing.md },
+  planEx: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm },
+  planExName: { color: colors.text, fontSize: 14, fontWeight: "700", flexGrow: 1 },
+  swapBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
+  swapTxt: { color: colors.text, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  swapChoice: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.sm },
+  finishedCard: { ...card, padding: spacing.lg, marginBottom: spacing.md },
+  finishedRow: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  finishedTitle: { color: colors.text, fontSize: 15, fontWeight: "700", flex: 1 },
+  finishedMeta: { color: colors.textMuted, fontSize: 12 },
   secondaryCta: {
     minHeight: 44,
     alignItems: "center",

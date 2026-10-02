@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import type { ProgramDay } from "./program-schema";
 import { storage } from "./utils/storage";
 import type {
   MuscleHeatmapData,
@@ -1395,6 +1396,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  swapProgramExercise: (
+    programId: string,
+    body: { week_index: number; day_index: number; exercise_slug: string; replacement_slug: string },
+  ) =>
+    request<{ day: ProgramDay; adjusted_day: ProgramDay | null }>(
+      `/programs/${encodeURIComponent(programId)}/swap-exercise`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   coachStatus: () =>
     request<{
       provider: string;
