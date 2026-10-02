@@ -1,9 +1,9 @@
-"""Wearables (Terra-ready, simulated until keys are provided).
+"""Wearables (Terra live path, sample data only for the demo account).
 
 - "Sources connectées": connect/disconnect/sync per provider.
-- POST /webhooks/terra is the ready-to-plug Terra webhook (normalizes payloads
-  into wearable_metrics). Real OAuth activates once TERRA_API_KEY/TERRA_DEV_ID
-  are set in backend/.env.
+- POST /webhooks/terra maps the current Terra daily, sleep, and body models
+  into wearable_metrics. Real OAuth starts once TERRA_API_KEY and TERRA_DEV_ID
+  are set. Those names are listed in .env.production.example with no values.
 
 Gym QR check-ins live in routers/gyms.py.
 """
@@ -129,7 +129,7 @@ METRIC_UNITS = {
 }
 MANUAL_DEVICE = "manual"
 
-# Terra payload field -> normalized metric
+# Flat aliases kept for older test payloads. A nested Terra field wins when both exist.
 TERRA_FIELD_MAP = {
     "hrv_avg": "hrv",
     "rmssd_avg": "hrv",
@@ -147,12 +147,23 @@ TERRA_FIELD_MAP = {
     "recovery_score": "recovery",
 }
 
+# Current Terra models (docs.tryterra.co data models, schema 2022-03-16).
+# Daily steps live on distance_data.steps. Activity steps live on
+# distance_data.summary.steps and are a workout, not the day total.
+# Whoop recovery is daily scores.recovery (0-100). Whoop strain is
+# strain_data.strain_level. Sleep scores.sleep is a score, not hours.
+# readiness_data.recovery_level is an enum (0-6), not a percent.
+# data_enrichment is Terra's own score and is not a device reading.
+# Garmin VO2 max arrives on the body payload. The point field wins over the
+# day average when both are numbers; they are never averaged.
+# Body heart-rate summary is under heart_data.heart_rate_data, not the daily path.
 TERRA_NESTED_METRICS = {
     "daily": {
         ("heart_rate_data", "summary", "avg_hrv_rmssd"): "hrv",
         ("heart_rate_data", "summary", "resting_hr_bpm"): "resting_hr",
         ("distance_data", "steps"): "steps",
         ("calories_data", "total_burned_calories"): "calories",
+        ("oxygen_data", "day_avg_vo2max_ml_per_min_per_kg"): "vo2max",
         ("oxygen_data", "vo2max_ml_per_min_per_kg"): "vo2max",
         ("strain_data", "strain_level"): "strain",
         ("scores", "recovery"): "recovery",
@@ -160,13 +171,22 @@ TERRA_NESTED_METRICS = {
     "sleep": {
         ("heart_rate_data", "summary", "avg_hrv_rmssd"): "hrv",
         ("heart_rate_data", "summary", "resting_hr_bpm"): "resting_hr",
-        ("sleep_durations_data", "asleep", "duration_asleep_state_seconds"): "sleep_seconds",
         ("readiness_data", "readiness"): "recovery",
     },
     "body": {
+        ("heart_data", "heart_rate_data", "summary", "avg_hrv_rmssd"): "hrv",
+        ("heart_data", "heart_rate_data", "summary", "resting_hr_bpm"): "resting_hr",
+        ("oxygen_data", "day_avg_vo2max_ml_per_min_per_kg"): "vo2max",
         ("oxygen_data", "vo2max_ml_per_min_per_kg"): "vo2max",
     },
 }
+
+_ASLEEP_TOTAL = ("sleep_durations_data", "asleep", "duration_asleep_state_seconds")
+_ASLEEP_STAGES = (
+    ("sleep_durations_data", "asleep", "duration_deep_sleep_state_seconds"),
+    ("sleep_durations_data", "asleep", "duration_light_sleep_state_seconds"),
+    ("sleep_durations_data", "asleep", "duration_REM_sleep_state_seconds"),
+)
 
 
 def _nested_value(item: dict, path: tuple[str, ...]):
@@ -176,6 +196,54 @@ def _nested_value(item: dict, path: tuple[str, ...]):
             return None
         value = value.get(key)
     return value
+
+
+def _terra_number(value):
+    """A Terra metric is a JSON number. Booleans are ints in Python and are not readings."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _sleep_hours_from_terra(item: dict) -> float | None:
+    """Hours asleep from the current sleep model.
+
+    ``duration_asleep_state_seconds`` is the total when Terra sends it. When
+    that field is null and stage seconds are present, the total is the sum of
+    those stages (Terra documents this for Garmin and Whoop). In-bed time
+    includes awake time, so it is not a substitute. A sleep score is not a duration.
+    """
+    total = _terra_number(_nested_value(item, _ASLEEP_TOTAL))
+    if total is not None:
+        return total / 3600
+    stages = []
+    for path in _ASLEEP_STAGES:
+        number = _terra_number(_nested_value(item, path))
+        if number is not None:
+            stages.append(number)
+    if not stages:
+        return None
+    return sum(stages) / 3600
+
+
+def _terra_metric_values(event_type: str | None, item: dict) -> dict[str, float]:
+    """Map one Terra data item. Missing fields stay missing. Nothing is filled in."""
+    values: dict[str, float] = {}
+    for path, metric in TERRA_NESTED_METRICS.get(event_type or "", {}).items():
+        number = _terra_number(_nested_value(item, path))
+        if number is not None:
+            values[metric] = number
+    if event_type == "sleep":
+        hours = _sleep_hours_from_terra(item)
+        if hours is not None:
+            values["sleep_hours"] = hours
+    for field, metric in TERRA_FIELD_MAP.items():
+        if metric in values:
+            continue
+        number = _terra_number(item.get(field))
+        if number is not None:
+            values[metric] = number
+    return values
 
 
 def _terra_recorded_at(item: dict) -> datetime:
@@ -538,8 +606,8 @@ async def sync_source(provider: str, user: dict = Depends(require_pro)):
 
     # ---- wearables (Terra) ---------------------------------------------- #
     if not demo:
-        # No mock data for real athletes: metrics arrive via the Terra webhook
-        # (or the native Health bridge). Report an honest "nothing to sync yet".
+        # No sample rows for a real athlete, even when the source is already
+        # connected. Metrics arrive via the Terra webhook or a file import.
         await db.wearable_sources.update_one(
             {"user_id": user["id"], "provider": provider}, {"$set": {"last_sync_at": now()}}
         )
@@ -552,7 +620,21 @@ async def sync_source(provider: str, user: dict = Depends(require_pro)):
                 + ("(Terra webhook)." if TERRA_CONFIGURED else "(Terra keys not configured yet).")
             ),
         }
-    # replace previous simulated rows from this provider to keep series clean
+    written = await _simulate_wearable_week(user, provider)
+    await db.wearable_sources.update_one(
+        {"user_id": user["id"], "provider": provider}, {"$set": {"last_sync_at": now()}}
+    )
+    return {"provider": provider, "synced": written, "simulated": True}
+
+
+async def _simulate_wearable_week(user: dict, provider: str) -> int:
+    """Write seven days of sample wearable rows. Demo accounts only.
+
+    Calling this for anyone else is refused before a row is written. The
+    route above also returns before it reaches this function.
+    """
+    if not is_demo_user(user):
+        raise HTTPException(403, "Sample wearable data is only available on the demo account")
     await db.wearable_metrics.delete_many(
         {"user_id": user["id"], "device": provider, "simulated": True}
     )
@@ -588,15 +670,12 @@ async def sync_source(provider: str, user: dict = Depends(require_pro)):
             )
     if docs:
         await db.wearable_metrics.insert_many(docs)
-    await db.wearable_sources.update_one(
-        {"user_id": user["id"], "provider": provider}, {"$set": {"last_sync_at": now()}}
-    )
-    return {"provider": provider, "synced": len(docs), "simulated": True}
+    return len(docs)
 
 
 @router.post("/webhooks/terra")
 async def terra_webhook(request: Request, background: BackgroundTasks):
-    """Ready-to-plug Terra webhook: maps payloads to normalized wearable_metrics."""
+    """Map a Terra webhook onto wearable_metrics. Missing fields are left missing."""
     raw_body = await request.body()
     if TERRA_SIGNING_SECRET:
         signature = request.headers.get("terra-signature") or request.headers.get("x-terra-signature")
@@ -640,20 +719,11 @@ async def terra_webhook(request: Request, background: BackgroundTasks):
         return {"received": True, "processed": 0, "reason": "unknown terra user"}
     processed = 0
     for item in payload.get("data") or []:
-        values = []
-        for path, metric in TERRA_NESTED_METRICS.get(event_type, {}).items():
-            value = _nested_value(item, path)
-            if metric == "sleep_seconds" and isinstance(value, (int, float)):
-                values.append(("sleep_hours", float(value) / 3600))
-            elif isinstance(value, (int, float)):
-                values.append((metric, float(value)))
-        # Keep compatibility with simulator/legacy flat payloads.
-        for field, metric in TERRA_FIELD_MAP.items():
-            if isinstance(item.get(field), (int, float)):
-                values.append((metric, float(item[field])))
-
+        if not isinstance(item, dict):
+            continue
+        values = _terra_metric_values(event_type, item)
         item_key = _terra_item_key(event_type or "unknown", item)
-        for metric, value in dict(values).items():
+        for metric, value in values.items():
             await db.wearable_metrics.update_one(
                 {
                     "terra_user_id": terra_user,
