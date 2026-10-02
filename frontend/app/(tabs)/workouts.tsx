@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
+import { activityEdgeHaptic } from "@/src/activity-haptic";
 import { useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
@@ -126,7 +127,10 @@ export default function Workouts() {
       setSelectedSlugs([]);
       setModal(false);
       await load();
-      if (w?.id) router.push(`/workout/${w.id}`);
+      if (w?.id) {
+        activityEdgeHaptic();
+        router.push(`/workout/${w.id}`);
+      }
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : t("Could not create session"));
     } finally {
@@ -141,6 +145,7 @@ export default function Workouts() {
     try {
       const w = await api.createWorkout(datedSessionTitle(t, formatDate));
       if (!w?.id) throw new Error(t("Could not create session"));
+      activityEdgeHaptic();
       await load();
       router.push(`/workout/${w.id}`);
     } catch (error) {
@@ -515,7 +520,7 @@ const styles = StyleSheet.create({
   },
   segBtnActive: { backgroundColor: colors.surface2 },
   segTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0, fontSize: 13 },
-  segTxtActive: { color: colors.text, fontWeight: "600" },
+  segTxtActive: { color: colors.brand, fontWeight: "600" },
   chipsRow: { maxHeight: 56 },
   chipsContent: {
     paddingHorizontal: spacing.lg,

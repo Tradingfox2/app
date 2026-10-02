@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { activityEdgeHaptic } from "@/src/activity-haptic";
 import { api, type Community } from "@/src/api";
 import { track } from "@/src/analytics";
 import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
@@ -247,7 +247,6 @@ export default function WorkoutLogger() {
     const w = parseFloat(weight);
     const rp = parseFloat(rpe);
     if (!r || Number.isNaN(w)) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const historical = priorSetsRef.current.find((row) => row.set_index === nextSetIndex);
     const restBefore = typeof historical?.rest_sec === "number" ? historical.rest_sec : null;
     // Optimistic local update — sub-3-second UX guarantee
@@ -313,6 +312,7 @@ export default function WorkoutLogger() {
         setFinishError(t("Session did not finish. Try again."));
         return;
       }
+      activityEdgeHaptic();
       const logged = setsRef.current;
       const tonnage = logged.reduce(
         (sum, row) => sum + (Number(row.weight_kg) || 0) * (Number(row.reps) || 0),

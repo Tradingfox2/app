@@ -37,6 +37,7 @@ import {
 } from "@/src/recorder-math";
 import { useI18n } from "@/src/i18n";
 import { storage } from "@/src/utils/storage";
+import { activityEdgeHaptic } from "@/src/activity-haptic";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing } from "@/src/theme";
 
@@ -197,6 +198,7 @@ export default function RecordScreen() {
 
   const start = () => {
     if (phaseRef.current === "recording" || saving) return;
+    const fresh = phaseRef.current === "idle";
     setError(null);
     if (startedAtRef.current === null) startedAtRef.current = Date.now();
     breakRef.current = phaseRef.current === "paused";
@@ -213,6 +215,7 @@ export default function RecordScreen() {
     stretchStartRef.current = Date.now();
     phaseRef.current = "recording";
     setPhase("recording");
+    if (fresh) activityEdgeHaptic();
     sensorGen.current += 1;
     void beginSensors(sensorGen.current);
   };
@@ -268,6 +271,7 @@ export default function RecordScreen() {
     if (saving) return;
     const movingSec = movingSecNow();
     if (movingSec < 1 || startedAtRef.current === null) return;
+    activityEdgeHaptic();
     if (phaseRef.current === "recording") pause();
     releaseAwakeRef.current?.();
     releaseAwakeRef.current = null;

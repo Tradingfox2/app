@@ -20,6 +20,7 @@ import {
   ProgramDay,
   ProgramSchema,
 } from "@/src/program-schema";
+import { activityEdgeHaptic } from "@/src/activity-haptic";
 import { usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
@@ -241,6 +242,7 @@ export default function ProgramScreen() {
       }
       const created = await api.startProgramDay(programDoc.id, { week_index: weekIdx, day_index: day.day_index });
       if (!created?.id) throw new Error(t("Could not start session"));
+      activityEdgeHaptic();
       openLogger(created.id);
     } catch (e: any) {
       Alert.alert(t("Could not start session"), e?.message ?? t("Try again"));
@@ -271,6 +273,7 @@ export default function ProgramScreen() {
         day_index: mergePrompt.day.day_index,
       });
       if (!created?.id) throw new Error(t("Could not start session"));
+      activityEdgeHaptic();
       setMergePrompt(null);
       openLogger(created.id);
     } catch (e: any) {

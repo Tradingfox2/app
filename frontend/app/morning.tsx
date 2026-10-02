@@ -103,7 +103,7 @@ function Scale({
               style={(state) => [
                 styles.step,
                 selected ? styles.stepOn : null,
-                pressableStyle(state, { variant: selected ? "primary" : "surface", reduceMotion }),
+                pressableStyle(state, { variant: selected ? "mark" : "surface", reduceMotion }),
               ]}
             >
               <Text style={selected ? styles.stepTxtOn : styles.stepTxt}>{step}</Text>
@@ -150,7 +150,7 @@ export default function MorningCheckin() {
           accessibilityRole="button"
           accessibilityLabel={t("Back")}
           onPress={() => router.back()}
-          style={styles.back}
+          style={(state) => [styles.back, pressableStyle(state, { variant: "quiet", reduceMotion })]}
           testID="morning-back"
         >
           <Ionicons name="arrow-back" size={20} color={colors.text} />
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     height: 28,
     marginLeft: -14,
     borderRadius: 14,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.text,
   },
   scale: { flexDirection: "row", gap: spacing.sm },
   step: {
@@ -227,9 +227,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  stepOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  stepOn: { backgroundColor: colors.surface2, borderColor: colors.text },
   stepTxt: { color: colors.text, fontSize: 16, fontWeight: "700" },
-  stepTxtOn: { color: colors.brandOn, fontSize: 16, fontWeight: "700" },
+  stepTxtOn: { color: colors.text, fontSize: 16, fontWeight: "700" },
   error: { color: colors.live, marginBottom: spacing.md },
   save: {
     minHeight: 52,

@@ -8,6 +8,7 @@ import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { LineChart, type LineValue } from "@/src/components/line-chart";
 import { dateFromDayKey } from "@/src/activity-day";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { useI18n } from "@/src/i18n";
 import { card, colors, radius, spacing } from "@/src/theme";
 
@@ -33,6 +34,7 @@ function muscleTitle(slug: string, t: (source: string) => string): string {
 export default function AnalysisScreen() {
   const router = useRouter();
   const { t, formatDate } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [days, setDays] = useState<30 | 90>(30);
   const [data, setData] = useState<Trends | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,14 @@ export default function AnalysisScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="analysis-screen">
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          testID="back-btn"
+          accessibilityRole="button"
+          accessibilityLabel={t("Back")}
+          style={(state) => pressableStyle(state, { variant: "quiet", reduceMotion })}
+        >
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
         <Text style={styles.title}>{t("TRENDS")}</Text>
@@ -78,7 +87,18 @@ export default function AnalysisScreen() {
         {([30, 90] as const).map((option) => {
           const selected = days === option;
           return (
-            <Pressable key={option} accessibilityRole="tab" accessibilityState={{ selected }} testID={`analysis-tab-${option}`} onPress={() => setDays(option)} style={[styles.tab, selected ? styles.tabOn : null]}>
+            <Pressable
+              key={option}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              testID={`analysis-tab-${option}`}
+              onPress={() => setDays(option)}
+              style={(state) => [
+                styles.tab,
+                selected ? styles.tabOn : null,
+                pressableStyle(state, { variant: "surface", reduceMotion }),
+              ]}
+            >
               <Text style={[styles.tabTxt, selected ? styles.tabTxtOn : null]}>{t(option === 30 ? "30 DAYS" : "90 DAYS")}</Text>
             </Pressable>
           );
@@ -89,7 +109,12 @@ export default function AnalysisScreen() {
         {error ? (
           <View accessibilityRole="alert" style={styles.errorRow}>
             <Text style={styles.errorTxt} testID="analysis-error">{error}</Text>
-            <Pressable accessibilityRole="button" onPress={() => setAttempt((value) => value + 1)} testID="analysis-retry">
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setAttempt((value) => value + 1)}
+              testID="analysis-retry"
+              style={(state) => pressableStyle(state, { variant: "quiet", reduceMotion })}
+            >
               <Text style={styles.retry}>{t("Retry")}</Text>
             </Pressable>
           </View>
@@ -132,10 +157,19 @@ const styles = StyleSheet.create({
   spacer: { width: 26 },
   title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
   tabs: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  tab: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.surface2 },
-  tabOn: { backgroundColor: colors.brand },
-  tabTxt: { color: colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.6 },
-  tabTxtOn: { color: colors.brandOn },
+  tab: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabOn: { borderBottomColor: colors.brand },
+  tabTxt: { color: colors.textMuted, fontSize: 12, fontWeight: "800", letterSpacing: 0.6 },
+  tabTxtOn: { color: colors.brand },
   body: { padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xxxl, gap: spacing.md },
   card: { ...card, padding: spacing.lg },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginBottom: spacing.sm },

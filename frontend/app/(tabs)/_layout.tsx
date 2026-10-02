@@ -44,7 +44,7 @@ function TabBarButton({
   href,
   onPress,
   style,
-  android_ripple,
+  android_ripple: _androidRipple,
   pressColor: _pressColor,
   pressOpacity: _pressOpacity,
   hoverEffect: _hoverEffect,
@@ -56,11 +56,7 @@ function TabBarButton({
       {...rest}
       disabled={disabled}
       href={href}
-      android_ripple={
-        disabled
-          ? undefined
-          : { borderless: true, ...android_ripple, color: "rgba(242, 243, 244, 0.14)" }
-      }
+      android_ripple={undefined}
       onPress={(event) => {
         if (Platform.OS === "web" && href != null) {
           if (!isPlainActivation(event)) return;
@@ -119,6 +115,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        animation: "none",
         tabBarActiveTintColor: colors.brand,
         // textMuted (not textDim): inactive tabs must stay readable on the dark bar
         tabBarInactiveTintColor: colors.textMuted,

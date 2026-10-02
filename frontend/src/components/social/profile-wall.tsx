@@ -370,8 +370,8 @@ const wall = StyleSheet.create({
   tabs: { flexDirection: "row", gap: spacing.sm },
   tab: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
   tabOn: { backgroundColor: colors.surface2 },
-  tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
-  tabTextOn: { color: colors.text },
+  tabText: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  tabTextOn: { color: colors.brand },
   photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   photo: { width: 104, height: 104, borderRadius: radius.sm, backgroundColor: colors.surface2 },
 });

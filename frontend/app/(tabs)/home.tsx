@@ -17,6 +17,7 @@ import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
 import { DidYouKnow } from "@/src/components/did-you-know";
 import { LiveNowStrip } from "@/src/components/live-now-strip";
 import { ActivityRing } from "@/src/components/activity-ring";
+import { activityEdgeHaptic } from "@/src/activity-haptic";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing, type, card } from "@/src/theme";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
@@ -242,6 +243,7 @@ export default function Home() {
         day_index: nextSession.day_index,
       });
       if (!workout?.id) throw new Error(t("Could not start session"));
+      activityEdgeHaptic();
       router.push(`/workout/${workout.id}` as Href);
     } catch (cause) {
       failStart(cause);
@@ -257,6 +259,7 @@ export default function Home() {
     try {
       const workout = await api.createWorkout(datedSessionTitle(t, formatDate));
       if (!workout?.id) throw new Error(t("Could not create session"));
+      activityEdgeHaptic();
       router.push(`/workout/${workout.id}` as Href);
     } catch (cause) {
       failStart(cause);

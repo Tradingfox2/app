@@ -346,9 +346,9 @@ The palette below landed from `cursor/visual-system-1295` and is on main.
 - **Owner:** `frontend/src/theme.ts`. Screens use these tokens. There is no
   second palette and no light canvas. Page is `colors.bg` `#101418`.
 - **Chartreuse** `colors.brand` `#D6E35A` with `colors.brandOn` `#16180C` is
-  only a primary button fill and `tabBarActiveTintColor` in
-  `app/(tabs)/_layout.tsx`. In-screen chips and the muscle-sheet tabs use
-  `surface2` plus `colors.text`.
+  a primary button fill, the selected tab label (or its short underline), and
+  `tabBarActiveTintColor` in `app/(tabs)/_layout.tsx`. Chips, rows, and kudos
+  stay off it. The tab bar fill stays `colors.surface`.
 - **Rings:** Home Strain / Recovery / Sleep stay those labels. They sit on
   `colors.ringPlate` `#000000` inside the inset rings card. Strain is
   `colors.blaze`, recovery `colors.success`, sleep `colors.info`. Not Apple
@@ -400,10 +400,13 @@ The activity-day screen landed from `cursor/home-activity-day-d3c3` and is on ma
 
 The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 
-## Press cues (2026-10-01, rebased onto `0f1f296`)
+## Press cues (2026-10-02, press and release)
 
-- Community, You, and the screens they open use `frontend/src/press-affordance.tsx` (`Affordance`). Default `raise` lifts toward `#242A31` and draws a hairline. `brand` only brightens `#D6E35A` to `#DDE874`. `none` keeps today's look.
-- Workout hover and press stay in `frontend/src/press-feedback.ts`. Home and the tab bar stay on `frontend/src/affordance.ts`.
+- Phones and tablets use press and release only. No scale, no ripple that continues after lift, no hover color.
+- Shared timing is `frontend/src/press-motion.ts`: 160ms ease-out on background and opacity. Reduced motion is 0ms. Filled surfaces step `#1A1F24` → `#242A31`. Unfilled controls use opacity 0.72. Primary chartreuse darkens to `#A6B047` (75% `#D6E35A` toward `#16180C`).
+- Community and You: `frontend/src/press-affordance.tsx`. Workout, Plan, and the logger: `frontend/src/press-feedback.ts`. Home, the tab bar, activity, and the recorder: `frontend/src/affordance.ts`.
+- The bottom bar stays `#1A1F24`. The selected tab label is `#D6E35A`; the previous tab is `#A7ADB4`. Tab changes do not slide the screen (`animation: "none"`).
+- `activityEdgeHaptic` fires once when an activity starts and once when it stops. Set logging, rows, and scrolling do not haptic. Start still runs if haptics fail.
 - `LiveNowStrip` takes `affordance` (Home, default off) and `feedback` (Community, default off). Home still passes only `affordance`. Community passes `feedback`.
 
 - **Entry:** Home `quick-record` sits under the quick row, below Today. It opens
@@ -429,12 +432,12 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 - **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
   bridge emits the browser watch id, which does not match its subscriber id.
 
-## Interaction affordance (verified 2026-10-01, main `6422411`)
+## Interaction affordance (updated 2026-10-02)
 
-- There was no shared press or hover helper. `frontend/src/affordance.ts`
-  (`useReducedMotion`, `pressableStyle`) is that helper. Web hover is 140ms.
-  Reduced motion keeps the color or opacity change and drops scale and the
-  transition. Disabled controls return no extra style.
+- `frontend/src/affordance.ts` (`useReducedMotion`, `pressableStyle`) is the
+  Home helper. Press is 160ms ease-out. Reduced motion keeps the color or
+  opacity change and drops the transition. There is no scale. Disabled
+  controls return no extra style.
 - React Native Web `Pressable` already sets `cursor: pointer`, and
   `app/+html.tsx` does the same for buttons and tabs. `hovered` is passed at
   runtime and is absent from the React Native style-callback type.
@@ -447,8 +450,8 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
   with Community. Both take `affordance` (default off). Home passes it. The
   SVG muscle regions already highlight the selected muscle and were left alone.
 - `recorder.spec.ts` and `activity-day.spec.ts` assert computed background and
-  text colors. Primary hover uses `filter: brightness(1.06)` so the chartreuse
-  fill stays `rgb(214, 227, 90)`. Activity hover never uses `colors.brand`.
+  text colors. Primary press darkens chartreuse to `#A6B047` and the rest
+  fill stays `rgb(214, 227, 90)`. Activity press never uses `colors.brand`.
 
 ## Added 2026-10-01 (readiness)
 
@@ -474,7 +477,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 
 ## Added 2026-10-01 (trends, rebased onto `1ba878d`)
 
-- **`GET /api/trends?days=30|90`** (`routers/trends.py`) is the signed-in athlete's daily UTC series: `readiness` (wearable `recovery`, last value that day — not the 0–100 score in `readiness.py`), `hrv`, `resting_hr`, `sleep_hours`, `load_au` (session RPE: `perceived_effort × duration_sec / 60`), `tonnage` (`weight_kg × reps` on that user's sets), and per-muscle tonnage from `exercises.primary_muscle_slug`. A day with no reading is `null`. The route uses `current_user`, not `require_pro`. Home `quick-labs` still opens `/labs` (French "ANALYSES"). `quick-analysis` opens `/analysis`, uses the same surface hover as the other Home rows, and Home does not import that screen or call `/api/trends` on load. The shared SVG chart is `src/components/line-chart.tsx` (progression reuses it; a missing day breaks the line). On `/analysis`, chartreuse is only the selected 30/90 tab.
+- **`GET /api/trends?days=30|90`** (`routers/trends.py`) is the signed-in athlete's daily UTC series: `readiness` (wearable `recovery`, last value that day — not the 0–100 score in `readiness.py`), `hrv`, `resting_hr`, `sleep_hours`, `load_au` (session RPE: `perceived_effort × duration_sec / 60`), `tonnage` (`weight_kg × reps` on that user's sets), and per-muscle tonnage from `exercises.primary_muscle_slug`. A day with no reading is `null`. The route uses `current_user`, not `require_pro`. Home `quick-labs` still opens `/labs` (French "ANALYSES"). `quick-analysis` opens `/analysis`, uses the same surface press as the other Home rows, and Home does not import that screen or call `/api/trends` on load. The shared SVG chart is `src/components/line-chart.tsx` (progression reuses it; a missing day breaks the line). On `/analysis`, chartreuse is only the selected 30/90 label and its short underline. The tab fill stays `#1A1F24`.
 - **2026-10-01 — Coach Connect.** `POST /api/partner/connect` creates a Stripe Connect Express account for an approved coach and returns the onboarding link. `body.country` must be an Express ISO code in the EU, UK, US, CA, JP, SG, HK, AU, NZ, or KR. A missing `STRIPE_SECRET_KEY` is 503. `GET /api/partner/connect/status` stores `users.stripe_account_id` and sets `payout_status` to `connected` only when charges and payouts are enabled. Community checkout adds `transfer_data.destination` and `application_fee_percent` 20 when that owner is connected, and stays platform-only otherwise. After the existing signature check, `invoice.paid` writes `partner_ledger` (`owner_id`, `kind`, `gross_cents`, `fee_cents`, `net_cents`, `currency`, `stripe_id`, `created_at`) in the invoice currency, with no conversion, and audits the write. The partner balance still totals that collection per currency. The partner screen tells the coach to connect payouts. Those routes are not on first paint. No XAF, Mobile Money, or coach-chat Pro gate.
 - **2026-10-01 — Partners ledger.** `POST /auth/register` stores an optional `referral_code` on `users.referred_by` and pays nothing for the signup. After the existing webhook signature check, the first paid invoice writes `commissions` (`backend/referrals.py`): level 1 is 20% to the direct referrer, level 2 is 5% to their referrer, in that invoice's currency (`pro` or `club`). Athletes get Pro credit days (`pro_credit_until`, honored by `require_pro`) unless the beneficiary is an approved coach with `payout_status: connected`, who stays `pending` cash. `charge.refunded` sets `clawed_back`. `GET /api/referrals/mine` returns the code, counts, and per-currency pending and paid totals, with no conversion and no zero for a missing amount. Settings loads it on press and shares `ironflow://join?ref=CODE` through `shareLink`.
 

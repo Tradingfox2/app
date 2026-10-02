@@ -16,9 +16,12 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { api, type GymReward } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { activityEdgeHaptic } from "@/src/activity-haptic";
+import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { datedSessionTitle } from "@/src/session-title";
 
 export default function CheckinScreen() {
+  const reduceMotion = useReducedMotion();
   const { t, formatDate, formatNumber } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
@@ -85,6 +88,7 @@ export default function CheckinScreen() {
     try {
       const workout = await api.createWorkout(datedSessionTitle(t, formatDate));
       if (!workout?.id) throw new Error(t("Could not create session"));
+      activityEdgeHaptic();
       router.push(`/workout/${workout.id}` as Href);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("Could not start session"));
@@ -223,7 +227,7 @@ export default function CheckinScreen() {
                   testID="checkin-next"
                   onPress={() => void goTrain()}
                   disabled={starting}
-                  style={styles.cta}
+                  style={(state) => [styles.cta, pressableStyle(state, { variant: "primary", reduceMotion, disabled: starting })]}
                 >
                   <Text style={styles.ctaTxt}>
                     {activeWorkoutId ? t("RESUME SESSION") : starting ? t("STARTING…") : t("START WORKOUT")}

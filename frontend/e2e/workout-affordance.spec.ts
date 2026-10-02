@@ -55,7 +55,7 @@ const sheet = "rgb(36, 42, 49)";
 const card = "rgb(26, 31, 36)";
 const hairline = "rgb(110, 118, 126)";
 const brand = "rgb(214, 227, 90)";
-const brandHover = "rgb(217, 229, 103)";
+const brandPressed = "rgb(166, 176, 71)";
 
 async function signIn(page: Page) {
   await page.addInitScript(() => localStorage.setItem("ironflow_token", JSON.stringify("synthetic-test-token")));
@@ -102,8 +102,29 @@ function fulfillApi(route: Route, path: string, method: string) {
   return route.fulfill({ json: [] });
 }
 
-test("workout controls show hover, press, and an inert disabled state", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop", "Pointer hover is checked on desktop web.");
+async function hold(locator: Locator) {
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("control has no box");
+  await locator.page().mouse.move(box.x + Math.min(20, box.width / 2), box.y + Math.min(20, box.height / 2));
+  await locator.page().mouse.down();
+}
+
+async function opacity(locator: Locator) {
+  return Number(await css(locator, "opacity"));
+}
+
+async function release(page: Page) {
+  await page.mouse.move(2, 2);
+  await page.mouse.up();
+}
+
+function still(transform: string) {
+  return transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)";
+}
+
+test("workout controls show press, release, and an inert disabled state", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Pointer press is checked on desktop web.");
   await signIn(page);
   await page.route("**/api/**", async (route: Route) => {
     const url = new URL(route.request().url());
@@ -116,37 +137,43 @@ test("workout controls show hover, press, and an inert disabled state", async ({
   await expect(session).toBeVisible();
   expect(await css(session, "background-color")).toBe(card);
   expect(await css(session, "cursor")).toBe("pointer");
-  expect(await css(session, "transition-duration")).toMatch(/0\.14s|140ms/);
-
+  expect(await css(session, "transition-duration")).toMatch(/0\.16s|160ms/);
+  expect(await css(session, "transition-timing-function")).toContain("ease-out");
   await session.hover();
+  expect(await css(session, "background-color")).toBe(card);
+
+  await hold(session);
   await expect.poll(() => css(session, "background-color")).toBe(sheet);
+  expect(still(await css(session, "transform"))).toBe(true);
+  expect(await css(session, "opacity")).toBe("1");
+  await release(page);
+  await expect.poll(() => css(session, "background-color")).toBe(card);
 
-  const box = await session.boundingBox();
-  if (!box) throw new Error("session row has no box");
-  await page.mouse.move(box.x + 24, box.y + 24);
-  await page.mouse.down();
-  await expect.poll(() => css(session, "transform")).toContain("0.98");
-  await expect.poll(() => css(session, "opacity")).toBe("0.92");
-  await page.mouse.move(2, 2);
-  await page.mouse.up();
-
-  await page.getByTestId("tab-library-btn").hover();
-  await expect.poll(() => css(page.getByTestId("tab-library-btn"), "border-top-color")).toBe(hairline);
+  const libraryTab = page.getByTestId("tab-library-btn");
+  await hold(libraryTab);
+  await expect.poll(() => opacity(libraryTab)).toBeCloseTo(0.72, 1);
+  expect(await css(libraryTab, "background-color")).not.toBe(brand);
+  await release(page);
 
   const muscle = page.getByTestId("muscle-chest");
-  await page.getByTestId("tab-library-btn").click();
+  await libraryTab.click();
   await expect(muscle).toBeVisible();
-  await muscle.hover();
-  await expect.poll(() => css(muscle, "border-top-color")).toBe(hairline);
+  await hold(muscle);
+  await expect.poll(() => opacity(muscle)).toBeCloseTo(0.72, 1);
+  expect(await css(muscle, "background-color")).not.toBe(brand);
+  await release(page);
 
   const fab = page.getByTestId("fab-new-workout");
-  await fab.hover();
-  await expect.poll(() => css(fab, "background-color")).toBe(brandHover);
+  expect(await css(fab, "background-color")).toBe(brand);
+  await hold(fab);
+  await expect.poll(() => css(fab, "background-color")).toBe(brandPressed);
+  expect(still(await css(fab, "transform"))).toBe(true);
+  await release(page);
 
   const search = page.getByTestId("library-search");
   await search.hover();
   await expect.poll(() => search.evaluate((el) => {
-    let node: HTMLElement | null = el;
+    let node: Element | null = el;
     while (node) {
       const color = getComputedStyle(node).borderTopColor;
       if (color === "rgb(110, 118, 126)") return color;
@@ -157,15 +184,18 @@ test("workout controls show hover, press, and an inert disabled state", async ({
 
   await search.fill("bench");
   const clear = page.getByRole("button", { name: "Clear exercise search" });
-  await clear.hover();
-  await expect.poll(() => css(clear, "background-color")).toBe(sheet);
-  await expect.poll(() => css(clear, "outline-color")).toBe(hairline);
+  await hold(clear);
+  await expect.poll(() => opacity(clear)).toBeCloseTo(0.72, 1);
+  expect(await css(clear, "background-color")).not.toBe(brand);
+  await release(page);
 
   await page.getByTestId("exercise-demo-bench-press").click();
   const closeDemo = page.getByRole("button", { name: "Close exercise demo" });
   await expect(closeDemo).toBeVisible();
-  await closeDemo.hover();
-  await expect.poll(() => css(closeDemo, "background-color")).toBe(sheet);
+  await hold(closeDemo);
+  await expect.poll(() => opacity(closeDemo)).toBeCloseTo(0.72, 1);
+  expect(await css(closeDemo, "background-color")).not.toBe(brand);
+  await release(page);
   await closeDemo.click();
 
   await page.getByTestId("exercise-bench-press").click();
@@ -183,40 +213,52 @@ test("workout controls show hover, press, and an inert disabled state", async ({
   await expect.poll(() => title.inputValue()).toBe("");
   const submit = page.getByTestId("submit-workout-btn");
   await expect.poll(() => submit.getAttribute("aria-disabled")).toBe("true");
-  await submit.hover({ force: true });
+  await hold(submit);
   await expect.poll(() => css(submit, "cursor")).toBe("auto");
   await expect.poll(() => css(submit, "background-color")).toBe(brand);
+  await release(page);
   await page.keyboard.press("Escape");
 
   await page.goto("/program");
   const adjust = page.getByTestId("adjust-btn");
   await expect(adjust).toBeVisible();
-  await adjust.hover();
-  await expect.poll(() => css(adjust, "background-color")).toBe(sheet);
+  await hold(adjust);
+  await expect.poll(() => opacity(adjust)).toBeCloseTo(0.72, 1);
+  expect(await css(adjust, "background-color")).not.toBe(brand);
+  await release(page);
   const start = page.getByTestId("start-day-1");
-  await start.hover();
-  await expect.poll(() => css(start, "background-color")).toBe(brandHover);
+  expect(await css(start, "background-color")).toBe(brand);
+  await hold(start);
+  await expect.poll(() => css(start, "background-color")).toBe(brandPressed);
+  expect(still(await css(start, "transform"))).toBe(true);
+  await release(page);
   const week = page.getByTestId("week-1");
-  await week.hover();
-  await expect.poll(() => css(week, "border-top-color")).toBe(hairline);
+  await hold(week);
+  await expect.poll(() => opacity(week)).toBeCloseTo(0.72, 1);
+  expect(await css(week, "background-color")).not.toBe(brand);
+  await release(page);
 
   await page.goto("/workout/w-1");
   const pick = page.getByTestId("pick-exercise-btn");
   await expect(pick).toBeVisible();
-  await pick.hover();
+  await hold(pick);
   await expect.poll(() => css(pick, "background-color")).toBe(sheet);
+  expect(await css(pick, "background-color")).not.toBe(brand);
+  await release(page);
   const reps = page.getByTestId("input-reps");
   await reps.hover();
   await expect.poll(() => css(reps, "border-top-color")).toBe(hairline);
   await page.getByTestId("add-set-btn").click();
   const skip = page.getByTestId("skip-timer-btn");
   await expect(skip).toBeVisible();
-  await skip.hover();
-  await expect.poll(() => css(skip, "outline-color")).toBe(hairline);
+  await hold(skip);
+  await expect.poll(() => opacity(skip)).toBeCloseTo(0.72, 1);
+  expect(await css(skip, "background-color")).not.toBe(brand);
+  await release(page);
 });
 
 test("reduced motion keeps the press signal without a scale", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop", "Pointer hover is checked on desktop web.");
+  test.skip(testInfo.project.name !== "desktop", "Pointer press is checked on desktop web.");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await signIn(page);
   await page.route("**/api/**", async (route: Route) => {
@@ -226,15 +268,11 @@ test("reduced motion keeps the press signal without a scale", async ({ page }, t
   await page.goto("/workouts");
   const session = page.getByTestId("workout-done-1");
   await expect(session).toBeVisible();
-  await session.hover();
+  await expect.poll(() => css(session, "transition-duration")).toMatch(/^0s/);
+  await hold(session);
   await expect.poll(() => css(session, "background-color")).toBe(sheet);
-  expect(await css(session, "transition-duration")).toBe("0s");
-  const box = await session.boundingBox();
-  if (!box) throw new Error("session row has no box");
-  await page.mouse.move(box.x + 24, box.y + 24);
-  await page.mouse.down();
-  await expect.poll(() => css(session, "opacity")).toBe("0.92");
-  expect(await css(session, "transform")).toBe("none");
-  await page.mouse.move(2, 2);
-  await page.mouse.up();
+  expect(await css(session, "opacity")).toBe("1");
+  expect(still(await css(session, "transform"))).toBe(true);
+  await release(page);
+  await expect.poll(() => css(session, "background-color")).toBe(card);
 });

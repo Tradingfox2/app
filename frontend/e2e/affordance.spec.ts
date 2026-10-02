@@ -3,7 +3,8 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
 const surface = "rgb(26, 31, 36)";
 const surface2 = "rgb(36, 42, 49)";
 const brand = "rgb(214, 227, 90)";
-const hairline = "rgb(52, 59, 68)";
+const brandPressed = "rgb(166, 176, 71)";
+const muted = "rgb(167, 173, 180)";
 
 const me = {
   id: "me-1", full_name: "Ada Lift", email: "ada@example.com", role: "athlete",
@@ -64,8 +65,34 @@ async function paint(locator: Locator) {
       outlineWidth: style.outlineWidth,
       transform: style.transform,
       transitionDuration: style.transitionDuration,
+      transitionTimingFunction: style.transitionTimingFunction,
     };
   });
+}
+
+function still(transform: string) {
+  return transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)";
+}
+
+async function hold(locator: Locator) {
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("control has no box");
+  await locator.page().mouse.move(box.x + Math.min(16, box.width / 2), box.y + Math.min(16, box.height / 2));
+  await locator.page().mouse.down();
+}
+
+async function release(page: Page) {
+  await page.mouse.move(2, 2);
+  await page.mouse.up();
+}
+
+async function labelColor(locator: Locator, name: string) {
+  return locator.evaluate((el, label) => {
+    const nodes = Array.from(el.querySelectorAll("*"));
+    const match = nodes.find((node) => node.childElementCount === 0 && node.textContent?.trim() === label);
+    return match ? getComputedStyle(match).color : "";
+  }, name);
 }
 
 async function signIn(page: Page) {
@@ -107,7 +134,7 @@ async function mockApi(page: Page) {
   });
 }
 
-test("hover and press mark the home, activity, recorder, and tab controls", async ({ page }) => {
+test("press and release mark the home, activity, recorder, and tab controls", async ({ page }) => {
   const today = localDayKey();
   await signIn(page);
   await mockApi(page);
@@ -117,53 +144,80 @@ test("hover and press mark the home, activity, recorder, and tab controls", asyn
   await expect(page.getByTestId("live-now-s-live")).toBeVisible();
 
   const search = page.getByTestId("home-search");
-  expect((await paint(search)).backgroundColor).not.toBe(surface2);
+  const searchRest = await paint(search);
+  expect(searchRest.backgroundColor).not.toBe(surface2);
+  expect(searchRest.backgroundColor).not.toBe(brand);
+  expect(searchRest.transitionDuration.startsWith("0.16s")).toBe(true);
+  expect(searchRest.transitionTimingFunction).toContain("ease-out");
   await search.hover();
-  await expect.poll(async () => (await paint(search)).backgroundColor).toBe(surface2);
-  const searchHover = await paint(search);
-  expect(searchHover.transitionDuration.startsWith("0.14s")).toBe(true);
+  expect((await paint(search)).backgroundColor).toBe(searchRest.backgroundColor);
 
-  await page.mouse.down();
-  await expect.poll(async () => (await paint(search)).transform).toContain("0.98");
-  await page.mouse.move(2, 2);
-  await page.mouse.up();
+  await hold(search);
+  await expect.poll(async () => (await paint(search)).opacity).toBe("0.72");
+  const searchPressed = await paint(search);
+  expect(still(searchPressed.transform)).toBe(true);
+  expect(searchPressed.backgroundColor).not.toBe(brand);
+  await release(page);
+  await expect.poll(async () => (await paint(search)).opacity).toBe("1");
   await expect(page).toHaveURL(/\/home/);
 
   const start = page.getByTestId("today-start-day");
-  await start.hover();
-  await expect.poll(async () => (await paint(start)).filter).toContain("1.06");
   expect((await paint(start)).backgroundColor).toBe(brand);
+  await start.hover();
+  expect((await paint(start)).backgroundColor).toBe(brand);
+  expect((await paint(start)).filter).not.toContain("1.06");
+  await hold(start);
+  await expect.poll(async () => (await paint(start)).backgroundColor).toBe(brandPressed);
+  const startPressed = await paint(start);
+  expect(still(startPressed.transform)).toBe(true);
+  expect(Number(startPressed.opacity)).toBeGreaterThan(0.95);
+  await release(page);
+  await expect.poll(async () => (await paint(start)).backgroundColor).toBe(brand);
 
   const program = page.getByTestId("quick-program");
-  await program.hover();
+  await hold(program);
   await expect.poll(async () => (await paint(program)).backgroundColor).toBe(surface2);
+  expect((await paint(program)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   const record = page.getByTestId("quick-record");
-  await record.hover();
+  await hold(record);
   await expect.poll(async () => (await paint(record)).backgroundColor).toBe(surface2);
   expect((await paint(record)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   const day = page.getByTestId("week-day-" + today);
-  await day.hover();
-  await expect.poll(async () => (await paint(day)).backgroundColor).toBe(surface2);
+  await hold(day);
+  await expect.poll(async () => Number((await paint(day)).opacity)).toBeCloseTo(0.72, 1);
+  expect((await paint(day)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   const connect = page.getByTestId("connect-source-cta");
-  await connect.hover();
-  await expect.poll(async () => (await paint(connect)).outlineColor).toBe(hairline);
-  const connectHover = await paint(connect);
-  expect(connectHover.backgroundColor).toBe(surface2);
-  expect(connectHover.outlineWidth).toBe("1px");
+  expect((await paint(connect)).backgroundColor).toBe(surface2);
+  await hold(connect);
+  await expect.poll(async () => Number((await paint(connect)).opacity)).toBeCloseTo(0.72, 1);
+  expect((await paint(connect)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   const live = page.getByTestId("live-now-s-live");
-  await live.hover();
+  await hold(live);
   await expect.poll(async () => (await paint(live)).backgroundColor).toBe(surface2);
+  expect((await paint(live)).backgroundColor).not.toBe(brand);
+  await release(page);
 
-  await page.getByLabel("Next tip").hover();
-  await expect(page.getByLabel("Next tip")).toBeVisible();
+  const nextTip = page.getByLabel("Next tip");
+  await hold(nextTip);
+  await expect.poll(async () => Number((await paint(nextTip)).opacity)).toBeCloseTo(0.72, 1);
+  await release(page);
 
   const homeTab = page.getByRole("tab", { name: "Home" });
-  await homeTab.hover();
-  await expect.poll(async () => (await paint(homeTab)).backgroundColor).toBe(surface2);
+  expect((await paint(homeTab)).backgroundColor).not.toBe(brand);
+  expect(await labelColor(homeTab, "Home")).toBe(brand);
+  expect(await labelColor(page.getByRole("tab", { name: "Workout" }), "Workout")).toBe(muted);
+  await hold(homeTab);
+  await expect.poll(async () => Number((await paint(homeTab)).opacity)).toBeCloseTo(0.72, 1);
+  expect((await paint(homeTab)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   await page.evaluate(() => {
     (window as unknown as { __stay?: number }).__stay = 1;
@@ -171,15 +225,22 @@ test("hover and press mark the home, activity, recorder, and tab controls", asyn
   await page.getByRole("tab", { name: "Workout" }).click();
   await expect(page).toHaveURL(/\/workouts/);
   expect(await page.evaluate(() => (window as unknown as { __stay?: number }).__stay)).toBe(1);
+  expect(await labelColor(page.getByRole("tab", { name: "Home" }), "Home")).toBe(muted);
+  expect(await labelColor(page.getByRole("tab", { name: "Workout" }), "Workout")).toBe(brand);
+  expect((await paint(page.getByRole("tab", { name: "Workout" }))).backgroundColor).not.toBe(brand);
 
   await page.goto("/activity?day=" + today);
   await expect(page.getByTestId("activity-screen")).toBeVisible();
   const back = page.getByTestId("activity-back");
-  await back.hover();
-  await expect.poll(async () => (await paint(back)).backgroundColor).toBe(surface2);
+  await hold(back);
+  await expect.poll(async () => Number((await paint(back)).opacity)).toBeCloseTo(0.72, 1);
+  expect((await paint(back)).backgroundColor).not.toBe(brand);
+  await release(page);
   const activityDay = page.getByTestId("activity-day-" + today);
-  await activityDay.hover();
-  await expect.poll(async () => (await paint(activityDay)).backgroundColor).toBe(surface2);
+  await hold(activityDay);
+  await expect.poll(async () => Number((await paint(activityDay)).opacity)).toBeCloseTo(0.72, 1);
+  expect((await paint(activityDay)).backgroundColor).not.toBe(brand);
+  await release(page);
   const chartreuse = await page.getByTestId("activity-screen").locator("*").evaluateAll((els) =>
     els.some((el) => {
       const style = getComputedStyle(el);
@@ -192,31 +253,39 @@ test("hover and press mark the home, activity, recorder, and tab controls", asyn
   await expect(page.getByTestId("record-screen")).toBeVisible();
   const tennis = page.getByTestId("sport-tennis");
   expect((await paint(tennis)).backgroundColor).toBe(surface);
-  await tennis.hover();
+  await hold(tennis);
   await expect.poll(async () => (await paint(tennis)).backgroundColor).toBe(surface2);
   expect((await paint(tennis)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   await page.getByTestId("sport-run").click();
   const run = page.getByTestId("sport-run");
   await expect.poll(async () => (await paint(run)).backgroundColor).toBe(surface2);
-  await run.hover();
+  await hold(run);
   await expect.poll(async () => Number((await paint(run)).opacity)).toBeLessThan(1);
   expect((await paint(run)).backgroundColor).not.toBe(brand);
+  await release(page);
 
   const recordStart = page.getByTestId("record-start");
-  await recordStart.hover();
-  await expect.poll(async () => (await paint(recordStart)).filter).toContain("1.06");
   expect((await paint(recordStart)).backgroundColor).toBe(brand);
+  await hold(recordStart);
+  await expect.poll(async () => (await paint(recordStart)).backgroundColor).toBe(brandPressed);
+  expect(still((await paint(recordStart)).transform)).toBe(true);
+  await release(page);
 
   await recordStart.click();
   const locked = page.getByTestId("sport-hike");
-  await locked.hover({ force: true });
-  expect((await paint(locked)).backgroundColor).toBe(surface);
+  const lockedBefore = await paint(locked);
+  await hold(locked);
+  expect(await paint(locked)).toEqual(lockedBefore);
+  expect(lockedBefore.backgroundColor).toBe(surface);
+  await release(page);
   const finish = page.getByTestId("record-finish");
   const finishBefore = await paint(finish);
-  await finish.hover({ force: true });
+  await hold(finish);
   expect(await paint(finish)).toEqual(finishBefore);
   expect(finishBefore.backgroundColor).not.toBe(brand);
+  await release(page);
 });
 
 test("reduced motion keeps the signal and drops the scale", async ({ page }) => {
@@ -226,13 +295,12 @@ test("reduced motion keeps the signal and drops the scale", async ({ page }) => 
   await page.goto("/home");
   const search = page.getByTestId("home-search");
   await expect(search).toBeVisible();
-  await search.hover();
-  await expect.poll(async () => (await paint(search)).backgroundColor).toBe(surface2);
-  expect((await paint(search)).transitionDuration.startsWith("0s")).toBe(true);
-  await page.mouse.down();
-  await expect.poll(async () => (await paint(search)).opacity).toBe("0.85");
+  await expect.poll(async () => (await paint(search)).transitionDuration).toMatch(/^0s/);
+  await hold(search);
+  await expect.poll(async () => (await paint(search)).opacity).toBe("0.72");
   const pressed = await paint(search);
-  expect(pressed.transform === "none" || pressed.transform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);
-  await page.mouse.move(2, 2);
-  await page.mouse.up();
+  expect(still(pressed.transform)).toBe(true);
+  expect(pressed.backgroundColor).not.toBe(brand);
+  await release(page);
+  await expect.poll(async () => (await paint(search)).opacity).toBe("1");
 });

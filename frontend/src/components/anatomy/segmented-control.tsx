@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
+import { pressableStyle, useReducedMotion } from "../../affordance";
 import { colors, spacing, radius } from "../../theme";
 
 type Option<T extends string> = {
@@ -18,6 +19,7 @@ export function SegmentedControl<T extends string>({
   selected,
   onSelect,
 }: SegmentedControlProps<T>) {
+  const reduceMotion = useReducedMotion();
   return (
     <View style={styles.container} accessibilityRole="tablist">
       {options.map((option) => {
@@ -25,7 +27,11 @@ export function SegmentedControl<T extends string>({
         return (
           <Pressable
             key={option.value}
-            style={[styles.segment, isSelected && styles.segmentSelected]}
+            style={(state) => [
+              styles.segment,
+              isSelected && styles.segmentSelected,
+              pressableStyle(state, { variant: "quiet", reduceMotion }),
+            ]}
             onPress={() => onSelect(option.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: isSelected }}
@@ -69,7 +75,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   segmentTextSelected: {
-    color: colors.text,
+    color: colors.brand,
     fontWeight: "600",
   },
 });

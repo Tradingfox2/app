@@ -21,6 +21,7 @@ import { MUSCLE_KNOWLEDGE } from "./muscle-knowledge";
 import { localizeMuscleKnowledge } from "./muscle-knowledge-locales";
 import { ANTAGONISTS, SYNERGISTS } from "./muscle-relations";
 import { loadState, type LoadState } from "./muscle-region";
+import { pressableStyle, useReducedMotion } from "../../affordance";
 import { colors, fonts, spacing, radius } from "../../theme";
 import { ExerciseDemoModal } from "../exercises/exercise-demo-modal";
 import { useI18n } from "../../i18n";
@@ -90,9 +91,14 @@ function TabButton({
   active: boolean;
   onPress: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   return (
     <Pressable
-      style={[styles.tabButton, active && styles.tabButtonActive]}
+      style={(state) => [
+        styles.tabButton,
+        active && styles.tabButtonActive,
+        pressableStyle(state, { variant: "quiet", reduceMotion }),
+      ]}
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
@@ -726,9 +732,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.sm,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
   },
   tabButtonActive: {
-    backgroundColor: colors.surface2,
+    borderBottomColor: colors.brand,
   },
   tabLabel: {
     fontSize: 12,
@@ -736,7 +744,7 @@ const styles = StyleSheet.create({
     color: muted,
   },
   tabLabelActive: {
-    color: colors.text,
+    color: colors.brand,
     fontWeight: "900",
   },
   closeButton: {

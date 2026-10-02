@@ -521,9 +521,11 @@ test("home opens the morning check-in only below half confidence and does not po
   await page.getByTestId("morning-soreness-2").click();
   await page.getByTestId("morning-mood-4").click();
   const brand = "rgb(214, 227, 90)";
-  await expect(page.getByTestId("morning-mood-4")).toHaveCSS("background-color", brand);
-  await expect(page.getByTestId("morning-soreness-2")).toHaveCSS("background-color", brand);
-  await expect(page.getByTestId("morning-mood-1")).not.toHaveCSS("background-color", brand);
+  const selectedStep = "rgb(36, 42, 49)";
+  await expect(page.getByTestId("morning-mood-4")).toHaveCSS("background-color", selectedStep);
+  await expect(page.getByTestId("morning-soreness-2")).toHaveCSS("background-color", selectedStep);
+  await expect(page.getByTestId("morning-mood-1")).not.toHaveCSS("background-color", selectedStep);
+  await expect(page.getByTestId("morning-mood-4")).not.toHaveCSS("background-color", brand);
   await expect(page.getByTestId("morning-save")).toHaveCSS("background-color", brand);
   await page.getByTestId("morning-save").click();
   await expect.poll(() => morningPosts.length).toBe(1);

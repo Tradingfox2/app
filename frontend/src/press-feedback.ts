@@ -8,20 +8,17 @@ import {
   type ViewProps,
   type ViewStyle,
 } from "react-native";
+import { brandPressed, PRESS_MS, pressMotion, pressOpacity } from "@/src/press-motion";
 import { colors } from "@/src/theme";
 
 /**
- * Hover and press for the Workout tab, the strength logger, Plan, the rest
- * timer, and session history. Chartreuse brightens only on primary fills.
- * Other controls lift toward the sheet color or show a hairline. Disabled
- * controls stay inert. Reduced motion skips the ease and the scale.
+ * Press and release for the Workout tab, the strength logger, Plan, the rest
+ * timer, and session history. Primary chartreuse darkens in place. Filled
+ * rows step to the next dark surface. Chips, ghosts, and outlines dim.
+ * Disabled controls stay inert. Reduced motion keeps the cue and drops the ease.
  */
 
-const HOVER_MS = "140ms";
 const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-/** Brand #D6E35A mixed 8% toward white. Hover only, same hue. */
-export const brandHover = "#D9E567";
 
 export type PressVariant = "primary" | "surface" | "chip" | "ghost" | "outline";
 
@@ -93,7 +90,6 @@ export function useReducedMotion(): boolean {
 export function pressStyle(variant: PressVariant, state: PressState, options: PressOptions = {}): ViewStyle {
   const disabled = options.disabled === true;
   const web = Platform.OS === "web";
-  const hovered = web && state.hovered === true && !disabled;
   const pressed = state.pressed === true && !disabled;
   const style: MotionStyle = {};
 
@@ -103,44 +99,27 @@ export function pressStyle(variant: PressVariant, state: PressState, options: Pr
     // sits behind it, so the cursor stays a pointer. Keep the hit target and
     // show an inert cursor. onPress still does not fire.
     if (disabled) style.pointerEvents = "auto";
-    if (!options.reducedMotion) {
-      style.transitionProperty = "background-color, border-color, opacity, transform, outline-color";
-      style.transitionDuration = HOVER_MS;
-      style.transitionTimingFunction = "ease";
-    }
   }
+  if (!disabled) Object.assign(style, pressMotion(options.reducedMotion === true));
 
-  if (!disabled && hovered) {
-    switch (variant) {
-      case "primary":
-        style.backgroundColor = brandHover;
-        break;
-      case "surface":
-        style.backgroundColor = colors.surface2;
-        break;
-      case "chip":
-        if (!options.preserveBorder) style.borderColor = colors.textDim;
-        break;
-      case "ghost":
-        style.backgroundColor = colors.surface2;
-        style.outlineWidth = 1;
-        style.outlineStyle = "solid";
-        style.outlineColor = colors.textDim;
-        break;
-      case "outline":
-        style.backgroundColor = colors.surface2;
-        if (!options.preserveBorder) style.borderColor = colors.textDim;
-        break;
-      default: {
-        const exhaustive: never = variant;
-        return exhaustive;
-      }
+  if (!pressed) return style;
+
+  switch (variant) {
+    case "primary":
+      style.backgroundColor = brandPressed;
+      break;
+    case "surface":
+      style.backgroundColor = colors.surface2;
+      break;
+    case "chip":
+    case "ghost":
+    case "outline":
+      style.opacity = pressOpacity;
+      break;
+    default: {
+      const exhaustive: never = variant;
+      return exhaustive;
     }
-  }
-
-  if (pressed) {
-    style.opacity = 0.92;
-    if (!options.reducedMotion) style.transform = [{ scale: 0.98 }];
   }
 
   return style;
@@ -166,8 +145,8 @@ export function useFieldAffordance() {
   const style: MotionStyle = {};
   if (web && !reducedMotion) {
     style.transitionProperty = "border-color";
-    style.transitionDuration = HOVER_MS;
-    style.transitionTimingFunction = "ease";
+    style.transitionDuration = PRESS_MS;
+    style.transitionTimingFunction = "ease-out";
   }
   if (hovered || focused) style.borderColor = colors.textDim;
   const hover = (

@@ -372,7 +372,7 @@ const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: sp
   primaryAction: { minHeight: 44, alignSelf: "flex-start", paddingHorizontal: spacing.md, flexDirection: "row", gap: spacing.sm, alignItems: "center", backgroundColor: colors.brand, borderRadius: radius.sm },
   primaryActionText: { ...type.button, fontSize: 12 }, tabs: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
   tab: { minHeight: 38, justifyContent: "center", paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabActive: { borderBottomColor: colors.text }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 1 }, tabTextActive: { color: colors.text },
+  tabActive: { borderBottomColor: colors.brand }, tabText: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 1 }, tabTextActive: { color: colors.brand },
   loader: { marginTop: spacing.xxl }, list: { paddingTop: spacing.sm },
   sectionHead: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm, paddingHorizontal: spacing.lg }, sectionTitle: { ...type.section, flex: 1 },
   count: { color: colors.textDim, fontSize: 12, fontVariant: ["tabular-nums"] },
