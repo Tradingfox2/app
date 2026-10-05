@@ -146,7 +146,9 @@ test("workout controls show hover, press, and an inert disabled state", async ({
   const search = page.getByTestId("library-search");
   await search.hover();
   await expect.poll(() => search.evaluate((el) => {
-    let node: HTMLElement | null = el;
+    // Playwright types the node as SVGElement | HTMLElement. Parent walk must
+    // accept either, because an SVG search icon is a valid hit target.
+    let node: Element | null = el;
     while (node) {
       const color = getComputedStyle(node).borderTopColor;
       if (color === "rgb(110, 118, 126)") return color;
