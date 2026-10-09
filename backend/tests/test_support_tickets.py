@@ -327,13 +327,24 @@ def test_lost_ticket_update_writes_no_audit(monkeypatch):
             "status": "open", "assignee_id": None, "created_at": stamp, "updated_at": stamp,
         })
 
+        # Motor builds a new collection object on every attribute access, so the
+        # patch has to sit on the object the handler will actually call.
+        tickets_col = database.tickets
+
         class Lost:
             modified_count = 0
 
         async def lose(*_args, **_kwargs):
             return Lost()
 
-        monkeypatch.setattr(database.tickets, "update_one", lose)
+        tickets_col.update_one = lose
+
+        class Handle:
+            tickets = tickets_col
+            users = database.users
+            audit_log = database.audit_log
+
+        monkeypatch.setattr(tickets, "db", Handle)
         with pytest.raises(HTTPException) as lost:
             await tickets.update_for_staff(
                 "t-race",

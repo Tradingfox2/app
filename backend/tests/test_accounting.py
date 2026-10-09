@@ -169,6 +169,7 @@ def test_a_capped_read_is_incomplete_and_currencies_stay_apart(monkeypatch):
     import accounting
 
     async def scenario(db):
+        monkeypatch.setattr(server, "db", db)
         monkeypatch.setattr(staff, "db", db)
         monkeypatch.setattr(accounting, "_CAP", 2)
         moment = datetime(2026, 9, 15, tzinfo=timezone.utc)
