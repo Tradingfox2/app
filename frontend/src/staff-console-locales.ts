@@ -8,6 +8,8 @@ export const staffConsoleMessages: Record<SupportedLocale, Messages> = {
   fr: {
     "IRONFLOW / OPERATIONS": "IRONFLOW / OPÉRATIONS",
     Operations: "Opérations",
+    Menu: "Menu",
+    "Close menu": "Fermer le menu",
     People: "Personnes",
     Business: "Activité",
     Administration: "Administration",
@@ -65,6 +67,8 @@ export const staffConsoleMessages: Record<SupportedLocale, Messages> = {
   de: {
     "IRONFLOW / OPERATIONS": "IRONFLOW / BETRIEB",
     Operations: "Betrieb",
+    Menu: "Menü",
+    "Close menu": "Menü schließen",
     People: "Personen",
     Business: "Geschäft",
     Administration: "Verwaltung",
@@ -120,6 +124,8 @@ export const staffConsoleMessages: Record<SupportedLocale, Messages> = {
   es: {
     "IRONFLOW / OPERATIONS": "IRONFLOW / OPERACIONES",
     Operations: "Operaciones",
+    Menu: "Menú",
+    "Close menu": "Cerrar el menú",
     People: "Personas",
     Business: "Actividad",
     Administration: "Administración",
@@ -175,6 +181,8 @@ export const staffConsoleMessages: Record<SupportedLocale, Messages> = {
   it: {
     "IRONFLOW / OPERATIONS": "IRONFLOW / OPERAZIONI",
     Operations: "Operazioni",
+    Menu: "Menu",
+    "Close menu": "Chiudi il menu",
     People: "Persone",
     Business: "Attività",
     Administration: "Amministrazione",

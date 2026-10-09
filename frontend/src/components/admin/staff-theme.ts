@@ -29,6 +29,8 @@ export const staffColors = {
   success: "#3D9A6A",
   warning: "#C4A15A",
   error: "#E23B3B",
+  /** Alert copy on the dark ground. The icon red above fails contrast as text. */
+  errorText: "#FF8A8A",
   errorWash: "#3A1818",
   info: "#7AA2C9",
 };

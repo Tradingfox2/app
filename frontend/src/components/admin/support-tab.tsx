@@ -4,13 +4,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
 import type { SupportMessage, SupportTicketStatus } from "@/src/api";
 import { colors } from "@/src/theme";
-import { selectedControl } from "@/src/community-copy";
 import { staffTicketStatusLabel } from "@/src/components/support/copy";
 import { queueAge } from "./queue-age";
 import { consoleStyles as styles } from "./console-styles";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
+import { FilterChip } from "./filter-chip";
+import { StatusBadge } from "./status-badge";
 import { QueueList } from "./queue-list";
+import { QueueRow } from "./queue-row";
 import type { AdminConsoleModel } from "./use-admin-console";
 
 const TICKET_STATUSES: SupportTicketStatus[] = ["open", "pending", "closed"];
@@ -53,7 +55,7 @@ export function SupportTab({ model }: { model: AdminConsoleModel }) {
         </Affordance>
         <DetailPanel label={ticketDetail.subject}>
           <View style={styles.cardHead}>
-            <Text style={styles.tag}>{t(ticketDetail.category.replace(/_/g, " ").toUpperCase())}</Text>
+            <StatusBadge tone="neutral" label={t(ticketDetail.category.replace(/_/g, " ").toUpperCase())} />
             <Text style={styles.time}>{formatDate(ticketDetail.updated_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
           </View>
           <Text style={styles.name}>{ticketDetail.subject}</Text>
@@ -71,9 +73,7 @@ export function SupportTab({ model }: { model: AdminConsoleModel }) {
             <Text style={styles.section}>{t("STATUS")}</Text>
             <FilterBar label={t("Ticket status")}>
               {TICKET_STATUSES.map(item => (
-                <Affordance key={item} accessibilityRole="button" accessibilityLabel={staffTicketStatusLabel(item, t)} {...selectedControl(draftStatus === item)} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} style={[styles.chip, draftStatus === item && styles.chipActive]}>
-                  <Text style={[styles.chipText, draftStatus === item && styles.chipTextActive]}>{staffTicketStatusLabel(item, t)}</Text>
-                </Affordance>
+                <FilterChip key={item} label={staffTicketStatusLabel(item, t)} selected={draftStatus === item} testID={`ticket-status-${item}`} onPress={() => setDraftStatus(item)} />
               ))}
             </FilterBar>
             <Affordance accessibilityRole="button" accessibilityLabel={t("SAVE STATUS")} testID="ticket-save-status" disabled={working || draftStatus === ticketDetail.status} onPress={() => void saveTicketStatus()} style={[styles.action, (working || draftStatus === ticketDetail.status) && styles.disabled]}>
@@ -95,13 +95,9 @@ export function SupportTab({ model }: { model: AdminConsoleModel }) {
     <>
       <FilterBar label={t("Support queue")}>
         {TICKET_STATUSES.map(item => (
-          <Affordance key={item} accessibilityRole="button" accessibilityLabel={staffTicketStatusLabel(item, t)} {...selectedControl(ticketStatus === item)} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} style={[styles.chip, ticketStatus === item && styles.chipActive]}>
-            <Text style={[styles.chipText, ticketStatus === item && styles.chipTextActive]}>{staffTicketStatusLabel(item, t)}</Text>
-          </Affordance>
+          <FilterChip key={item} label={staffTicketStatusLabel(item, t)} selected={ticketStatus === item} testID={`ticket-filter-${item}`} onPress={() => setTicketStatus(item)} />
         ))}
-        <Affordance accessibilityRole="button" accessibilityLabel={t("Unassigned")} {...selectedControl(unassignedOnly)} testID="ticket-filter-unassigned" onPress={() => setUnassignedOnly(value => !value)} style={[styles.chip, unassignedOnly && styles.chipActive]}>
-          <Text style={[styles.chipText, unassignedOnly && styles.chipTextActive]}>{t("Unassigned")}</Text>
-        </Affordance>
+        <FilterChip label={t("Unassigned")} selected={unassignedOnly} testID="ticket-filter-unassigned" onPress={() => setUnassignedOnly(value => !value)} />
       </FilterBar>
       <View style={styles.searchRow}>
         <TextInput value={ticketQuery} onChangeText={onTicketQuery} onSubmitEditing={submitTicketSearch} maxLength={80} accessibilityLabel={t("Search by subject, email, or ticket id")} placeholder={t("Search by subject, email, or ticket id")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-ticket-search" />
@@ -124,15 +120,22 @@ export function SupportTab({ model }: { model: AdminConsoleModel }) {
         footerLoading={working}
       >
         {visibleTickets.map(ticket => (
-          <Affordance key={ticket.id} accessibilityRole="button" accessibilityLabel={ticket.subject} testID={`admin-ticket-${ticket.id}`} onPress={() => void openTicket(ticket.id)} style={styles.row}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.name}>{ticket.subject}</Text>
-              <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())}</Text>
-              <Text style={styles.meta}>{queueAge(ticket.created_at, ticket.updated_at, t)}{ticket.assignee_id ? "" : ` · ${t("Unassigned")}`}</Text>
-            </View>
-            <View style={styles.staffTag}><Text style={styles.staffTagText}>{staffTicketStatusLabel(ticket.status, t)}</Text></View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
-          </Affordance>
+          <QueueRow
+            key={ticket.id}
+            label={ticket.subject}
+            testID={`admin-ticket-${ticket.id}`}
+            onPress={() => void openTicket(ticket.id)}
+            trailing={
+              <>
+                <StatusBadge tone={ticket.status === "open" ? "danger" : ticket.status === "pending" ? "warning" : "ok"} label={staffTicketStatusLabel(ticket.status, t)} />
+                <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
+              </>
+            }
+          >
+            <Text style={styles.name}>{ticket.subject}</Text>
+            <Text style={styles.meta}>{ticketLabel(ticket.user, ticket.user_id)} · {t(ticket.category.replace(/_/g, " ").toUpperCase())}</Text>
+            <Text style={styles.meta}>{queueAge(ticket.created_at, ticket.updated_at, t)}{ticket.assignee_id ? "" : ` · ${t("Unassigned")}`}</Text>
+          </QueueRow>
         ))}
       </QueueList>
     </>

@@ -4,6 +4,10 @@ import { api, type AccountingBucket, type AccountingCounts, type AccountingLine,
 import { radius, spacing } from "@/src/theme";
 import { staffColors as colors, staffFonts, staffType as type } from "./staff-theme";
 import { useI18n } from "@/src/i18n";
+import { DataScroll } from "./data-scroll";
+import { FilterBar } from "./filter-bar";
+import { FilterChip } from "./filter-chip";
+import { StatusBadge } from "./status-badge";
 
 const DAYS = [7, 30, 90] as const;
 type Days = (typeof DAYS)[number];
@@ -109,7 +113,7 @@ export function AccountingPanel() {
     }
   };
   const empty = (state: "none_in_period" | "unavailable", none = "Nothing in this period.") => (
-    <Text style={styles.hint}>{t(state === "none_in_period" ? none : "Could not read this section.")}</Text>
+    <StatusBadge tone={state === "unavailable" ? "warning" : "neutral"} label={t(state === "none_in_period" ? none : "Could not read this section.")} />
   );
   const figures = (rows: { amount_cents: number; currency: string | null }[]) => (
     <>{rows.map(row => <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{moneyText(row.amount_cents, row.currency)}</Text>)}</>
@@ -120,9 +124,9 @@ export function AccountingPanel() {
       case "unavailable":
         return empty(section.state, none);
       case "recorded":
-        if (!section.amounts_stored) return <Text style={styles.hint}>{t("Amounts are not stored on these rows.")}</Text>;
+        if (!section.amounts_stored) return <StatusBadge tone="neutral" label={t("Amounts are not stored on these rows.")} />;
         return <>
-          <Text style={styles.hint}>{t("Recorded")}</Text>
+          <StatusBadge tone="ok" label={t("Recorded")} />
           {figures(section.totals)}
         </>;
       case "incomplete": {
@@ -130,8 +134,8 @@ export function AccountingPanel() {
           ? t("Incomplete: this section hit the row cap. Totals below are only the rows that were read.")
           : t("Incomplete: some rows could not be read. Totals below omit those rows.");
         return <>
-          <Text style={styles.hint}>{note}</Text>
-          {section.amounts_stored && section.totals ? figures(section.totals) : <Text style={styles.hint}>{t("Amounts are not stored on these rows.")}</Text>}
+          <StatusBadge tone="warning" label={note} />
+          {section.amounts_stored && section.totals ? figures(section.totals) : <StatusBadge tone="neutral" label={t("Amounts are not stored on these rows.")} />}
         </>;
       }
       default: {
@@ -147,14 +151,14 @@ export function AccountingPanel() {
         return empty(section.state);
       case "recorded":
         return <>
-          <Text style={styles.hint}>{t("Recorded")}</Text>
+          <StatusBadge tone="ok" label={t("Recorded")} />
           {section.counts.map(row => (
             <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{formatNumber(row.count)} · {row.currency ?? t("Currency not recorded")}</Text>
           ))}
         </>;
       case "incomplete":
         return <>
-          <Text style={styles.hint}>{t("Incomplete: this section hit the row cap. Totals below are only the rows that were read.")}</Text>
+          <StatusBadge tone="warning" label={t("Incomplete: this section hit the row cap. Totals below are only the rows that were read.")} />
           {section.counts.map(row => (
             <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{formatNumber(row.count)} · {row.currency ?? t("Currency not recorded")}</Text>
           ))}
@@ -182,13 +186,11 @@ export function AccountingPanel() {
     <View testID="accounting-panel">
       <Text style={styles.section}>{t("ACCOUNTING")}</Text>
       <Text style={styles.hint}>{t("Money recorded by Stripe and RevenueCat. Amounts stay in the currency they were charged. Nothing here is converted.")}</Text>
-      <View style={styles.filters}>
+      <FilterBar label={t("Accounting period")}>
         {DAYS.map(item => (
-          <Pressable key={item} accessibilityRole="button" testID={`accounting-period-${item}`} onPress={() => { if (item === days) return; setDays(item); setLoading(true); }} style={[styles.chip, days === item && styles.chipActive]}>
-            <Text style={[styles.chipText, days === item && styles.chipTextActive]}>{t(periodLabel(item))}</Text>
-          </Pressable>
+          <FilterChip key={item} label={t(periodLabel(item))} selected={days === item} testID={`accounting-period-${item}`} onPress={() => { if (item === days) return; setDays(item); setLoading(true); }} />
         ))}
-      </View>
+      </FilterBar>
       {loading ? <ActivityIndicator color={colors.text} /> : null}
       {error ? (
         <View accessibilityRole="alert">
@@ -199,7 +201,7 @@ export function AccountingPanel() {
         </View>
       ) : null}
       {data ? (
-        <>
+        <DataScroll>
           <Text style={styles.hint}>{data.period.from} – {data.period.to}</Text>
           <Text style={styles.section}>{t("Collected")}</Text>
           {COLLECTED.map(([id, label]) => (
@@ -230,7 +232,7 @@ export function AccountingPanel() {
           ))}
           <Text style={styles.hint}>{t("Last amount on file. Monthly and yearly are never added together.")}</Text>
           {!subscriptionAmounts ? (
-            <Text style={styles.hint} testID="accounting-subscriptions-incomplete">{t("Subscription amounts were not in this response. Those rows are incomplete, not zero.")}</Text>
+            <StatusBadge tone="warning" testID="accounting-subscriptions-incomplete" label={t("Subscription amounts were not in this response. Those rows are incomplete, not zero.")} />
           ) : null}
           {PROVIDERS.map(([provider, label]) => (
             <View key={provider}>
@@ -255,7 +257,7 @@ export function AccountingPanel() {
           <Text style={styles.section}>{t("Active subscriptions")}</Text>
           {counts(asCounts(sections?.active_subscriptions))}
           <Text style={styles.section}>{t("Recent lines")}</Text>
-          {data.recent_lines.length === 0 ? <Text style={styles.hint}>{t("Nothing in this period.")}</Text> : null}
+          {data.recent_lines.length === 0 ? <StatusBadge tone="neutral" label={t("Nothing in this period.")} /> : null}
           {data.recent_lines.map((line, index) => (
             <View key={`${line.kind}-${line.stripe_id ?? "none"}-${line.when ?? index}`} style={styles.row} testID="accounting-line">
               <Text style={styles.name}>{t(KINDS[line.kind] ?? line.kind)}{line.status ? ` · ${line.status}` : ""}</Text>
@@ -263,7 +265,7 @@ export function AccountingPanel() {
               <Text style={styles.meta}>{line.when ? formatDate(line.when, { dateStyle: "short", timeStyle: "short" }) : t("Date not recorded")}</Text>
             </View>
           ))}
-        </>
+        </DataScroll>
       ) : null}
     </View>
   );
@@ -273,15 +275,10 @@ const styles = StyleSheet.create({
   section: { ...type.section, marginTop: spacing.lg },
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
   figure: { color: colors.text, fontFamily: staffFonts.display, fontSize: 22, lineHeight: 26, fontVariant: ["tabular-nums"], marginTop: spacing.xs },
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
-  chip: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface },
-  chipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },
-  chipText: { color: colors.textDim, fontSize: 11, fontWeight: "800" },
-  chipTextActive: { color: colors.text },
   row: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   name: { color: colors.text, fontSize: 13, fontWeight: "700" },
   meta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   action: { minHeight: 40, alignSelf: "flex-start", justifyContent: "center", paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, marginTop: spacing.sm },
   actionText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  error: { color: colors.error, marginTop: spacing.sm },
+  error: { color: colors.errorText, marginTop: spacing.sm },
 });

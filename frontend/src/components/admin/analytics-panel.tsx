@@ -7,6 +7,7 @@ import { MetricGlossary } from "@/src/components/metric-glossary";
 import { radius, spacing } from "@/src/theme";
 import { staffColors as colors, staffFonts, staffType as type } from "./staff-theme";
 import { useI18n } from "@/src/i18n";
+import { DataScroll } from "./data-scroll";
 
 const LABELS: Record<string, string> = {
   screen_view: "Screen views",
@@ -96,7 +97,7 @@ export function AnalyticsPanel() {
         </View>
       ) : null}
       {data ? (
-        <>
+        <DataScroll>
           {data.generated_at ? <Text style={styles.hint}>{t("Updated {time}.", { time: formatDate(data.generated_at, { dateStyle: "short", timeStyle: "short" }) })}</Text> : null}
           <Text style={styles.section}>{t("LAST 24 HOURS")}</Text>
           <View style={styles.grid}>
@@ -106,7 +107,7 @@ export function AnalyticsPanel() {
           <View style={styles.grid}>
             {names.map(name => chip("7d", name))}
           </View>
-        </>
+        </DataScroll>
       ) : null}
     </View>
   );
@@ -121,5 +122,5 @@ const styles = StyleSheet.create({
   metricLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   action: { minHeight: 40, alignSelf: "flex-start", justifyContent: "center", paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, marginTop: spacing.sm },
   actionText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  error: { color: colors.error, marginTop: spacing.sm },
+  error: { color: colors.errorText, marginTop: spacing.sm },
 });

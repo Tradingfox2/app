@@ -1,4 +1,5 @@
-import { ActivityIndicator, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Affordance } from "@/src/press-affordance";
@@ -40,6 +41,7 @@ function AdminConsole() {
   const model = useAdminConsole();
   const { width } = useWindowDimensions();
   const wide = width >= SIDEBAR_AT;
+  const [navOpen, setNavOpen] = useState(false);
   const reduced = useReducedMotion();
   useStaffMotionSheet();
   const { user, logout, t, tab, selectTab, overview, health, sectionErrors, can, loading, error, working, reloadVisible, search } = model;
@@ -52,11 +54,11 @@ function AdminConsole() {
     return true;
   };
 
-  const navButtons = (rail: boolean) => NAV_GROUPS.map(group => {
+  const navButtons = NAV_GROUPS.map(group => {
     const items = NAV.filter(item => group.ids.includes(item.id) && visible(item.id));
     if (items.length === 0) return null;
     return (
-      <View key={group.id} style={rail ? shell.railGroup : shell.group} accessibilityRole="tablist">
+      <View key={group.id} style={shell.group} accessibilityRole="tablist">
         <Text style={shell.groupLabel}>{t(group.label)}</Text>
         {items.map(item => {
           const selected = tab === item.id;
@@ -68,8 +70,8 @@ function AdminConsole() {
               accessibilityLabel={t(item.label)}
               {...selectedControl(selected)}
               testID={`admin-tab-${item.id}`}
-              onPress={() => selectTab(item.id)}
-              style={[styles.tab, !rail && shell.sideTab, selected && styles.tabActive]}
+              onPress={() => { setNavOpen(false); selectTab(item.id); }}
+              style={[styles.tab, shell.sideTab, selected && styles.tabActive]}
             >
               <Ionicons name={item.icon} size={16} color={selected ? staffColors.brand : staffColors.textMuted} />
               <Text style={[styles.tabText, selected && styles.tabTextActive, shell.tabLabel]}>{t(item.label)}</Text>
@@ -82,12 +84,14 @@ function AdminConsole() {
   });
 
   if (!loading && !overview) {
+    const signedInStaff = Boolean(user?.staff_role);
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.locked}>
-          <Ionicons name="lock-closed" size={40} color={staffColors.textDim} />
-          <Text style={styles.lockedText}>{t("This console is for the IronFlow staff team.")}</Text>
+          <Ionicons name={signedInStaff ? "cloud-offline-outline" : "lock-closed"} size={40} color={staffColors.textDim} />
+          <Text style={styles.lockedText}>{t(signedInStaff ? "The operations summary could not be loaded." : "This console is for the IronFlow staff team.")}</Text>
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+          {signedInStaff ? <Affordance accessibilityRole="button" accessibilityLabel={t("Retry")} onPress={reloadVisible}><Text style={styles.retry}>{t("Retry")}</Text></Affordance> : null}
           <Affordance accessibilityRole="button" accessibilityLabel={t("SIGN OUT")} onPress={() => { void logout(); }} style={styles.action}><Text style={styles.actionText}>{t("SIGN OUT")}</Text></Affordance>
         </View>
       </SafeAreaView>
@@ -115,34 +119,33 @@ function AdminConsole() {
               <Text style={styles.headerTitle} testID="admin-operations-title">{t("IRONFLOW / OPERATIONS")}</Text>
             </View>
             <View style={styles.workspace} testID="admin-workspace-badge"><Text style={styles.workspaceText}>{t("Admin workspace")}</Text></View>
-            <ScrollView style={shell.navScroll} contentContainerStyle={shell.navContent}>{navButtons(false)}</ScrollView>
+            <ScrollView style={shell.navScroll} contentContainerStyle={shell.navContent}>{navButtons}</ScrollView>
             {identity}
           </View>
         ) : (
           <View style={styles.header}>
+            <Affordance accessibilityRole="button" accessibilityLabel={t(navOpen ? "Close menu" : "Menu")} accessibilityState={{ expanded: navOpen }} testID="admin-nav-menu" hitSlop={8} onPress={() => setNavOpen(open => !open)} style={styles.icon}>
+              <Ionicons name={navOpen ? "close" : "menu"} size={22} color={staffColors.text} />
+            </Affordance>
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={styles.titleRow}>
                 <Text style={styles.headerTitle} testID="admin-operations-title">{t("IRONFLOW / OPERATIONS")}</Text>
                 <View style={styles.workspace} testID="admin-workspace-badge"><Text style={styles.workspaceText}>{t("Admin workspace")}</Text></View>
               </View>
-              <Text style={styles.headerMeta}>{user?.email} · {t((overview?.staff_role || "").toUpperCase() || "STAFF")}</Text>
+              <Text style={styles.headerMeta} numberOfLines={1}>{user?.email} · {t((overview?.staff_role || "").toUpperCase() || "STAFF")}</Text>
             </View>
             <Affordance accessibilityRole="button" accessibilityLabel={t("SIGN OUT")} hitSlop={8} onPress={() => { void logout(); }} style={styles.icon}>
               <Ionicons name="log-out-outline" size={20} color={staffColors.text} />
             </Affordance>
           </View>
         )}
+        <View style={shell.stage}>
         <View style={shell.main}>
-          {!wide ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={shell.rail}>
-              {navButtons(true)}
-            </ScrollView>
-          ) : null}
           <View style={shell.pageHead}>
             <Text style={shell.pageTitle}>{current ? t(current.label) : ""}</Text>
             {working ? <ActivityIndicator color={staffColors.text} /> : null}
           </View>
-          <ScrollView contentContainerStyle={styles.scroll}>
+          <ScrollView contentContainerStyle={styles.scroll} accessibilityElementsHidden={!wide && navOpen}>
             <View style={staffEnter(reduced)}>
               {loading ? <ActivityIndicator color={staffColors.text} /> : null}
               {error ? (
@@ -182,6 +185,15 @@ function AdminConsole() {
             </View>
           </ScrollView>
         </View>
+        {!wide ? (
+          <View pointerEvents={navOpen ? "auto" : "none"} style={[shell.drawer, !navOpen && shell.drawerClosed]} accessibilityElementsHidden={!navOpen}>
+            <View style={shell.drawerPanel}>
+              <ScrollView style={shell.drawerScroll} contentContainerStyle={shell.navContent}>{navButtons}</ScrollView>
+            </View>
+            {navOpen ? <Pressable accessibilityRole="button" accessibilityLabel={t("Close menu")} onPress={() => setNavOpen(false)} style={shell.backdrop} /> : null}
+          </View>
+        ) : null}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -189,7 +201,7 @@ function AdminConsole() {
 
 const shell = {
   wash: { position: "absolute" as const, top: 0, left: 0, right: 0, height: 220 },
-  frame: { flex: 1 },
+  frame: { flex: 1, position: "relative" as const },
   frameWide: { flexDirection: "row" as const },
   sidebar: {
     width: 264,
@@ -215,14 +227,18 @@ const shell = {
     marginLeft: 8,
   },
   sideTab: { alignSelf: "stretch" as const },
-  tabLabel: { flexShrink: 1 },
+  tabLabel: { flexShrink: 1, textTransform: "uppercase" as const },
   identity: { borderTopWidth: 1, borderTopColor: staffColors.border, paddingTop: spacing.md, gap: 4 },
   role: { color: staffColors.text, fontFamily: staffFonts.display, fontSize: 16, letterSpacing: 0.8 },
   signOut: { minHeight: 40, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, marginTop: 6 },
   signOutText: { color: staffColors.text, fontFamily: staffFonts.text, fontSize: 13, fontWeight: "600" as const },
+  stage: { flex: 1, minWidth: 0, position: "relative" as const },
   main: { flex: 1, minWidth: 0 },
-  rail: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.lg, alignItems: "center" as const },
-  railGroup: { flexDirection: "row" as const, alignItems: "center" as const, gap: 4 },
+  drawer: { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0, zIndex: 30, flexDirection: "row" as const },
+  drawerClosed: { display: "none" as const },
+  drawerPanel: { width: 280, maxWidth: "86%" as const, alignSelf: "stretch" as const, overflow: "hidden" as const, backgroundColor: staffColors.surface, borderRightWidth: 1, borderRightColor: staffColors.border, padding: spacing.md, ...staffShadow },
+  drawerScroll: { flex: 1 },
+  backdrop: { flex: 1, backgroundColor: "rgba(16, 20, 24, 0.72)" },
   pageHead: {
     minHeight: 52,
     paddingHorizontal: spacing.lg,
@@ -232,7 +248,7 @@ const shell = {
     borderBottomWidth: 1,
     borderBottomColor: staffColors.border,
   },
-  pageTitle: { fontFamily: staffFonts.display, fontSize: 26, lineHeight: 30, color: staffColors.text, letterSpacing: 0.4 },
+  pageTitle: { fontFamily: staffFonts.display, fontSize: 26, lineHeight: 30, color: staffColors.text, letterSpacing: 0.4, textTransform: "uppercase" as const },
 };
 
 export default function StaffHome() {

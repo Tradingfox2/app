@@ -1,10 +1,11 @@
-import { Linking, Platform, Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Affordance } from "@/src/press-affordance";
-import { colors } from "@/src/theme";
+import { staffColors } from "./staff-theme";
 import { webOrigin } from "@/src/share";
 import { consoleStyles as styles } from "./console-styles";
 import { QueueList } from "./queue-list";
+import { QueueRow } from "./queue-row";
+import { StatusBadge } from "./status-badge";
 import type { AdminConsoleModel } from "./use-admin-console";
 
 function openMemberCommunity(id: string) {
@@ -31,16 +32,27 @@ export function CommunitiesTab({ model }: { model: AdminConsoleModel }) {
       queueLabel={t("communities")}
       footerLoading={working}
     >
-      {communities.map(group => (
-        <Affordance key={group.id} accessibilityRole="button" accessibilityLabel={group.name} accessibilityHint={t("Active members only")} {...(Platform.OS === "web" ? { title: t("Active members only") } : {})} testID={`admin-community-${group.id}`} onPress={() => openMemberCommunity(group.id)} style={styles.row}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.name}>{group.name}</Text>
-            <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {t(group.status.toUpperCase())} · {t("{n} members", { n: formatNumber(group.member_count) })}{group.pending_count ? ` · ${t("{n} waiting to join", { n: formatNumber(group.pending_count) })}` : ""}</Text>
+      {communities.map(group => {
+        const status = group.status || "unknown";
+        const tone = status === "active" ? "ok" : status === "suspended" || status === "banned" ? "danger" : "neutral";
+        return (
+          <QueueRow
+            key={group.id}
+            label={group.name}
+            hint={t("Active members only")}
+            testID={`admin-community-${group.id}`}
+            onPress={() => openMemberCommunity(group.id)}
+            trailing={<Ionicons name="chevron-forward" size={16} color={staffColors.textDim} />}
+          >
+            <View style={styles.cardHead}>
+              <Text style={styles.name}>{group.name}</Text>
+              <StatusBadge tone={tone} label={t(status.toUpperCase())} />
+            </View>
+            <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {typeof group.member_count === "number" ? t("{n} members", { n: formatNumber(group.member_count) }) : t("Member count not recorded")}{typeof group.pending_count === "number" && group.pending_count > 0 ? ` · ${t("{n} waiting to join", { n: formatNumber(group.pending_count) })}` : ""}</Text>
             <Text style={styles.metricHint}>{t("Active members only")}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
-        </Affordance>
-      ))}
+          </QueueRow>
+        );
+      })}
     </QueueList>
   );
 }
