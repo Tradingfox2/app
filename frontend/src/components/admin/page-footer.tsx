@@ -10,6 +10,7 @@ export function PageFooter({
   nextCursor,
   loading,
   onMore,
+  queueLabel,
   t,
 }: {
   loaded: number;
@@ -17,6 +18,8 @@ export function PageFooter({
   nextCursor: string | null;
   loading?: boolean;
   onMore?: () => void;
+  /** Names the list for the load-more control. The visible label stays "Load more". */
+  queueLabel?: string;
   t: Translate;
 }) {
   if (loaded === 0) return null;
@@ -27,7 +30,14 @@ export function PageFooter({
     <>
       <Text style={styles.hint}>{label}</Text>
       {nextCursor && onMore ? (
-        <Pressable accessibilityRole="button" disabled={loading} onPress={onMore} style={styles.more}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={queueLabel ? t("Load more {queue}", { queue: queueLabel }) : t("Load more")}
+          disabled={loading}
+          onPress={onMore}
+          style={styles.more}
+          testID="admin-load-more"
+        >
           <Text style={styles.moreText}>{t("Load more")}</Text>
         </Pressable>
       ) : null}

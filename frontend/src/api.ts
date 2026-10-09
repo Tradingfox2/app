@@ -85,6 +85,9 @@ export type ModerationReport = {
   content_snapshot: string;
   status: "open" | "resolved";
   resolution: string | null;
+  /** `partial` means the decision was saved and a side effect still needs a retry. */
+  resolution_status?: "complete" | "partial" | null;
+  side_effect_error?: string | null;
   created_at: string;
   /** Set when staff closes the report. Absent on an open row. */
   reviewed_at?: string | null;
@@ -136,11 +139,20 @@ export type AnalyticsSummary = {
 export type AccountingMoney = { amount_cents: number; currency: string | null };
 export type AccountingBucket =
   | { state: "none_in_period" | "unavailable" }
-  | { state: "recorded"; amounts_stored: false; row_count: number }
-  | { state: "recorded"; amounts_stored: true; totals: AccountingMoney[] };
+  | { state: "recorded"; amounts_stored: false; row_count: number; incomplete_rows?: number }
+  | { state: "recorded"; amounts_stored: true; totals: AccountingMoney[]; incomplete_rows?: number }
+  | {
+      state: "incomplete";
+      reason: "row_cap" | "malformed_rows";
+      amounts_stored: boolean;
+      totals?: AccountingMoney[];
+      row_count?: number;
+      incomplete_rows?: number;
+    };
 export type AccountingCounts =
   | { state: "none_in_period" | "unavailable" }
-  | { state: "recorded"; counts: { currency: string | null; count: number }[] };
+  | { state: "recorded"; counts: { currency: string | null; count: number }[] }
+  | { state: "incomplete"; reason: "row_cap"; counts: { currency: string | null; count: number }[] };
 export type AccountingLine = {
   kind: string; stripe_id: string | null; currency: string | null;
   cents: number | null; when: string | null; status: string | null;
@@ -1165,8 +1177,11 @@ export const api = {
   archiveChannel: (channelId: string) => request<void>(`/channels/${channelId}`, { method: "DELETE" }),
   coachApplications: (status: "pending" | "approved" | "rejected" = "pending") =>
     request<CoachApplicationReview[]>(`/admin/coach-applications?status=${status}`),
-  adminCoaches: async (status: "pending" | "approved" | "rejected" | "suspended") =>
-    staffPage<AdminCoach>(await request<unknown>(`/admin/coaches?status=${status}`), "coaches"),
+  adminCoaches: async (status: "pending" | "approved" | "rejected" | "suspended", cursor?: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ status });
+    if (cursor) params.set("cursor", cursor);
+    return staffPage<AdminCoach>(await request<unknown>(`/admin/coaches?${params}`, { signal }), "coaches");
+  },
   reviewCoachApplication: (id: string, status: "approved" | "rejected", review_note?: string) =>
     request<CoachApplicationReview>(`/admin/coach-applications/${id}`, {
       method: "PATCH",
@@ -1348,7 +1363,7 @@ export const api = {
   // Moderation + back office
   report: (payload: { target_type: ModerationReport["target_type"]; target_id: string; reason: string; detail?: string }) =>
     request<ModerationReport>("/reports", { method: "POST", body: JSON.stringify(payload) }),
-  adminOverview: () => request<AdminOverview>("/admin/overview"),
+  adminOverview: (signal?: AbortSignal) => request<AdminOverview>("/admin/overview", { signal }),
   adminHealth: async (): Promise<HealthReport> => {
     const checked_at = new Date().toISOString();
     try {
@@ -1361,11 +1376,11 @@ export const api = {
       return { phase: "unverified", status: "unknown", mongo: null, checked_at };
     }
   },
-  adminUsers: async (q: string, status: "all" | "active" | "suspended" | "staff", cursor?: string) => {
+  adminUsers: async (q: string, status: "all" | "active" | "suspended" | "staff", cursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ status });
     if (q) params.set("q", q);
     if (cursor) params.set("cursor", cursor);
-    const page = staffPage<AdminAccount>(await request<unknown>(`/admin/users?${params}`), "users");
+    const page = staffPage<AdminAccount>(await request<unknown>(`/admin/users?${params}`, { signal }), "users");
     return { users: page.rows, count: page.rows.length, total: page.total, next_cursor: page.next_cursor };
   },
   adminUser: (id: string) => request<AdminAccount>(`/admin/users/${id}`),
@@ -1379,41 +1394,43 @@ export const api = {
     request<AdminAccount>(`/admin/users/${id}/staff-role`, { method: "PATCH", body: JSON.stringify({ staff_role, reason }) }),
   adminReports: async (
     status: "open" | "resolved" = "open",
-    options?: { cursor?: string; targetType?: string },
+    options?: { cursor?: string; targetType?: string; signal?: AbortSignal },
   ) => {
     const params = new URLSearchParams({ status });
     if (options?.cursor) params.set("cursor", options.cursor);
     if (options?.targetType && options.targetType !== "all") params.set("target_type", options.targetType);
-    return staffPage<ModerationReport>(await request<unknown>(`/admin/reports?${params}`), "reports");
+    return staffPage<ModerationReport>(await request<unknown>(`/admin/reports?${params}`, { signal: options?.signal }), "reports");
   },
-  adminTickets: (status: SupportTicketStatus, q = "", options?: { unassigned?: boolean; cursor?: string }) => {
+  adminRetryReport: (id: string) =>
+    request<ModerationReport>(`/admin/reports/${id}/retry-side-effect`, { method: "POST" }),
+  adminTickets: (status: SupportTicketStatus, q = "", options?: { unassigned?: boolean; cursor?: string; signal?: AbortSignal }) => {
     const params = new URLSearchParams({ status });
     if (q) params.set("q", q);
     if (options?.unassigned) params.set("unassigned", "true");
     if (options?.cursor) params.set("cursor", options.cursor);
-    return request<SupportTicketList>(`/admin/tickets?${params}`);
+    return request<SupportTicketList>(`/admin/tickets?${params}`, { signal: options?.signal });
   },
   adminTicket: (id: string) => request<SupportTicketDetail>(`/admin/tickets/${id}`),
   adminUpdateTicket: (id: string, patch: { status?: SupportTicketStatus; assignee_id?: string | null }) =>
     request<SupportTicketDetail>(`/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   adminReplyTicket: (id: string, body: string) =>
     request<SupportMessage>(`/admin/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
-  adminMemberships: async (status: "pending" | "banned" | "removed" = "pending", cursor?: string) => {
+  adminMemberships: async (status: "pending" | "banned" | "removed" = "pending", cursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ status });
     if (cursor) params.set("cursor", cursor);
-    return staffPage<AdminMembership>(await request<unknown>(`/admin/memberships?${params}`), "memberships");
+    return staffPage<AdminMembership>(await request<unknown>(`/admin/memberships?${params}`, { signal }), "memberships");
   },
   adminReviewMembership: (id: string, status: "active" | "rejected", reason: string) =>
     request<AdminMembership>(`/admin/memberships/${id}`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
-  adminCommunities: async (cursor?: string) => {
+  adminCommunities: async (cursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     const suffix = params.toString();
-    return staffPage<AdminCommunity>(await request<unknown>(`/admin/communities${suffix ? `?${suffix}` : ""}`), "communities");
+    return staffPage<AdminCommunity>(await request<unknown>(`/admin/communities${suffix ? `?${suffix}` : ""}`, { signal }), "communities");
   },
   adminReviewReport: (id: string, resolution: string, note: string) =>
     request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
-  adminAuditLog: async (query: AuditQuery = {}) => {
+  adminAuditLog: async (query: AuditQuery = {}, signal?: AbortSignal) => {
     const params = new URLSearchParams();
     if (query.actor) params.set("actor", query.actor);
     if (query.action) params.set("action", query.action);
@@ -1423,7 +1440,7 @@ export const api = {
     if (query.to) params.set("to", query.to);
     if (query.cursor) params.set("cursor", query.cursor);
     const suffix = params.toString();
-    return staffPage<AuditEntry>(await request<unknown>(`/admin/audit-log${suffix ? `?${suffix}` : ""}`), "entries");
+    return staffPage<AuditEntry>(await request<unknown>(`/admin/audit-log${suffix ? `?${suffix}` : ""}`, { signal }), "entries");
   },
   adminAnalytics: () => request<AnalyticsSummary>("/admin/analytics"),
   adminAccounting: (from: string, to: string) =>

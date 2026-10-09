@@ -6,9 +6,12 @@ never returned here — moderation works from what the reporter submitted.
 """
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -193,7 +196,7 @@ async def create_report(body: ReportIn, user: dict = Depends(current_user)):
         "community_id": community_id,
         "target_type": body.target_type, "target_id": body.target_id,
         "reason": body.reason, "detail": body.detail.strip(), "content_snapshot": snapshot,
-        "status": "open", "resolution": None, "reviewed_by": None, "reviewed_at": None,
+        "status": "open", "resolution": None, "resolution_status": None, "reviewed_by": None, "reviewed_at": None,
         "created_at": now(),
     }
     await db.reports.insert_one(report)
@@ -298,26 +301,38 @@ def _coach_directory_row(person: dict | None, application: dict | None) -> dict:
 @router.get("/admin/coaches")
 async def list_coach_directory(
     status: Literal["pending", "approved", "rejected", "suspended"] = "approved",
+    limit: int = Query(default=100, ge=1, le=100),
     user: dict = Depends(staff.require("coaches.review")),
+    cursor: str | None = None,
 ):
     """Coach lists behind the overview card.
 
     Approved matches the overview count (role coach + approved), including
     coaches who were approved before applications were stored. Banned means
     the account is suspended. Waiting and rejected come from applications.
+    The cursor is taken from the sorted documents, not the joined row, because
+    the joined `created_at` can come from the other collection.
     """
-    rows: list[dict] = []
     if status in {"pending", "rejected"}:
+        match = {"status": status}
+        total = await db.coach_applications.count_documents(match)
+        window = match
+        if cursor:
+            created_s, doc_id = admin_pages.decode_cursor(cursor, 2)
+            window = admin_pages.and_query(match, admin_pages.after_asc(
+                "created_at", admin_pages.parse_instant(created_s), doc_id,
+            ))
         applications = [
             clean(row) or {}
-            async for row in db.coach_applications.find({"status": status}, {"_id": 0}).sort("created_at", 1).limit(100)
+            async for row in db.coach_applications.find(window, {"_id": 0}).sort([("created_at", 1), ("id", 1)]).limit(limit + 1)
         ]
+        extra = len(applications) > limit
+        applications = applications[:limit]
         people = await _accounts([row.get("user_id") for row in applications])
-        total = await db.coach_applications.count_documents({"status": status})
         return {
             "coaches": [_coach_directory_row(people.get(row.get("user_id") or ""), row) for row in applications],
             "total": total,
-            "next_cursor": None,
+            "next_cursor": _page_cursor(applications, extra, "created_at", "id"),
         }
     if status == "approved":
         query: dict = {"role": "coach", "coach_status": "approved"}
@@ -329,10 +344,19 @@ async def list_coach_directory(
                 {"coach_status": {"$in": ["pending", "approved", "rejected"]}},
             ],
         }
+    total = await db.users.count_documents(query)
+    window = query
+    if cursor:
+        created_s, doc_id = admin_pages.decode_cursor(cursor, 2)
+        window = admin_pages.and_query(query, admin_pages.before_desc(
+            "created_at", admin_pages.parse_instant(created_s), doc_id,
+        ))
     people = [
         clean(row) or {}
-        async for row in db.users.find(query, ACCOUNT_FIELDS).sort("created_at", -1).limit(100)
+        async for row in db.users.find(window, ACCOUNT_FIELDS).sort([("created_at", -1), ("id", -1)]).limit(limit + 1)
     ]
+    extra = len(people) > limit
+    people = people[:limit]
     applications = [
         clean(row) or {}
         async for row in db.coach_applications.find(
@@ -340,9 +364,11 @@ async def list_coach_directory(
         )
     ] if people else []
     by_user = {row.get("user_id"): row for row in applications}
-    for person in people:
-        rows.append(_coach_directory_row(person, by_user.get(person.get("id"))))
-    return {"coaches": rows, "total": await db.users.count_documents(query), "next_cursor": None}
+    return {
+        "coaches": [_coach_directory_row(person, by_user.get(person.get("id"))) for person in people],
+        "total": total,
+        "next_cursor": _page_cursor(people, extra, "created_at", "id"),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -544,39 +570,136 @@ async def review_report(report_id: str, body: ReportReviewIn, user: dict = Depen
         _staff_guard(account, user, "suspend")
     # Claim the open row before any side effect. A second reviewer loses here
     # and must not suspend an account or remove content for a decision they did not win.
+    # `resolution_status` starts partial so a crash after the claim is retryable.
     claimed = await db.reports.update_one({"id": report_id, "status": "open"}, {"$set": {
         "status": "resolved", "resolution": body.resolution, "note": note,
         "reviewed_by": user["id"], "reviewed_at": now(),
+        "resolution_status": "partial", "side_effect_error": "pending",
     }})
     if claimed.modified_count != 1:
         raise HTTPException(409, "Report already resolved")
     # The winning resolution stays if a later write fails. Reopening the row
     # would let a second decision land on top of a suspension or removal that
-    # already happened.
-    if body.resolution == "content_removed":
-        await moderation.remove_content(report["target_type"], report["target_id"], actor=user)
-    if body.resolution == "user_suspended" and account is not None:
-        await _apply_suspension(user, account, note, None)
+    # already happened. The audit row is written before the side effect so a
+    # failure still names who decided.
     await staff.audit(user, f"report.{body.resolution}", target_type=report["target_type"],
                       target_id=report["target_id"], reason=note or None,
                       metadata={"report_id": report_id, "reason": report["reason"], "from": "open", "to": body.resolution})
-    notice = {
-        "warning_sent": "A moderator sent you a warning about the community guidelines.",
-        "content_removed": "Content was removed for breaching the guidelines.",
-    }.get(body.resolution)
-    if report.get("reported_user_id") and notice:
-        # Through notifications.create so the row carries `read_at`, which is
-        # the field the notification centre actually reads. A moderation notice
-        # is deliberately NOT sent via notify(): it must reach the member even
-        # if they have blocked the staff account acting on the report.
-        await notifications.create(
-            report["reported_user_id"],
-            "moderation_action",
-            "Community guidelines",
-            note or notice,
-            metadata={"report_id": report_id, "target_type": "report",
-                      "target_id": report_id},
-        )
+    code = await _report_side_effects(user, report, body.resolution, note, account)
+    await _mark_resolution(report_id, code)
+    return clean(await db.reports.find_one({"id": report_id}, {"_id": 0}))
+
+
+_NOTICE = {
+    "warning_sent": "A moderator sent you a warning about the community guidelines.",
+    "content_removed": "Content was removed for breaching the guidelines.",
+}
+_SIDE_EFFECT_CODE = {
+    "content_removed": "content_removal_failed",
+    "user_suspended": "suspension_failed",
+    "warning_sent": "notice_failed",
+    "dismissed": "side_effect_failed",
+}
+
+
+async def _mark_resolution(report_id: str, code: str | None) -> None:
+    if code:
+        await db.reports.update_one({"id": report_id}, {"$set": {
+            "resolution_status": "partial", "side_effect_error": code,
+        }})
+        return
+    await db.reports.update_one({"id": report_id}, {"$set": {
+        "resolution_status": "complete", "side_effect_error": None,
+    }})
+
+
+async def _report_side_effects(
+    actor: dict, report: dict, resolution: str, note: str, account: dict | None,
+) -> str | None:
+    """Run removal, suspension, and the member notice.
+
+    Returns a stable error code when something fails. The exception text is
+    not stored: it can echo reported content. A repeated call is safe:
+    removal no-ops once the target is gone, suspension is skipped when the
+    account is already suspended, and the notice is skipped when this report
+    already created one.
+    """
+    try:
+        if resolution == "content_removed":
+            await moderation.remove_content(report["target_type"], report["target_id"], actor=actor)
+        if resolution == "user_suspended":
+            target_id = (account or {}).get("id") or report.get("reported_user_id")
+            if target_id:
+                fresh = await db.users.find_one({"id": target_id}, ACCOUNT_FIELDS)
+                if fresh and not fresh.get("suspended_at"):
+                    await _apply_suspension(actor, fresh, note, None)
+        await _moderation_notice(report, resolution, note)
+    except Exception:
+        code = _SIDE_EFFECT_CODE.get(resolution, "side_effect_failed")
+        logger.warning("report side effect failed code=%s report_id=%s", code, report.get("id"))
+        return code
+    return None
+
+
+async def _moderation_notice(report: dict, resolution: str, note: str) -> None:
+    notice = _NOTICE.get(resolution)
+    reported = report.get("reported_user_id")
+    if not reported or not notice:
+        return
+    existing = await db.notifications.find_one({
+        "user_id": reported,
+        "type": "moderation_action",
+        "metadata.report_id": report["id"],
+    }, {"_id": 1})
+    if existing:
+        return
+    # Through notifications.create so the row carries `read_at`, which is
+    # the field the notification centre actually reads. A moderation notice
+    # is deliberately NOT sent via notify(): it must reach the member even
+    # if they have blocked the staff account acting on the report.
+    await notifications.create(
+        reported,
+        "moderation_action",
+        "Community guidelines",
+        note or notice,
+        metadata={"report_id": report["id"], "target_type": "report", "target_id": report["id"]},
+    )
+
+
+@router.post("/admin/reports/{report_id}/retry-side-effect")
+async def retry_report_side_effect(report_id: str, user: dict = Depends(staff.require("reports.resolve"))):
+    """Re-run a side effect that failed after the report was claimed.
+
+    The resolution itself is not opened again. A lost claim stays a 409.
+    """
+    report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(404, "Report not found")
+    if report.get("status") != "resolved" or report.get("resolution_status") != "partial":
+        raise HTTPException(409, "This report does not have a partial resolution to retry")
+    resolution = report.get("resolution") or ""
+    note = (report.get("note") or "").strip()
+    account = None
+    if resolution == "user_suspended":
+        reported_id = report.get("reported_user_id")
+        if not reported_id:
+            raise HTTPException(409, "This report has no account to suspend")
+        account = await _account_or_404(reported_id)
+        if account["id"] == user["id"]:
+            raise HTTPException(409, "You cannot suspend your own account")
+        if not account.get("suspended_at"):
+            _staff_guard(account, user, "suspend")
+    code = await _report_side_effects(user, report, resolution, note, account)
+    await _mark_resolution(report_id, code)
+    await staff.audit(
+        user, "report.side_effect_retried", target_type="report", target_id=report_id,
+        metadata={
+            "report_id": report_id,
+            "from": "partial",
+            "to": "partial" if code else "complete",
+            "side_effect_error": code,
+        },
+    )
     return clean(await db.reports.find_one({"id": report_id}, {"_id": 0}))
 
 
@@ -738,7 +861,19 @@ async def reply_admin_ticket(
 ):
     ticket = await tickets.require_ticket(ticket_id)
     # Staff can still leave a closing note after the member is locked out.
-    return await tickets.add_message(ticket, user, body, "staff")
+    message = await tickets.add_message(ticket, user, body, "staff")
+    # The reply body stays on the ticket. The audit row names the actor, the
+    # ticket, and the status at send time. It does not copy the message.
+    await staff.audit(
+        user, "ticket.replied", target_type="ticket", target_id=ticket_id,
+        metadata={
+            "message_id": message.get("id"),
+            "from": ticket.get("status"),
+            "to": ticket.get("status"),
+            "has_attachment": bool(message.get("media_id")),
+        },
+    )
+    return message
 
 
 # --------------------------------------------------------------------------- #

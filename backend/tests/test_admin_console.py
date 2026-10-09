@@ -400,3 +400,133 @@ def test_audit_log_filters_and_pages(monkeypatch):
             (await db.audit_log.find_one({"action": "staff.role_changed"}))["id"],
         }
     run_isolated(scenario)
+
+
+def test_staff_note_is_audited_without_the_note_text(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        support = account("support", staff_role="support")
+        await db.users.insert_one(account("target"))
+        await admin.add_note("target", admin.NoteIn(note="Private staff observation about billing"), support)
+        entry = await db.audit_log.find_one({"action": "user.note_added", "target_id": "target"})
+        assert entry["actor_id"] == "support"
+        assert "Private staff observation" not in str(entry)
+        assert (await db.user_notes.find_one({"user_id": "target"}))["note"] == "Private staff observation about billing"
+    run_isolated(scenario)
+
+
+def test_coach_directory_pages_past_100(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        boss = account("boss", staff_role="admin")
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        await db.coach_applications.insert_many([
+            {
+                "id": f"app-{index:03d}",
+                "user_id": f"u-{index:03d}",
+                "status": "pending",
+                "created_at": base + timedelta(seconds=index),
+            }
+            for index in range(205)
+        ])
+        seen: set[str] = set()
+        cursor = None
+        pages = 0
+        while True:
+            page = await admin.list_coach_directory("pending", 100, boss, cursor=cursor)
+            assert page["total"] == 205
+            ids = [row["application_id"] for row in page["coaches"]]
+            assert ids and seen.isdisjoint(ids)
+            seen.update(ids)
+            pages += 1
+            cursor = page["next_cursor"]
+            if not cursor:
+                break
+            assert pages < 5
+        assert pages == 3 and seen == {f"app-{index:03d}" for index in range(205)}
+        assert [row["application_id"] for row in (await admin.list_coach_directory("pending", 2, boss))["coaches"]] == ["app-000", "app-001"]
+
+        await db.users.insert_many([
+            {
+                **account(f"coach-{index:03d}", role="coach", coach_status="approved"),
+                "created_at": base + timedelta(seconds=index),
+                "suspended_at": None,
+            }
+            for index in range(205)
+        ])
+        approved_seen: set[str] = set()
+        cursor = None
+        pages = 0
+        while True:
+            page = await admin.list_coach_directory("approved", 100, boss, cursor=cursor)
+            assert page["total"] == 205
+            ids = [row["user_id"] for row in page["coaches"]]
+            assert ids and approved_seen.isdisjoint(ids)
+            approved_seen.update(ids)
+            pages += 1
+            cursor = page["next_cursor"]
+            if not cursor:
+                break
+            assert pages < 5
+        assert pages == 3 and approved_seen == {f"coach-{index:03d}" for index in range(205)}
+        # Newest first on the approved branch.
+        assert (await admin.list_coach_directory("approved", 1, boss))["coaches"][0]["user_id"] == "coach-204"
+    run_isolated(scenario)
+
+
+def test_failed_side_effect_is_partial_and_retryable(monkeypatch):
+    async def scenario(db):
+        import moderation
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(moderation, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        moderator = account("mod", staff_role="moderator")
+        await db.users.insert_many([account("author"), moderator])
+        await db.posts.insert_one({"id": "p1", "author_id": "author", "content": "Take 10x the dose", "status": "active"})
+        await db.reports.insert_one({
+            "id": "r-partial", "status": "open", "reason": "dangerous_advice", "target_type": "post",
+            "target_id": "p1", "reported_user_id": "author", "reporter_id": "mod",
+            "content_snapshot": "Take 10x the dose", "created_at": datetime.now(timezone.utc),
+        })
+
+        async def boom(*_args, **_kwargs):
+            raise RuntimeError("storage down: Take 10x the dose")
+
+        monkeypatch.setattr(admin.moderation, "remove_content", boom)
+        resolved = await admin.review_report(
+            "r-partial", admin.ReportReviewIn(resolution="content_removed", note="Unsafe dosing advice"), moderator,
+        )
+        assert resolved["status"] == "resolved" and resolved["resolution_status"] == "partial"
+        assert resolved["side_effect_error"] == "content_removal_failed"
+        stored = await db.reports.find_one({"id": "r-partial"})
+        assert stored["resolution_status"] == "partial"
+        assert "storage down" not in str(stored) and "Take 10x the dose" not in str({
+            key: stored[key] for key in stored if key != "content_snapshot"
+        })
+        audit = await db.audit_log.find_one({"action": "report.content_removed"})
+        assert audit["actor_id"] == "mod" and audit["metadata"]["report_id"] == "r-partial"
+        assert audit["metadata"]["from"] == "open" and audit["metadata"]["to"] == "content_removed"
+        assert "Take 10x the dose" not in str(audit)
+        assert (await db.posts.find_one({"id": "p1"}))["status"] == "active"
+        assert await db.notifications.count_documents({"type": "moderation_action"}) == 0
+
+        async def remove(target_type, target_id, *, actor):
+            await db.posts.update_one({"id": target_id}, {"$set": {"status": "deleted"}})
+            return True
+
+        monkeypatch.setattr(admin.moderation, "remove_content", remove)
+        retried = await admin.retry_report_side_effect("r-partial", moderator)
+        assert retried["resolution_status"] == "complete" and retried["side_effect_error"] is None
+        assert (await db.posts.find_one({"id": "p1"}))["status"] == "deleted"
+        assert await db.notifications.count_documents({"user_id": "author", "type": "moderation_action"}) == 1
+        retry_audit = await db.audit_log.find_one({"action": "report.side_effect_retried"})
+        assert retry_audit["metadata"]["from"] == "partial" and retry_audit["metadata"]["to"] == "complete"
+        assert "Take 10x the dose" not in str(retry_audit)
+        with pytest.raises(HTTPException) as done:
+            await admin.retry_report_side_effect("r-partial", moderator)
+        assert done.value.status_code == 409
+        assert await db.notifications.count_documents({"user_id": "author", "type": "moderation_action"}) == 1
+    run_isolated(scenario)

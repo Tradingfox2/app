@@ -265,7 +265,14 @@ async def update_for_staff(ticket_id: str, body: TicketPatchIn, actor: dict) -> 
             updates["assignee_id"] = assignee_id
     if updates:
         updates["updated_at"] = now()
-        await db.tickets.update_one({"id": ticket_id}, {"$set": updates})
+        # Match the status and assignee we just read. A second writer loses
+        # instead of recording a from/to pair that is already stale.
+        claimed = await db.tickets.update_one(
+            {"id": ticket_id, "status": ticket["status"], "assignee_id": ticket.get("assignee_id")},
+            {"$set": updates},
+        )
+        if claimed.modified_count != 1:
+            raise HTTPException(409, "Ticket changed while you were editing it")
         if "status" in updates:
             await staff.audit(
                 actor, "ticket.status_changed", target_type="ticket", target_id=ticket_id,

@@ -248,5 +248,45 @@ Acceptance criteria are what a later change has to prove. Items already done on 
 - No new staff permission strings.
 - No SQL migration. New indexes are created in the existing Mongo lifespan hook.
 - No weakening of route checks to make a tab easier to open.
-- No claim that the console is legally compliant.
-- Coach applications remain capped at 100 with an honest total.
+- No claim that the console is legally compliant. The 24 hour queue highlight is a product target, not a legal SLA. Coach paging is described in Phase 2.
+
+## Phase 2
+
+Date: 2026-10-09. Continues on `cursor/admin-console-audit-9d72` after `c46d88d`.
+
+### What changed
+
+- **Coaches.** `GET /admin/coaches` pages with the same opaque cursor as the other queues. Pending and rejected walk `created_at` ascending. Approved and suspended walk `created_at` descending. The cursor is taken from the sorted document, not the joined row. The response stays `{coaches, total, next_cursor}`. A bare array is still accepted by `staffPage()` so the management fixture keeps working. Index: `coach_applications (status, created_at, id)`.
+- **Ticket audit.** Status and assignee changes were already `ticket.status_changed` and `ticket.assignee_changed`. Staff replies now write `ticket.replied` with actor, ticket id, message id, from/to status (the status at send time), and `has_attachment`. The reply body is not copied. A ticket update matches `{id, status, assignee_id}`. A lost race is 409 and writes no audit row.
+- **Report side effects.** The claim still sets `status=resolved` before removal, suspension, or the notice. `resolution_status` starts as `partial` with `side_effect_error=pending`. The `report.{resolution}` audit row is written before the side effect. A thrown side effect stores a stable code (`content_removal_failed`, `suspension_failed`, `notice_failed`, `side_effect_failed`), not the exception text. `POST /admin/reports/{id}/retry-side-effect` (`reports.resolve`) runs the same idempotent path. A second retry after `complete` is 409. The audit action is `report.side_effect_retried` with from `partial` to `complete` or `partial`. Removal no-ops when the target is gone, suspension is skipped when `suspended_at` is set, and the notice is skipped when a `moderation_action` notification already exists for that report.
+- **Staff notes.** `user.note_added` was already written without the note text. A test now locks that.
+- **Accounting.** A read that stops at the row cap, or a mix of readable and unreadable rows, is `state: incomplete` with `reason: row_cap` or `malformed_rows` and the totals that were actually read. A collection that fails to load stays `unavailable`. Rows that store no amounts stay `recorded` with `amounts_stored: false`. Currencies are still never added. The panel groups Collected, Deductions, and Liabilities (owed to coaches, commissions pending, referral rewards pending). Paid commissions and paid referral rewards sit under Recorded payouts. Each recorded bucket says Recorded. Incomplete buckets say the totals are only the rows that were read.
+- **Queue age.** `ADMIN_QUEUE_TARGET_HOURS` is 24 in `frontend/src/components/admin/queue-age.ts`. It is a product target for highlighting, not a legal SLA. The unassigned priority row shows `oldest_unassigned_ticket_at`. The reports tab shows `oldest_open_report_at`. Overdue rows use the error color, not chartreuse.
+- **Console structure.** `frontend/staff/index.tsx` is the shell: header, tab list, and one mounted hook. Reports, users, support, audit, memberships, communities, coaches, and staff roles live under `frontend/src/components/admin/`. Shared pieces: `QueueList`, `FilterBar`, `DetailPanel`, `ConfirmAction`, `SectionState`, `PageFooter`. Test ids are unchanged. Existing one-click resolve, suspend, and approve actions stay one click. The confirm dialog is the retry for a partial report. Duplicate clicks are ignored by a synchronous busy lock, and the buttons disable while that lock is held.
+- **Filters.** Web address-bar keys: `tab`, `reportStatus`, `reportType`, `coach`, `join`, `ticketStatus`, `unassigned`, `userStatus`, `q`, `tq`, `actor`, `action`, `target`, `from`, `to`. `history.replaceState` updates the current entry. User search, ticket search, and audit fields debounce at 300ms. In-flight report, user, and audit reads abort, and a generation counter drops a late response. Mutations refresh overview counts and the audit page. Each panel has a last-updated line and its own retry.
+- **Keyboard and layout.** Queue controls use button roles and accessible names. Opening a ticket moves focus to Back. Closing it returns focus to that ticket. The retry confirm control takes focus when it opens. Web focus uses a text-colored ring. Below 720px the header wraps. Cards and inputs stay within the viewport.
+- **Lint.** `frontend/app/community/[id]/manage.tsx` types the insight chips as `readonly (readonly [keyof CommunityInsights, string])[]`.
+
+### API changes
+
+| Method | Path | Change |
+| --- | --- | --- |
+| GET | `/admin/coaches` | Query `cursor`. Same `{coaches, total, next_cursor}` envelope, now paged past 100. |
+| POST | `/admin/reports/{id}/retry-side-effect` | New. `reports.resolve`. 409 unless the report is resolved and `resolution_status` is `partial`. |
+| PATCH | `/admin/reports/{id}` | Response may include `resolution_status` (`partial` or `complete`) and `side_effect_error`. |
+| PATCH | `/admin/tickets/{id}` | 409 when status or assignee changed since the read. Audit only after the update matches. |
+| POST | `/admin/tickets/{id}/messages` | Also writes `ticket.replied`. Response body is unchanged. |
+| GET | `/admin/accounting/summary` | Sections may be `state: incomplete` with `reason` `row_cap` or `malformed_rows`. |
+
+### Remaining risks
+
+- Free-text `q`, `tq`, and `actor` are written into the address bar, so an email can sit in browser history on a shared machine.
+- `public.reports` in `supabase/migrations/003_community_social.sql` has no `resolution_status` column. Reports are stored in Mongo. The SQL file is a mirror contract and is not written by this app.
+- A live two-connection race is not in the suite. The lost-claim and lost-ticket tests force `modified_count == 0`.
+- Confirm-before-act covers the side-effect retry. Resolve, suspend, approve, and membership review stay one click so the existing specs keep their single press. The busy lock is what blocks a double submit.
+- Coach review is still an unconditional update on the application. The directory cursor does not make that review conditional.
+- `analytics.viewed` is still written on each analytics view.
+- A failed request is still not an audit row. The action name is the recorded outcome.
+- The 24 hour highlight is a product target, not a contractual SLA.
+- Accounting totals marked incomplete are the rows read before the cap or the rows that parsed. They are not a complete-period figure.
+- Subscription plan amounts stay next to the liability group as “last amount on file”. They are not added into owed-to-coaches.

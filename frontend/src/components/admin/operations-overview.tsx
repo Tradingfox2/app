@@ -3,19 +3,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
 import type { AdminOverview, HealthReport } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
+import { ADMIN_QUEUE_TARGET_HOURS, agePhrase, isOverdue } from "./queue-age";
 
 type Translate = (source: string, values?: Record<string, string | number>) => string;
 type FormatNumber = (value: number) => string;
-
-function agePhrase(iso: string, t: Translate): string {
-  const elapsed = Date.now() - new Date(iso).getTime();
-  const minutes = Math.max(0, Math.floor(elapsed / 60_000));
-  if (minutes < 1) return t("Just now");
-  if (minutes < 60) return t("{n}m ago", { n: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return t("{n}h ago", { n: hours });
-  return t("{n}d ago", { n: Math.floor(hours / 24) });
-}
 
 function Metric({
   value, label, hint, onPress, testID,
@@ -96,6 +87,10 @@ export function OperationsOverview({
         ? t("The health check ran and Mongo did not answer.")
         : t("The health check did not succeed, so this is not shown as healthy.");
   const oldestReport = overview.queues.oldest_open_report_at;
+  const oldestTicket = overview.queues.oldest_unassigned_ticket_at;
+  const reportOverdue = isOverdue(oldestReport);
+  const ticketOverdue = isOverdue(oldestTicket);
+  const overdueNote = t("Past the {hours}h target.", { hours: ADMIN_QUEUE_TARGET_HOURS });
   const stockHint = t("Active communities on the platform (not a 24h count).");
   const activityHint = t("Counts in the last 24 hours.");
   const sectionError = [sectionErrors.reports, sectionErrors.users, sectionErrors.audit].filter(Boolean).join(" ");
@@ -160,21 +155,24 @@ export function OperationsOverview({
 
       <Text style={styles.section}>{t("Priority work queue")}</Text>
       <View style={styles.queue}>
-        <Affordance accessibilityRole="button" testID="admin-priority-reports" onPress={onOpenReports} style={styles.queueRow}>
-          <Ionicons name="flag-outline" size={18} color={colors.text} />
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Reports awaiting review")} testID="admin-priority-reports" onPress={onOpenReports} style={[styles.queueRow, reportOverdue && styles.overdue]}>
+          <Ionicons name="flag-outline" size={18} color={reportOverdue ? colors.error : colors.text} />
           <View style={styles.queueCopy}>
             <Text style={styles.name}>{t("Reports awaiting review")}</Text>
             <Text style={styles.meta}>{t("Sorted by policy urgency, then waiting time.")}</Text>
             {oldestReport ? <Text style={styles.meta}>{t("Oldest report opened {age}.", { age: agePhrase(oldestReport, t) })}</Text> : null}
+            {reportOverdue ? <Text style={styles.overdueText}>{overdueNote}</Text> : null}
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
         </Affordance>
-        <Affordance accessibilityRole="button" testID="admin-priority-unassigned" onPress={onOpenUnassigned} style={styles.queueRow}>
-          <Ionicons name="chatbubbles-outline" size={18} color={colors.text} />
+        <Affordance accessibilityRole="button" accessibilityLabel={t("Unassigned support tickets")} testID="admin-priority-unassigned" onPress={onOpenUnassigned} style={[styles.queueRow, ticketOverdue && styles.overdue]}>
+          <Ionicons name="chatbubbles-outline" size={18} color={ticketOverdue ? colors.error : colors.text} />
           <View style={styles.queueCopy}>
             <Text style={styles.name}>{t("Unassigned support tickets")}</Text>
             <Text style={styles.meta}>{t("Assignment, status, last update and next action.")}</Text>
             {typeof unassigned === "number" ? <Text style={styles.meta}>{t("{count} open and unassigned.", { count: formatNumber(unassigned) })}</Text> : null}
+            {oldestTicket ? <Text style={styles.meta} testID="admin-priority-unassigned-age">{t("Oldest unassigned ticket opened {age}.", { age: agePhrase(oldestTicket, t) })}</Text> : null}
+            {ticketOverdue ? <Text style={styles.overdueText}>{overdueNote}</Text> : null}
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
         </Affordance>
@@ -251,6 +249,8 @@ const styles = StyleSheet.create({
   link: { color: colors.brand, fontSize: 12, fontWeight: "800" },
   queue: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.bg },
   queueRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  overdue: { backgroundColor: colors.errorWash, borderBottomColor: colors.error },
+  overdueText: { color: colors.error, fontSize: 12, fontWeight: "800" },
   queueCopy: { flex: 1 },
   name: { color: colors.text, fontWeight: "800" },
   meta: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },

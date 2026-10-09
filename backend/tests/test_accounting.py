@@ -159,6 +159,32 @@ def test_a_failed_collection_does_not_blank_the_report(monkeypatch):
         assert report["sections"]["owed_to_coaches"] == {"state": "unavailable"}
         assert "totals" not in report["sections"]["platform_fees"]
         paid = report["sections"]["commissions"]["paid"]
-        assert paid["state"] == "recorded" and paid["amounts_stored"] is False
-        assert "totals" not in paid
+        assert paid["state"] == "incomplete" and paid["reason"] == "malformed_rows"
+        assert paid["totals"] == [{"amount_cents": 100, "currency": "USD"}]
+        assert paid["incomplete_rows"] == 1
+    run_isolated(scenario)
+
+
+def test_a_capped_read_is_incomplete_and_currencies_stay_apart(monkeypatch):
+    import accounting
+
+    async def scenario(db):
+        monkeypatch.setattr(staff, "db", db)
+        monkeypatch.setattr(accounting, "_CAP", 2)
+        moment = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        await db.community_checkouts.insert_many([
+            {"id": "cs_usd", "status": "completed", "amount_cents": 1000, "currency": "usd", "updated_at": moment},
+            {"id": "cs_jpy", "status": "completed", "amount_cents": 500, "currency": "jpy", "updated_at": moment},
+            {"id": "cs_eur", "status": "completed", "amount_cents": 2500, "currency": "eur", "updated_at": moment},
+        ])
+        report = await accounting_summary(account("boss", staff_role="admin"), date(2026, 9, 1), date(2026, 9, 30))
+        gross = report["sections"]["gross_collected"]
+        assert gross["state"] == "incomplete" and gross["reason"] == "row_cap"
+        assert gross["amounts_stored"] is True
+        totals = {(row["currency"], row["amount_cents"]) for row in gross["totals"]}
+        assert len(totals) == len(gross["totals"])
+        assert len(totals) <= 2
+        assert not any(row["currency"] is None for row in gross["totals"])
+        # The third currency is past the cap, so it is not folded into the others.
+        assert len({row["currency"] for row in gross["totals"]}) == len(gross["totals"])
     run_isolated(scenario)

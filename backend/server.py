@@ -481,6 +481,7 @@ async def lifespan(app: FastAPI):
     await db.users.create_index([("created_at", -1), ("id", -1)])
     await db.users.create_index([("staff_role", 1), ("created_at", -1)])
     await db.coach_applications.create_index([("status", 1), ("created_at", 1)])
+    await db.coach_applications.create_index([("status", 1), ("created_at", 1), ("id", 1)])
     await db.community_members.create_index([("status", 1), ("created_at", 1)])
     await db.communities.create_index([("created_at", -1), ("id", -1)])
     await db.reports.create_index([("status", 1), ("created_at", 1), ("id", 1)])
