@@ -4,7 +4,8 @@ import { Affordance } from "@/src/press-affordance";
 import { api, type AnalyticsSummary } from "@/src/api";
 import { METRIC_GLOSSARY } from "@/src/analytics-locales";
 import { MetricGlossary } from "@/src/components/metric-glossary";
-import { colors, radius, spacing, type } from "@/src/theme";
+import { radius, spacing } from "@/src/theme";
+import { staffColors as colors, staffFonts, staffType as type } from "./staff-theme";
 import { useI18n } from "@/src/i18n";
 
 const LABELS: Record<string, string> = {
@@ -116,7 +117,7 @@ const styles = StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metric: { minWidth: 104, flexGrow: 1, padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface2 },
-  metricValue: { color: colors.text, fontSize: 22, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  metricValue: { color: colors.text, fontFamily: staffFonts.display, fontSize: 28, lineHeight: 32, fontVariant: ["tabular-nums"] },
   metricLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   action: { minHeight: 40, alignSelf: "flex-start", justifyContent: "center", paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, marginTop: spacing.sm },
   actionText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },

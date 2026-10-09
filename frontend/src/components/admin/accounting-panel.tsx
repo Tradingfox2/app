@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { api, type AccountingBucket, type AccountingCounts, type AccountingLine, type AccountingSummary } from "@/src/api";
-import { colors, radius, spacing, type } from "@/src/theme";
+import { radius, spacing } from "@/src/theme";
+import { staffColors as colors, staffFonts, staffType as type } from "./staff-theme";
 import { useI18n } from "@/src/i18n";
 
 const DAYS = [7, 30, 90] as const;
@@ -271,7 +272,7 @@ export function AccountingPanel() {
 const styles = StyleSheet.create({
   section: { ...type.section, marginTop: spacing.lg },
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
-  figure: { color: colors.text, fontSize: 18, fontWeight: "900", fontVariant: ["tabular-nums"], marginTop: spacing.xs },
+  figure: { color: colors.text, fontFamily: staffFonts.display, fontSize: 22, lineHeight: 26, fontVariant: ["tabular-nums"], marginTop: spacing.xs },
   filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
   chip: { minHeight: 36, justifyContent: "center", paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface },
   chipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },

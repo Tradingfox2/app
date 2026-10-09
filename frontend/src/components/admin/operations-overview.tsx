@@ -2,7 +2,8 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
 import type { AdminOverview, HealthReport } from "@/src/api";
-import { colors, radius, spacing, type } from "@/src/theme";
+import { radius, spacing } from "@/src/theme";
+import { staffColors as colors, staffFonts, staffType } from "./staff-theme";
 import { ADMIN_QUEUE_TARGET_HOURS, agePhrase, isOverdue } from "./queue-age";
 
 type Translate = (source: string, values?: Record<string, string | number>) => string;
@@ -39,6 +40,41 @@ function Metric({
     );
   }
   return <View accessibilityHint={hint} style={styles.metric} testID={testID}>{body}</View>;
+}
+
+function WorkMix({
+  reports, tickets, applications, total, t, formatNumber,
+}: {
+  reports: number;
+  tickets: number;
+  applications: number;
+  total: number;
+  t: Translate;
+  formatNumber: FormatNumber;
+}) {
+  const parts = [
+    { key: "reports", label: t("Open reports"), value: reports, color: colors.error },
+    { key: "tickets", label: t("Needs reply"), value: tickets, color: colors.warning },
+    { key: "applications", label: t("Pending applications"), value: applications, color: colors.info },
+  ];
+  if (total <= 0) {
+    return <Text style={styles.hint}>{t("No open work in these queues.")}</Text>;
+  }
+  return (
+    <View testID="admin-work-mix" accessibilityLabel={t("Open work, right now")}>
+      <Text style={styles.mixLabel}>{t("Open work, right now")}</Text>
+      <View style={styles.mixTrack}>
+        {parts.map(part => part.value > 0 ? (
+          <View key={part.key} style={{ flexGrow: part.value, flexBasis: 0, height: 8, backgroundColor: part.color }} />
+        ) : null)}
+      </View>
+      <View style={styles.mixLegend}>
+        {parts.map(part => (
+          <Text key={part.key} style={styles.mixItem}>{part.label} · {formatNumber(part.value)}</Text>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 export function OperationsOverview({
@@ -95,9 +131,19 @@ export function OperationsOverview({
   const activityHint = t("Counts in the last 24 hours.");
   const sectionError = [sectionErrors.reports, sectionErrors.users, sectionErrors.audit].filter(Boolean).join(" ");
 
+  const mixTotal = overview.queues.open_reports + openTickets + applications;
+
   return (
     <>
       <Text style={styles.section}>{t("QUEUES")}</Text>
+      <WorkMix
+        reports={overview.queues.open_reports}
+        tickets={openTickets}
+        applications={applications}
+        total={mixTotal}
+        t={t}
+        formatNumber={formatNumber}
+      />
       {overview.generated_at ? (
         <Text style={styles.hint}>{t("Updated {time}.", { time: formatDate(overview.generated_at, { dateStyle: "short", timeStyle: "short" }) })}</Text>
       ) : (
@@ -237,17 +283,21 @@ export function OperationsOverview({
 }
 
 const styles = StyleSheet.create({
-  section: { ...type.section, marginTop: spacing.lg },
-  hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
+  section: { ...staffType.section, marginTop: spacing.lg },
+  hint: { color: colors.textMuted, fontFamily: staffFonts.text, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
   error: { color: colors.error, marginTop: spacing.sm },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  metric: { minWidth: 148, flexGrow: 1, flexBasis: "46%", padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surface },
-  metricValue: { color: colors.text, fontSize: 22, fontWeight: "900", fontVariant: ["tabular-nums"] },
-  metricLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  metricHint: { color: colors.textDim, fontSize: 10, lineHeight: 14, marginTop: 4 },
+  metric: { minWidth: 148, flexGrow: 1, flexBasis: "46%", padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surfaceRaised },
+  metricValue: { color: colors.text, fontFamily: staffFonts.display, fontSize: 32, lineHeight: 36, fontVariant: ["tabular-nums"] },
+  metricLabel: { color: colors.textMuted, fontFamily: staffFonts.text, fontSize: 12, marginTop: 2 },
+  metricHint: { color: colors.textDim, fontFamily: staffFonts.text, fontSize: 11, lineHeight: 15, marginTop: 4 },
+  mixLabel: { color: colors.textMuted, fontFamily: staffFonts.text, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.xs },
+  mixTrack: { flexDirection: "row", height: 8, borderRadius: radius.pill, overflow: "hidden", backgroundColor: colors.surface3, gap: 2 },
+  mixLegend: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, marginTop: spacing.xs },
+  mixItem: { color: colors.text, fontFamily: staffFonts.text, fontSize: 12 },
   inline: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, marginTop: spacing.sm },
   link: { color: colors.brand, fontSize: 12, fontWeight: "800" },
-  queue: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.bg },
+  queue: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface, overflow: "hidden" },
   queueRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   overdue: { backgroundColor: colors.errorWash, borderBottomColor: colors.error },
   overdueText: { color: colors.error, fontSize: 12, fontWeight: "800" },

@@ -149,7 +149,25 @@
       "alt": "Focused male athlete in dark gym setting"
     }
   },
+  "staff_console": {
+    "direction": "IronFlow Precision Performance",
+    "scope": "frontend/staff and frontend/src/components/admin only. Member screens keep frontend/src/theme.ts.",
+    "canonical_brand": "#D6E35A",
+    "ground": "#101418",
+    "brand_decision": "color.brand #D4FF00 in this file is not what the app renders. theme.ts and the staff console both use #D6E35A. Chartreuse is only the primary action, the selected nav item, and key queue links. The ground stays in the #101418 family. Do not reintroduce #D4FF00 or paint chrome with the accent.",
+    "typography": {
+      "display": "Barlow Condensed, OFL, bundled at frontend/assets/fonts",
+      "text": "Barlow, OFL, bundled at frontend/assets/fonts",
+      "not_used": "Satoshi is a commercial Fontshare face and is not licensed in this repository. Inter is the member web fallback only."
+    },
+    "shadows": "Floating chrome only: sidebar, confirm dialog, sign-in card. Queues, tables, and accounting rows stay flat.",
+    "glass": "Not used on tables, accounting figures, or moderation detail.",
+    "motion": "180ms ironflow-rise on the main pane and sign-in. prefers-reduced-motion removes the travel.",
+    "imagery_3d": "No remote photos and no WebGL. Sign-in uses an inline SVG mark on a local gradient.",
+    "navigation": "Grouped sidebar from 1080px. Below that, one horizontal rail of the same admin-tab test ids. No extra click to reach a section."
+  },
   "instructions_to_main_agent": [
+    "Staff console: follow staff_console, not the zero-shadow, Satoshi, or #D4FF00 rules. Those older rules describe the member product direction and must not be reapplied to frontend/staff.",
     "Design constraint: Use '7 Dark-First Utility' personality. STRICTLY adhere to the electric lime (#D4FF00) and deep charcoal (#121212) palette. NO blues, NO purples.",
     "Typography: Use Barlow Condensed for all display/metric headers to ensure a technical, performance-oriented aesthetic. Use Satoshi for standard UI readability.",
     "Layout constraint: Enforce strict modular card layouts with zero-shadow (shadow_tier 0). Use borders (#2C2C2E) to separate data cards.",
