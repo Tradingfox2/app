@@ -8,6 +8,14 @@ export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 export const REPORT_TARGET_TYPES = ["post", "comment", "message", "direct_message", "user", "community"] as const;
 export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
 
+/** Desktop groups. The same tab ids stay in the URL and in `admin-tab-*` test ids. */
+export const NAV_GROUPS: { id: string; label: string; ids: Tab[] }[] = [
+  { id: "operations", label: "Operations", ids: ["overview", "reports", "support"] },
+  { id: "people", label: "People", ids: ["users", "coaches", "joins", "communities"] },
+  { id: "business", label: "Business", ids: ["analytics", "accounting"] },
+  { id: "administration", label: "Administration", ids: ["team", "audit"] },
+];
+
 export const NAV: { id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: "overview", label: "OVERVIEW", icon: "grid-outline" },
   { id: "analytics", label: "ANALYTICS", icon: "pulse-outline" },

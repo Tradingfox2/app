@@ -51,5 +51,5 @@ export function PageFooter({
 const styles = StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
   more: { alignSelf: "flex-start", marginTop: spacing.sm, minHeight: 36, justifyContent: "center" },
-  moreText: { color: colors.brand, fontSize: 12, fontWeight: "800" },
+  moreText: { color: colors.text, fontSize: 12, fontWeight: "800" },
 });
