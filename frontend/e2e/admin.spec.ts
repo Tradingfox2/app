@@ -1,5 +1,10 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+const previewUrl = (process.env.PREVIEW_URL ?? "").trim().replace(/\/+$/, "");
+const memberURL = previewUrl || "http://localhost:8082";
+const staffURL = (process.env.STAFF_URL ?? "").trim() || "http://localhost:8083";
+const staffUnavailable = Boolean(previewUrl) && !(process.env.STAFF_URL ?? "").trim();
+
 // Synthetic fixtures only; every /api call is intercepted.
 const support = { id: "staff-1", full_name: "Support Sam", email: "sam@example.invalid", role: "athlete", coach_status: "not_applied", preferred_locale: "en", avatar_url: null, staff_role: "support" };
 const moderator = { ...support, staff_role: "moderator" };
@@ -34,19 +39,100 @@ async function fixtures(page: Page, staff: typeof support | null, override?: (ro
   });
 }
 
-test("non-staff users cannot open the console", async ({ page }) => {
-  await fixtures(page, null);
-  await page.goto("/admin");
-  await expect(page.getByText("This console is for the IronFlow staff team.", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("admin-tab-users")).toHaveCount(0);
-  await page.goto("/profile");
-  await page.getByTestId("open-settings").click();
-  await expect(page.getByTestId("settings-screen").getByTestId("open-admin-console")).toHaveCount(0);
+test.describe("member app", () => {
+  test.use({ baseURL: memberURL });
+
+  test("has no staff console", async ({ page }) => {
+    await fixtures(page, support);
+    await page.goto("/admin");
+    await expect(page.getByTestId("admin-console")).toHaveCount(0);
+    await expect(page.getByTestId("admin-tab-users")).toHaveCount(0);
+    await expect(page.getByText("This console is for the IronFlow staff team.", { exact: true })).toHaveCount(0);
+    await page.goto("/profile");
+    await page.getByTestId("open-settings").click();
+    await expect(page.getByTestId("settings-screen").getByTestId("open-admin-console")).toHaveCount(0);
+  });
 });
+
+test.describe("staff site", () => {
+  test.skip(staffUnavailable, "The member preview is not the staff site.");
+  test.use({ baseURL: staffURL });
+
+  test("signed-out visitors see sign-in and no console", async ({ page }) => {
+    await page.route("**/api/**", route => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+    await page.goto("/");
+    await expect(page.getByTestId("staff-auth")).toBeVisible();
+    await expect(page.getByTestId("admin-tab-users")).toHaveCount(0);
+    await expect(page.getByTestId("admin-console")).toHaveCount(0);
+  });
+
+  test.describe("french copy", () => {
+    test.use({ locale: "fr-FR" });
+
+    test("shows the French staff sign-in", async ({ page }) => {
+      await page.route("**/api/**", route => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+      await page.goto("/auth");
+      await expect(page.getByText("Connexion équipe", { exact: true })).toBeVisible();
+      await expect(page.getByText("Connectez-vous avec votre compte IronFlow. Le support, le modérateur et l’admin ouvrent la console.", { exact: true })).toBeVisible();
+    });
+
+    test("shows French accounting labels and the stored yen amount", async ({ page }) => {
+      const empty = { state: "none_in_period" as const };
+      await fixtures(page, { ...support, staff_role: "admin", preferred_locale: "fr" }, async (route, path) => {
+        if (path === "/admin/overview") {
+          await route.fulfill({ json: {
+            users: { total: 1, new_7d: 0, suspended: 0, coaches: 0 },
+            queues: { open_reports: 0, pending_coach_applications: 0, pending_memberships: 0, open_tickets: 0, pending_tickets: 0 },
+            activity: { workouts_24h: 0, posts_24h: 0, messages_24h: 0, communities: 0 },
+            permissions: [...PERMISSIONS.support, "accounting.read"],
+            staff_role: "admin",
+          } });
+          return true;
+        }
+        if (path === "/admin/accounting/summary") {
+          await route.fulfill({ json: {
+            period: { from: "2026-09-01", to: "2026-09-30" },
+            generated_at: "2026-09-30T12:00:00Z",
+            sections: {
+              gross_collected: empty, platform_fees: empty, owed_to_coaches: empty, refunds: empty, chargebacks: empty,
+              commissions: { pending: empty, paid: empty, clawed_back: empty },
+              referrals: { pending: empty, paid: empty },
+              subscription_amounts: {
+                stripe: { pro_monthly: empty, pro_yearly: empty, other: empty },
+                revenuecat: { pro_monthly: empty, pro_yearly: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 500000, currency: "JPY" }] }, other: empty },
+              },
+              gym_partner_plans: empty,
+              active_subscriptions: empty,
+            },
+            recent_lines: [],
+          } });
+          return true;
+        }
+        return false;
+      });
+      await page.goto("/");
+      await page.getByTestId("admin-tab-accounting").click();
+      await expect(page.getByText("Abonnements enregistrés — App Store et Google Play", { exact: true })).toBeVisible();
+      await expect(page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly")).toContainText("JPY");
+      await expect(page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly")).toContainText("500");
+      await expect(page.getByTestId("accounting-section-gym_partner_plans")).toContainText("Aucun montant d'abonnement salle n'est enregistré.");
+      await expect(page.getByTestId("accounting-panel")).not.toContainText("€");
+    });
+  });
+
+  test("non-staff users cannot open the console", async ({ page }) => {
+    await fixtures(page, null);
+    await page.goto("/");
+    await expect(page.getByText("This console is for the IronFlow staff team.", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("admin-tab-users")).toHaveCount(0);
+    await expect(page.getByTestId("admin-tab-accounting")).toHaveCount(0);
+    await expect(page.getByTestId("accounting-panel")).toHaveCount(0);
+    await expect(page.getByTestId("admin-console")).toHaveCount(0);
+  });
 
 test("support sees the queue read-only and cannot suspend", async ({ page }) => {
   await fixtures(page, support);
-  await page.goto("/admin");
+  await page.goto("/");
   await expect(page.getByText("128", { exact: true })).toBeVisible();
   await page.getByTestId("admin-tab-reports").click();
   await expect(page.getByTestId("report-age-rep-1")).toContainText(/Opened \d+d ago/);
@@ -61,6 +147,7 @@ test("support sees the queue read-only and cannot suspend", async ({ page }) => 
   await expect(page.getByTestId("admin-suspend")).toHaveCount(0);
   await expect(page.getByTestId("admin-role-admin")).toHaveCount(0);
   await expect(page.getByTestId("admin-tab-analytics")).toHaveCount(0);
+  await expect(page.getByTestId("admin-tab-accounting")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
@@ -75,7 +162,7 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
     if (path === `/admin/users/${target.id}` && suspended) { await route.fulfill({ json: { ...target, ...suspended, stats: { workouts: 12, posts: 3, communities: 1, reports_against: 1 }, notes: [] } }); return true; }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-reports").click();
   await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
   await page.getByTestId("resolve-content_removed-rep-1").click();
@@ -117,7 +204,7 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
     }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await expect(page.getByTestId("admin-tab-analytics")).toBeVisible();
   await expect(page.getByTestId("admin-tab-support")).toBeVisible();
   const labels = (await page.getByRole("button").allTextContents()).map(text => text.replace(/\s+/g, " ").trim());
@@ -137,7 +224,7 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
 
 test("audit tab shows who did what", async ({ page }) => {
   await fixtures(page, moderator);
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-audit").click();
   await expect(page.getByText("user.suspended", { exact: true })).toBeVisible();
   await expect(page.getByText(`${support.email} → user:${target.id}`, { exact: true })).toBeVisible();
@@ -175,7 +262,7 @@ test("support queue shows an empty list and a load error", async ({ page }) => {
     }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-support").click();
   await expect(page.getByText("The support queue is empty.", { exact: true })).toBeVisible();
 
@@ -230,7 +317,7 @@ test("support saves status, replies, and sees pending in the queue", async ({ pa
     }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-support").click();
   await expect(page.getByText("Cannot log in", { exact: true })).toBeVisible();
   await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Needs reply");
@@ -262,7 +349,7 @@ test("support saves status, replies, and sees pending in the queue", async ({ pa
 
 test("overview keeps community stock out of the last 24 hours", async ({ page }) => {
   await fixtures(page, support);
-  await page.goto("/admin");
+  await page.goto("/");
   await expect(page.getByTestId("admin-section-stock")).toBeVisible();
   await expect(page.getByTestId("admin-stock-communities")).toContainText("Total communities");
   await expect(page.getByTestId("admin-stock-communities")).toContainText("Active communities on the platform (not a 24h count).");
@@ -310,7 +397,7 @@ test("memberships and community rows use waiting copy", async ({ page }) => {
     }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await expect(page.getByTestId("admin-tab-joins")).toContainText("Memberships");
   await page.getByTestId("admin-tab-joins").click();
   await expect(page.getByTestId("membership-waiting-hint")).toHaveText("Accept or decline a waiting request. Paid communities still need verified billing.");
@@ -350,7 +437,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-support").click();
   await expect(page.getByText("Billing question", { exact: true })).toBeVisible();
   await page.getByTestId("ticket-filter-unassigned").click();
@@ -359,13 +446,55 @@ test("support queue can hide assigned tickets", async ({ page }) => {
   await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Unassigned");
 });
 
-test("the Profile entry point actually opens the console", async ({ page }) => {
-  await fixtures(page, support);
-  await page.goto("/profile");
-  await page.getByTestId("open-settings").click();
-  await page.getByTestId("open-admin-console").click();
-  // Regression guard: app/admin/index.tsx is served at /admin, so pushing
-  // "/admin/index" lands on the not-found screen instead.
-  await expect(page.getByTestId("admin-tab-users")).toBeVisible();
-  await expect(page.getByText("Page could not be found.", { exact: true })).toHaveCount(0);
+  test("an admin sees stored currencies on the accounting summary", async ({ page }) => {
+    const empty = { state: "none_in_period" as const };
+    await fixtures(page, { ...support, staff_role: "admin" }, async (route, path) => {
+      if (path === "/admin/overview") {
+        await route.fulfill({ json: {
+          users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+          queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
+          activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+          permissions: [...PERMISSIONS.support, "accounting.read"],
+          staff_role: "admin",
+        } });
+        return true;
+      }
+      if (path === "/admin/accounting/summary") {
+        await route.fulfill({ json: {
+          period: { from: "2026-09-01", to: "2026-09-30" },
+          generated_at: "2026-09-30T12:00:00Z",
+          sections: {
+            gross_collected: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 1250, currency: "USD" }, { amount_cents: 500000, currency: "JPY" }] },
+            platform_fees: empty, owed_to_coaches: empty, refunds: empty, chargebacks: empty,
+            commissions: { pending: empty, paid: empty, clawed_back: empty },
+            referrals: { pending: empty, paid: empty },
+            subscription_amounts: {
+              stripe: { pro_monthly: empty, pro_yearly: empty, other: empty },
+              revenuecat: {
+                pro_monthly: empty,
+                pro_yearly: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 500000, currency: "JPY" }] },
+                other: empty,
+              },
+            },
+            gym_partner_plans: empty,
+            active_subscriptions: empty,
+          },
+          recent_lines: [],
+        } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-accounting").click();
+    const gross = page.getByTestId("accounting-section-gross_collected");
+    await expect(gross).toContainText("$12.50");
+    await expect(gross).toContainText("¥500,000");
+    await expect(gross).not.toContainText("€");
+    const yearly = page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly");
+    await expect(yearly).toContainText("¥500,000");
+    await expect(yearly).not.toContainText("€");
+    await expect(page.getByTestId("accounting-section-gym_partner_plans")).toContainText("No gym plan amount is stored.");
+    await expect(page.getByTestId("accounting-section-commissions-clawed_back")).toContainText("Nothing in this period.");
+  });
 });

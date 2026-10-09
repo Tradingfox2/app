@@ -61,13 +61,14 @@ reconcile when connected. Dormant until `CENTRIFUGO_URL` and
 - `frontend/src/api.ts` is the **only** HTTP boundary. A backend capability is
   unreachable unless it has both a method there and a caller under
   `frontend/app/` or `frontend/src/`.
+- **Staff site (2026-10-02).** The staff console is a second Expo web export of `frontend/`, with routes in `frontend/staff/` (`_layout.tsx`, `auth.tsx`, `index.tsx`). `IRONFLOW_WEB_TARGET=staff` in `frontend/app.config.js` sets the `expo-router` root to `./staff`. It reuses `src/api.ts`, `src/auth-context.tsx`, `src/i18n.tsx`, and `src/components/admin/*`. The member app has no `/admin` route and no Settings entry. `staff.require` on the existing `/api/admin/*` routes stays the gate, the bearer token stays in that origin's `localStorage`, and member routes import nothing from `staff/`. Callers of `api.ts` may also live under `frontend/staff/`.
 - Expo Router: `frontend/app/user/[id].tsx` is a leaf with no sibling
   directory. New user sub-screens must be static siblings
   (`user/connections.tsx`), never `user/[id]/*`.
-- **`expo-router`'s `typedRoutes` generator is unreliable here.** It emits
-  `/admin/index` for `app/admin/index.tsx` while the runtime serves `/admin`,
-  and lists non-routes such as `/../e2e/community.spec` as valid paths. Trust
-  the runtime; call sites carry a documented `as Href` cast.
+- **`expo-router`'s `typedRoutes` generator is unreliable here.** It has emitted
+  paths the runtime does not serve, and lists non-routes such as
+  `/../e2e/community.spec` as valid paths. Trust the runtime; call sites carry
+  a documented `as Href` cast.
 - Mentions are stored as `<@user_id>` tokens, never `@name`. Names are neither
   unique nor stable, and parsing them invites impersonation.
 - **Workout affordances (2026-10-01).** Session history is the Sessions segment
@@ -426,6 +427,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
   wearable_metrics write. No background location task.
 
 - **2026-10-01 — staff accounting:** `backend/accounting.py` owns `GET /admin/accounting/summary` (`accounting.read`, admin staff only). It reads `community_checkouts`, `billing_events`, `subscriptions`, `partner_ledger`, `referrals`, and `commissions` when that collection exists. Totals are `{amount_cents, currency}` in the stored currency, with no conversion and no zero filled in for a missing or empty window. A failed read does not blank the report. Opening it writes `audit_log` action `accounting.viewed`. The console tab mounts `AccountingPanel` only after it is chosen.
+- **2026-10-02 — staff accounting money coverage:** `accounting.summary` also returns `subscription_amounts.{stripe,revenuecat}.{pro_monthly,pro_yearly,other}` (last `subscriptions.amount_cents` on file, never summed across plans), `gym_partner_plans` (`gyms.billing.amount_cents`, current state, no period), and `commissions.clawed_back`. Every amount is the provider's minor-unit integer (Stripe raw; RevenueCat scaled by `revenuecat._EXPONENT`), so JPY is stored in yen; `AccountingPanel` divides by that same exponent table, never a fixed 100. Not stored, so not shown: refund amounts, Stripe/store fees, coach payouts already paid, gym reward value.
 - **Web:** `watchLocation` uses `navigator.geolocation` because Expo's web
   bridge emits the browser watch id, which does not match its subscriber id.
 

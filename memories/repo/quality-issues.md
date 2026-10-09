@@ -128,8 +128,10 @@ read that edge unconditionally. Grep all readers before adding a status field.
 `app/(tabs)/profile.tsx` pushed `/admin/index`, which the runtime serves at
 `/admin`, so the staff console button landed on "Unmatched Route". Two
 `/partner/index` pushes had the same defect. No test caught it because the
-admin specs navigate by URL rather than clicking the entry point. Regression
-test: `e2e/admin.spec.ts` "the Profile entry point actually opens the console".
+admin specs navigate by URL rather than clicking the entry point. The console
+later moved to the staff site, so the member regression is now
+`e2e/admin.spec.ts` "has no staff console" (no Settings entry, and `/admin`
+does not mount the console). Staff specs run against their own base URL.
 Fixed 2026-09-13.
 
 **Precedent:** an e2e suite that navigates by URL never exercises navigation.

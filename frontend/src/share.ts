@@ -20,7 +20,7 @@ export type ShareSheetResult = "shared" | "dismissed" | "unavailable";
  * Absolute https (or http, when explicitly configured) post URL.
  * Unset or non-http values fall back to `ironflow://post/{id}`.
  */
-function webOrigin(): string | null {
+export function webOrigin(): string | null {
   const raw = (process.env.EXPO_PUBLIC_WEB_ORIGIN || process.env.EXPO_PUBLIC_WEB_URL || "").trim();
   if (!raw) return null;
   const origin = raw.replace(/\/+$/, "");

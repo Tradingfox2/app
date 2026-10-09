@@ -40,7 +40,7 @@ def _when(row: dict, keys: tuple[str, ...]) -> datetime | None:
             return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     return None
 def _stripe_id(row: dict) -> str | None:
-    for key in ("stripe_id", "provider_subscription_id", "provider_payout_id", "subscription_id", "id"):
+    for key in ("stripe_id", "stripe_subscription_id", "provider_subscription_id", "provider_payout_id", "subscription_id", "id"):
         value = row.get(key)
         if isinstance(value, str) and value.startswith(_PREFIXES):
             return value
@@ -116,12 +116,18 @@ def _add(lines, rows, kind, when_keys, status_key, cents_keys, currency_key, *, 
             "cents": cents, "when": when.isoformat() if when else None,
             "status": status if isinstance(status, str) else None,
         })
+def _channel(row: dict) -> str | None:
+    """A missing provider is Stripe. RevenueCat is the store channel. Anything else is dropped."""
+    value = row.get("provider")
+    if value in (None, "stripe"):
+        return "stripe"
+    return "revenuecat" if value == "revenuecat" else None
 def _subs(rows: list[dict] | None, start: datetime, end: datetime) -> list[dict] | None:
     if rows is None:
         return None
     kept = []
     for row in rows:
-        if row.get("provider") not in (None, "stripe"):
+        if _channel(row) is None:
             continue
         begin = _when(row, ("current_period_start", "created_at"))
         finish = _when(row, ("current_period_end",))
@@ -140,6 +146,40 @@ def _counts(rows: list[dict] | None) -> dict:
         currency = _currency(row.get("currency"))
         groups[currency] = groups.get(currency, 0) + 1
     return {"state": "recorded", "counts": [{"currency": currency, "count": count} for currency, count in _sorted(groups)]}
+_PLAN_KEYS = ("pro_monthly", "pro_yearly", "other")
+def _plan_key(row: dict) -> str:
+    plan = row.get("plan")
+    return plan if plan in ("pro_monthly", "pro_yearly") else "other"
+def _by_plan(rows: list[dict]) -> dict:
+    grouped: dict[str, list[dict]] = {key: [] for key in _PLAN_KEYS}
+    for row in rows:
+        grouped[_plan_key(row)].append(row)
+    parse = lambda row: _positive(row, "amount_cents")
+    return {key: _totals(grouped[key], parse) for key in _PLAN_KEYS}
+def _subscription_amounts(rows: list[dict] | None) -> dict:
+    """Last amount on file, split by channel and plan. Plans are never added together."""
+    if rows is None:
+        blank = lambda: {key: dict(_DOWN) for key in _PLAN_KEYS}
+        return {"stripe": blank(), "revenuecat": blank()}
+    return {
+        "stripe": _by_plan([row for row in rows if _channel(row) == "stripe"]),
+        "revenuecat": _by_plan([row for row in rows if _channel(row) == "revenuecat"]),
+    }
+def _gym_amount(row: dict) -> tuple:
+    """Current gym Stripe amount. A row with no integer amount does not invent one."""
+    billing = row.get("billing")
+    if not isinstance(billing, dict) or "amount_cents" not in billing:
+        return ("skip", 0, None)
+    raw = billing.get("amount_cents")
+    if type(raw) is not int:
+        return ("bad", 0, None)
+    if raw <= 0:
+        return ("skip", 0, None)
+    return ("ok", raw, _currency(billing.get("currency")))
+def _clawed(rows, parse) -> dict:
+    if rows is None:
+        return dict(_DOWN)
+    return _totals([row for row in rows if row.get("status") == "clawed_back"], parse)
 def _split(rows, pending, paid, parse) -> dict:
     if rows is None:
         return {"pending": dict(_DOWN), "paid": dict(_DOWN)}
@@ -157,18 +197,24 @@ async def summary(start: datetime, end: datetime, start_day: date, end_day: date
     events = await _load("billing_events", _window(start, end, ("received_at",)))
     ledger = await _load("partner_ledger", _window(start, end, ("created_at", "updated_at", "occurred_at")))
     referrals = await _load("referrals", _window(start, end, ("activated_at", "created_at")))
-    commissions = await _load("commissions", _window(start, end, ("paid_at", "created_at", "updated_at")))
+    commissions = await _load("commissions", _window(start, end, ("paid_at", "created_at", "updated_at", "clawed_back_at")))
     subscriptions = _subs(await _load("subscriptions", {"status": {"$in": ["active", "trialing"]}}), start, end)
+    gyms = await _load("gyms", {"billing.amount_cents": {"$exists": True}})
     lines: list[dict] = []
     _add(lines, checkouts, "checkout", ("updated_at", "created_at"), "status", ("amount_cents",), "currency")
     _add(lines, events, "billing_event", ("received_at",), "type", ("amount_cents", "amount"), "currency")
     _add(lines, ledger, "partner_ledger", ("created_at", "updated_at", "occurred_at"), "status", ("net_cents",), "currency")
-    _add(lines, commissions, "commission", ("paid_at", "created_at", "updated_at"), "status", ("amount_cents", "cents"), "currency")
+    _add(lines, commissions, "commission", ("paid_at", "clawed_back_at", "created_at", "updated_at"), "status", ("amount_cents", "cents"), "currency")
     _add(lines, referrals, "referral", ("activated_at", "created_at"), "status", ("reward_amount_cents",), "reward_currency", drop_nonpositive=True)
-    _add(lines, subscriptions, "subscription", ("current_period_start", "created_at"), "status", (), "currency")
+    for row in subscriptions or []:
+        kind = "store_subscription" if row.get("provider") == "revenuecat" else "subscription"
+        _add(lines, [row], kind, ("current_period_start", "created_at"), "status", ("amount_cents",), "currency")
     lines.sort(key=lambda line: line["when"] or "", reverse=True)
     completed = [row for row in checkouts if row.get("status") == "completed"] if checkouts is not None else None
     amount = lambda row: _positive(row, "amount_cents", "amount")
+    commission_amount = lambda row: _positive(row, "amount_cents", "cents")
+    commission_sections = _split(commissions, _PENDING, _PAID, commission_amount)
+    commission_sections["clawed_back"] = _clawed(commissions, commission_amount)
     return {
         "period": {"from": start_day.isoformat(), "to": end_day.isoformat()},
         "generated_at": server.now(),
@@ -178,8 +224,10 @@ async def summary(start: datetime, end: datetime, start_day: date, end_day: date
             "owed_to_coaches": _totals(ledger, _owed),
             "refunds": _totals(_of_type(events, _REFUNDS), amount),
             "chargebacks": _totals(_of_type(events, _CHARGEBACKS), amount),
-            "commissions": _split(commissions, _PENDING, _PAID, lambda row: _positive(row, "amount_cents", "cents")),
+            "commissions": commission_sections,
             "referrals": _split(referrals, _REFERRAL_PENDING, _REWARDED, _reward),
+            "subscription_amounts": _subscription_amounts(subscriptions),
+            "gym_partner_plans": _totals(gyms, _gym_amount),
             "active_subscriptions": _counts(subscriptions),
         },
         "recent_lines": lines[:40],

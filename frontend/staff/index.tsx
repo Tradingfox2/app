@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { Redirect, useFocusEffect } from "expo-router";
 import { AdminAccount, AdminCoach, AdminCommunity, AdminMembership, AdminOverview, api, AuditEntry, CoachApplicationReview, ModerationReport, StaffRole, SupportMessage, SupportTicket, SupportTicketDetail, SupportTicketStatus } from "@/src/api";
 import { AccountingPanel } from "@/src/components/admin/accounting-panel";
 import { AnalyticsPanel } from "@/src/components/admin/analytics-panel";
@@ -11,6 +11,7 @@ import { staffTicketStatusLabel } from "@/src/components/support/copy";
 import { track } from "@/src/analytics";
 import { useAuth } from "@/src/auth-context";
 import { selectedControl } from "@/src/community-copy";
+import { webOrigin } from "@/src/share";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -144,13 +145,17 @@ const RESOLUTIONS: { key: string; label: string; icon: keyof typeof Ionicons.gly
   { key: "content_removed", label: "REMOVE", icon: "trash-outline" },
 ];
 
-export default function AdminConsole() {
-  const { user } = useAuth();
+function openMemberCommunity(id: string) {
+  const origin = webOrigin();
+  if (!origin) return;
+  void Linking.openURL(`${origin}/community/${encodeURIComponent(id)}`);
+}
+
+function AdminConsole() {
+  const { user, logout } = useAuth();
   const { t, formatDate, formatNumber } = useI18n();
-  const router = useRouter();
   const leave = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/(tabs)/profile");
+    void logout();
   };
   const [tab, setTab] = useState<Tab>("overview");
   const [applications, setApplications] = useState<CoachApplicationReview[]>([]);
@@ -333,7 +338,7 @@ export default function AdminConsole() {
       <Ionicons name="lock-closed" size={40} color={colors.textDim} />
       <Text style={styles.lockedText}>{t("This console is for the IronFlow staff team.")}</Text>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-      <Affordance signal="brand" accessibilityRole="button" onPress={leave} style={styles.primary}><Text style={styles.primaryText}>{t("BACK")}</Text></Affordance>
+      <Affordance accessibilityRole="button" onPress={leave} style={styles.primary}><Text style={styles.primaryText}>{t("SIGN OUT")}</Text></Affordance>
     </View></SafeAreaView>;
   }
 
@@ -346,7 +351,7 @@ export default function AdminConsole() {
   return (
     <SafeAreaView style={styles.safe} testID="admin-console">
       <View style={styles.header}>
-        <Affordance accessibilityRole="button" accessibilityLabel={t("Back")} hitSlop={8} onPress={leave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
+        <Affordance accessibilityRole="button" accessibilityLabel={t("SIGN OUT")} hitSlop={8} onPress={leave} style={styles.icon}><Ionicons name="log-out-outline" size={20} color={colors.text} /></Affordance>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("STAFF CONSOLE")}</Text>
           <Text style={styles.headerMeta}>{user?.email} · {t((overview?.staff_role || "").toUpperCase() || "STAFF")}</Text>
@@ -540,7 +545,7 @@ export default function AdminConsole() {
         {tab === "users" ? <>
           <View style={styles.searchRow}>
             <TextInput value={query} onChangeText={setQuery} onSubmitEditing={() => void search()} maxLength={80} placeholder={t("Search by name, email or ID")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-user-search" />
-            <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => void search()} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Affordance>
+            <Affordance accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => void search()} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.text} /></Affordance>
           </View>
           <View style={styles.filters}>
             {(["all", "active", "suspended", "staff"] as Status[]).map(item => (
@@ -622,7 +627,7 @@ export default function AdminConsole() {
               </View> : <Text style={styles.hint}>{t("Read-only: reviewing requests needs the moderator role.")}</Text>) : null}
               <View style={styles.actions}>
                 <Affordance accessibilityRole="button" onPress={() => void openUser(row.user_id)} style={styles.action}><Text style={styles.actionText}>{t("Open account")}</Text></Affordance>
-                {row.community ? <Affordance accessibilityRole="button" onPress={() => router.push({ pathname: "/community/[id]", params: { id: row.community_id } })} style={styles.action}><Text style={styles.actionText}>{t("OPEN COMMUNITY")}</Text></Affordance> : null}
+                {row.community ? <Affordance accessibilityRole="button" onPress={() => openMemberCommunity(row.community_id)} style={styles.action}><Text style={styles.actionText}>{t("OPEN COMMUNITY")}</Text></Affordance> : null}
               </View>
             </View>
           ))}
@@ -631,7 +636,7 @@ export default function AdminConsole() {
         {tab === "communities" ? <>
           {communities.length === 0 && !loading ? <Text style={styles.hint}>{t("No communities yet")}</Text> : null}
           {communities.map(group => (
-            <Affordance key={group.id} accessibilityRole="button" accessibilityHint={t("Active members only")} {...(Platform.OS === "web" ? { title: t("Active members only") } : {})} testID={`admin-community-${group.id}`} onPress={() => router.push({ pathname: "/community/[id]", params: { id: group.id } })} style={styles.row}>
+            <Affordance key={group.id} accessibilityRole="button" accessibilityHint={t("Active members only")} {...(Platform.OS === "web" ? { title: t("Active members only") } : {})} testID={`admin-community-${group.id}`} onPress={() => openMemberCommunity(group.id)} style={styles.row}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.name}>{group.name}</Text>
                 <Text style={styles.meta}>{group.owner?.full_name || group.owner?.email || t("Unknown")} · {t(group.status.toUpperCase())} · {t("{n} members", { n: formatNumber(group.member_count) })}{group.pending_count ? ` · ${t("{n} waiting to join", { n: formatNumber(group.pending_count) })}` : ""}</Text>
@@ -712,7 +717,7 @@ export default function AdminConsole() {
             </View>
             <View style={styles.searchRow}>
               <TextInput value={ticketQuery} onChangeText={setTicketQuery} onSubmitEditing={() => setTicketSearch(ticketQuery.trim())} maxLength={80} placeholder={t("Search by subject, email, or ticket id")} placeholderTextColor={colors.textDim} style={[styles.input, { flex: 1, marginBottom: 0 }]} testID="admin-ticket-search" />
-              <Affordance signal="brand" accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => setTicketSearch(ticketQuery.trim())} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.brandOn} /></Affordance>
+              <Affordance accessibilityRole="button" accessibilityLabel={t("Search")} disabled={working} onPress={() => setTicketSearch(ticketQuery.trim())} style={styles.searchBtn}><Ionicons name="search" size={18} color={colors.text} /></Affordance>
             </View>
             {!can("tickets.read") ? <Text style={styles.hint}>{t("Reading tickets needs the support role.")}</Text> : null}
             {tickets === null && !error ? <ActivityIndicator color={colors.text} /> : null}
@@ -755,6 +760,19 @@ export default function AdminConsole() {
   );
 }
 
+export default function StaffHome() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ActivityIndicator color={colors.text} />
+      </SafeAreaView>
+    );
+  }
+  if (!user) return <Redirect href="/auth" />;
+  return <AdminConsole />;
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: { minHeight: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -782,7 +800,7 @@ const styles = StyleSheet.create({
   input: { minHeight: 44, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, color: colors.text, marginBottom: spacing.sm },
   replyInput: { minHeight: 88, paddingVertical: spacing.sm, textAlignVertical: "top" },
   searchRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
-  searchBtn: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  searchBtn: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
   filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginVertical: spacing.sm },
   chip: { minHeight: 32, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" },
   chipActive: { borderColor: colors.text, backgroundColor: colors.surface2 }, chipText: { color: colors.textMuted, fontSize: 10, fontWeight: "900" }, chipTextActive: { color: colors.text },
@@ -798,6 +816,6 @@ const styles = StyleSheet.create({
   error: { color: colors.error }, retry: { color: colors.text, fontWeight: "900" },
   locked: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: spacing.md },
   lockedText: { color: colors.textMuted, textAlign: "center" },
-  primary: { minHeight: 44, paddingHorizontal: spacing.xl, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
-  primaryText: { ...type.button, fontSize: 12 },
+  primary: { minHeight: 44, paddingHorizontal: spacing.xl, borderRadius: radius.sm, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+  primaryText: { ...type.button, fontSize: 12, color: colors.text },
 });

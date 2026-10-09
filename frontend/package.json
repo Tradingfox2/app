@@ -9,6 +9,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "web:staff": "IRONFLOW_WEB_TARGET=staff expo start --web",
+    "export:staff": "IRONFLOW_WEB_TARGET=staff expo export --platform web --output-dir dist/staff",
     "lint": "expo lint",
     "test:community": "playwright test community.spec.ts",
     "test:activity-day": "node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/activity-day.test.ts",

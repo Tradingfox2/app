@@ -2,8 +2,9 @@
 
 Run `yarn test:community` from the feature worktree's frontend directory.
 Install the runner's browser once with `npx playwright install chromium`.
-The configuration starts Expo on localhost:8082, or reuses a running server
-outside CI. Ensure any reused server serves this same worktree.
+The configuration starts the member app on localhost:8082 and the staff site
+on localhost:8083, or reuses running servers outside CI. Ensure any reused
+server serves this same worktree. Staff specs use port 8083.
 
 All API requests are intercepted with synthetic fixtures, including writes.
 No real account, database, billing provider or production credentials are used.

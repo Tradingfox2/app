@@ -6,10 +6,26 @@ import { useI18n } from "@/src/i18n";
 
 const DAYS = [7, 30, 90] as const;
 type Days = (typeof DAYS)[number];
+/** Same minor-unit exponents as `revenuecat._EXPONENT`. Unknown codes use cents. JPY stays in yen. */
+const EXPONENT: Record<string, number> = {
+  BIF: 0, CLP: 0, DJF: 0, GNF: 0, JPY: 0, KMF: 0, KRW: 0,
+  MGA: 0, PYG: 0, RWF: 0, UGX: 0, VND: 0, VUV: 0, XPF: 0,
+  BHD: 3, JOD: 3, KWD: 3, OMR: 3, TND: 3,
+};
 const KINDS: Record<string, string> = {
   checkout: "Checkout", billing_event: "Billing event", partner_ledger: "Coach ledger",
   commission: "Commission", referral: "Referral", subscription: "Subscription",
+  store_subscription: "Store subscription",
 };
+const PROVIDERS = [
+  ["stripe", "Subscriptions on file — Stripe (web)"],
+  ["revenuecat", "Subscriptions on file — App Store and Google Play"],
+] as const;
+const PLANS = [
+  ["pro_monthly", "Monthly"],
+  ["pro_yearly", "Yearly"],
+  ["other", "Other plan"],
+] as const;
 const MONEY = [
   ["gross_collected", "Gross collected"],
   ["platform_fees", "Platform fees"],
@@ -60,21 +76,24 @@ export function AccountingPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const moneyText = (cents: number, currency: string | null) => {
-    if (!currency) return `${formatNumber(cents / 100)} · ${t("Currency not recorded")}`;
+    const digits = currency ? EXPONENT[currency.toUpperCase()] ?? 2 : 0;
+    const major = digits === 0 ? cents : cents / 10 ** digits;
+    if (!currency) return `${formatNumber(cents)} · ${t("Currency not recorded")}`;
+    const options: Intl.NumberFormatOptions = { style: "currency", currency, minimumFractionDigits: digits, maximumFractionDigits: digits };
     try {
-      return formatNumber(cents / 100, { style: "currency", currency });
+      return formatNumber(major, options);
     } catch {
-      return `${formatNumber(cents / 100)} ${currency}`;
+      return `${formatNumber(major, { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${currency}`;
     }
   };
-  const empty = (state: "none_in_period" | "unavailable") => (
-    <Text style={styles.hint}>{t(state === "none_in_period" ? "Nothing in this period." : "Could not read this section.")}</Text>
+  const empty = (state: "none_in_period" | "unavailable", none = "Nothing in this period.") => (
+    <Text style={styles.hint}>{t(state === "none_in_period" ? none : "Could not read this section.")}</Text>
   );
-  const bucket = (section: AccountingBucket) => {
+  const bucket = (section: AccountingBucket, none?: string) => {
     switch (section.state) {
       case "none_in_period":
       case "unavailable":
-        return empty(section.state);
+        return empty(section.state, none);
       case "recorded":
         if (!section.amounts_stored) return <Text style={styles.hint}>{t("Amounts are not stored on these rows.")}</Text>;
         return <>{section.totals.map(row => <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{moneyText(row.amount_cents, row.currency)}</Text>)}</>;
@@ -100,9 +119,10 @@ export function AccountingPanel() {
     }
   };
   const lineAmount = (line: AccountingLine) => (typeof line.cents === "number" ? moneyText(line.cents, line.currency) : t("Amount not recorded"));
-  const nested: { label: string; section: AccountingBucket }[] = data ? [
+  const nested: { label: string; section: AccountingBucket; testID?: string }[] = data ? [
     { label: "Commissions pending", section: data.sections.commissions.pending },
     { label: "Commissions paid", section: data.sections.commissions.paid },
+    { label: "Commissions clawed back", section: data.sections.commissions.clawed_back, testID: "accounting-section-commissions-clawed_back" },
     { label: "Referral rewards pending", section: data.sections.referrals.pending },
     { label: "Referral rewards paid", section: data.sections.referrals.paid },
   ] : [];
@@ -110,7 +130,7 @@ export function AccountingPanel() {
   return (
     <View testID="accounting-panel">
       <Text style={styles.section}>{t("ACCOUNTING")}</Text>
-      <Text style={styles.hint}>{t("Money recorded in Stripe. Amounts stay in the currency they were charged. Nothing here is converted.")}</Text>
+      <Text style={styles.hint}>{t("Money recorded by Stripe and RevenueCat. Amounts stay in the currency they were charged. Nothing here is converted.")}</Text>
       <View style={styles.filters}>
         {DAYS.map(item => (
           <Pressable key={item} accessibilityRole="button" testID={`accounting-period-${item}`} onPress={() => { if (item === days) return; setDays(item); setLoading(true); }} style={[styles.chip, days === item && styles.chipActive]}>
@@ -136,8 +156,25 @@ export function AccountingPanel() {
               {bucket(data.sections[id])}
             </View>
           ))}
+          <Text style={styles.hint}>{t("Last amount on file. Monthly and yearly are never added together.")}</Text>
+          {PROVIDERS.map(([provider, label]) => (
+            <View key={provider}>
+              <Text style={styles.section}>{t(label)}</Text>
+              {PLANS.map(([plan, planLabel]) => (
+                <View key={plan} testID={`accounting-section-subscription-${provider}-${plan}`}>
+                  <Text style={styles.name}>{t(planLabel)}</Text>
+                  {bucket(data.sections.subscription_amounts[provider][plan])}
+                </View>
+              ))}
+            </View>
+          ))}
+          <View testID="accounting-section-gym_partner_plans">
+            <Text style={styles.section}>{t("Gym partner plans")}</Text>
+            <Text style={styles.hint}>{t("Last Stripe amount stored on the gym. Not limited to this period.")}</Text>
+            {bucket(data.sections.gym_partner_plans, "No gym plan amount is stored.")}
+          </View>
           {nested.map(item => (
-            <View key={item.label}><Text style={styles.section}>{t(item.label)}</Text>{bucket(item.section)}</View>
+            <View key={item.label} testID={item.testID}><Text style={styles.section}>{t(item.label)}</Text>{bucket(item.section)}</View>
           ))}
           <Text style={styles.section}>{t("Active subscriptions")}</Text>
           {counts(data.sections.active_subscriptions)}

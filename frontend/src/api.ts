@@ -145,14 +145,21 @@ export type AccountingLine = {
   kind: string; stripe_id: string | null; currency: string | null;
   cents: number | null; when: string | null; status: string | null;
 };
+export type AccountingPlanBuckets = {
+  pro_monthly: AccountingBucket;
+  pro_yearly: AccountingBucket;
+  other: AccountingBucket;
+};
 export type AccountingSummary = {
   period: { from: string; to: string };
   generated_at: string;
   sections: {
     gross_collected: AccountingBucket; platform_fees: AccountingBucket; owed_to_coaches: AccountingBucket;
     refunds: AccountingBucket; chargebacks: AccountingBucket;
-    commissions: { pending: AccountingBucket; paid: AccountingBucket };
+    commissions: { pending: AccountingBucket; paid: AccountingBucket; clawed_back: AccountingBucket };
     referrals: { pending: AccountingBucket; paid: AccountingBucket };
+    subscription_amounts: { stripe: AccountingPlanBuckets; revenuecat: AccountingPlanBuckets };
+    gym_partner_plans: AccountingBucket;
     active_subscriptions: AccountingCounts;
   };
   recent_lines: AccountingLine[];

@@ -279,6 +279,14 @@ async function consoleFixtures(page: Page, permissions: string[], override?: (ro
   });
 }
 
+const previewUrl = (process.env.PREVIEW_URL ?? "").trim().replace(/\/+$/, "");
+const staffURL = (process.env.STAFF_URL ?? "").trim() || "http://localhost:8083";
+const staffUnavailable = Boolean(previewUrl) && !(process.env.STAFF_URL ?? "").trim();
+
+test.describe("staff site", () => {
+  test.skip(staffUnavailable, "The member preview is not the staff site.");
+  test.use({ baseURL: staffURL });
+
 test("a pending coach application can be approved from the console", async ({ page }) => {
   const reviews: unknown[] = [];
   await consoleFixtures(page, staffOverview.permissions, async (route, path) => {
@@ -289,7 +297,7 @@ test("a pending coach application can be approved from the console", async ({ pa
     }
     return false;
   });
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-coaches").click();
 
   await expect(page.getByTestId("application-app-1")).toContainText("Ten years coaching strength athletes.");
@@ -302,9 +310,10 @@ test("a pending coach application can be approved from the console", async ({ pa
 
 test("staff without coaches.review see the queue read-only", async ({ page }) => {
   await consoleFixtures(page, ["users.read", "reports.read", "audit.read"]);
-  await page.goto("/admin");
+  await page.goto("/");
   await page.getByTestId("admin-tab-coaches").click();
   // Without the permission the console never loads the queue at all.
   await expect(page.getByText("No coach applications waiting.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("approve-application-app-1")).toHaveCount(0);
+});
 });
