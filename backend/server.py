@@ -1472,7 +1472,8 @@ api.include_router(tips_router)
 api.include_router(revenuecat_router)
 
 app.include_router(api)
-if not media_storage.s3_enabled():
+# Bundled local files (exercise posters) stay served even when uploads go to S3/R2.
+if True:
     media_storage.MEDIA_ROOT.mkdir(exist_ok=True)
     app.mount("/api/media/files", StaticFiles(directory=media_storage.MEDIA_ROOT), name="media")
 app.add_middleware(

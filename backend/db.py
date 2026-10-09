@@ -21,5 +21,17 @@ db_name = os.environ.get("DB_NAME", "ironflow")
 
 # tz_aware: Mongo stores UTC; without this, reads come back naive and break
 # arithmetic against now() (timezone-aware) — e.g. muscle recovery ages.
-client = AsyncIOMotorClient(mongo_url, tz_aware=True)
+def _make_client():
+    try:
+        import truststore
+        truststore.extract_from_ssl()
+        try:
+            return AsyncIOMotorClient(mongo_url, tz_aware=True)
+        finally:
+            truststore.inject_into_ssl()
+    except ImportError:
+        return AsyncIOMotorClient(mongo_url, tz_aware=True)
+
+
+client = _make_client()
 db = client[db_name]
