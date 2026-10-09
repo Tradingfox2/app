@@ -7,7 +7,7 @@ production. The global Motor client is left alone.
 import asyncio
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -261,6 +261,12 @@ def test_member_ticket_round_trip_is_owner_scoped_and_persisted(monkeypatch):
                 json={"body": "Looking at the April invoice.", "media_id": "media-staff"},
             )
             assert note.status_code == 201 and note.json()["author_role"] == "staff"
+            replied = [row async for row in database.audit_log.find({"action": "ticket.replied"})]
+            assert len(replied) == 1
+            assert replied[0]["actor_id"] == "support" and replied[0]["target_id"] == ticket_id
+            assert replied[0]["metadata"]["from"] == "pending" and replied[0]["metadata"]["to"] == "pending"
+            assert replied[0]["metadata"]["message_id"] == note.json()["id"]
+            assert "Looking at the April invoice." not in str(replied[0])
             stolen_staff = await client.post(
                 f"/api/admin/tickets/{ticket_id}/messages", headers=auth("support"),
                 json={"body": "Not my file", "media_id": "media-owner"},
@@ -282,6 +288,13 @@ def test_member_ticket_round_trip_is_owner_scoped_and_persisted(monkeypatch):
                 json={"body": "Closed after the invoice was reissued."},
             )
             assert closing.status_code == 201 and closing.json()["author_role"] == "staff"
+            closing_audits = [row async for row in database.audit_log.find({"action": "ticket.replied"})]
+            assert len(closing_audits) == 2
+            assert all("Closed after the invoice was reissued." not in str(row) for row in closing_audits)
+            assert all(row["actor_id"] == "support" and row["target_id"] == ticket_id for row in closing_audits)
+            status_change = await database.audit_log.find_one({"action": "ticket.status_changed", "metadata.to": "closed"})
+            assert status_change["actor_id"] == "support" and status_change["target_id"] == ticket_id
+            assert status_change["metadata"]["from"] == "pending" and status_change["metadata"]["to"] == "closed"
 
             owner_again = await client.get(f"/api/tickets/{ticket_id}", headers=auth("owner"))
             assert owner_again.status_code == 200
@@ -300,6 +313,48 @@ def test_member_ticket_round_trip_is_owner_scoped_and_persisted(monkeypatch):
             assert final["status"] == "closed" and final["assignee_id"] is None
             assert final["updated_at"] >= final["created_at"]
             assert await database.ticket_messages.count_documents({"ticket_id": ticket_id, "author_role": "staff"}) == 2
+
+    run_isolated(scenario)
+
+
+def test_lost_ticket_update_writes_no_audit(monkeypatch):
+    async def scenario(database):
+        bind(monkeypatch, database)
+        await database.users.insert_one(account("support", staff_role="support"))
+        stamp = datetime.now(timezone.utc)
+        await database.tickets.insert_one({
+            "id": "t-race", "user_id": "owner", "subject": "Hi", "category": "account",
+            "status": "open", "assignee_id": None, "created_at": stamp, "updated_at": stamp,
+        })
+
+        # Motor builds a new collection object on every attribute access, so the
+        # patch has to sit on the object the handler will actually call.
+        tickets_col = database.tickets
+
+        class Lost:
+            modified_count = 0
+
+        async def lose(*_args, **_kwargs):
+            return Lost()
+
+        tickets_col.update_one = lose
+
+        class Handle:
+            tickets = tickets_col
+            users = database.users
+            audit_log = database.audit_log
+
+        monkeypatch.setattr(tickets, "db", Handle)
+        with pytest.raises(HTTPException) as lost:
+            await tickets.update_for_staff(
+                "t-race",
+                tickets.TicketPatchIn(status="pending"),
+                {"id": "support", "email": "support@example.invalid", "staff_role": "support"},
+            )
+        assert lost.value.status_code == 409
+        assert lost.value.detail == "Ticket changed while you were editing it"
+        assert await database.audit_log.count_documents({}) == 0
+        assert (await database.tickets.find_one({"id": "t-race"}))["status"] == "open"
 
     run_isolated(scenario)
 

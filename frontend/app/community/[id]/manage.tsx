@@ -23,7 +23,7 @@ const INSIGHT_CHIPS = [
   ["messages_7d", "MESSAGES 7D"],
   ["messages_30d", "MESSAGES 30D"],
   ["active_members_7d", "ACTIVE 7D"],
-] as const satisfies ReadonlyArray<readonly [keyof CommunityInsights, string]>;
+] as const satisfies readonly (readonly [keyof CommunityInsights, string])[];
 
 /** Calendar date from a `YYYY-MM-DD` insights bucket, without a UTC day shift. */
 function insightDay(isoDay: string, formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string) {

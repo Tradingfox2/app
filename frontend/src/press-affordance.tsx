@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   AccessibilityInfo,
   Platform,
@@ -135,19 +135,43 @@ export function affordanceStyle(
 }
 
 /** Drop-in Pressable that shows it can be used. `signal="none"` keeps the current look. */
-export function Affordance({ style, signal = "raise", disabled, ...rest }: AffordanceProps) {
+export function Affordance({ style, signal = "raise", disabled, onFocus, onBlur, ...rest }: AffordanceProps) {
   const reduce = useReduceMotion();
   const blocked = Boolean(disabled);
+  const [focused, setFocused] = useState(false);
+  // A text-colored ring, not chartreuse. Chartreuse stays on primary and selected controls.
+  const focusRing: ViewStyle | null = Platform.OS === "web" && focused && !blocked
+    ? { outlineWidth: 2, outlineStyle: "solid", outlineColor: colors.text }
+    : null;
+  const handleFocus: NonNullable<PressableProps["onFocus"]> = (event) => {
+    setFocused(true);
+    onFocus?.(event);
+  };
+  const handleBlur: NonNullable<PressableProps["onBlur"]> = (event) => {
+    setFocused(false);
+    onBlur?.(event);
+  };
   if (signal === "none") {
-    return <Pressable {...(rest as PressableProps)} disabled={disabled} style={style} />;
+    return (
+      <Pressable
+        {...(rest as PressableProps)}
+        disabled={disabled}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        style={[style, focusRing]}
+      />
+    );
   }
   return (
     <Pressable
       {...(rest as PressableProps)}
       disabled={disabled}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       style={(state) => [
         style,
         affordanceStyle(state as PressState, { signal, disabled: blocked, reduceMotion: reduce }),
+        focusRing,
       ]}
     />
   );

@@ -476,6 +476,17 @@ async def lifespan(app: FastAPI):
     await db.reports.create_index([("reporter_id", 1), ("target_id", 1), ("status", 1)])
     await db.audit_log.create_index([("created_at", -1)])
     await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
+    await db.audit_log.create_index([("actor_id", 1), ("created_at", -1)])
+    await db.audit_log.create_index([("action", 1), ("created_at", -1)])
+    await db.users.create_index([("created_at", -1), ("id", -1)])
+    await db.users.create_index([("staff_role", 1), ("created_at", -1)])
+    await db.coach_applications.create_index([("status", 1), ("created_at", 1)])
+    await db.coach_applications.create_index([("status", 1), ("created_at", 1), ("id", 1)])
+    await db.community_members.create_index([("status", 1), ("created_at", 1)])
+    await db.communities.create_index([("created_at", -1), ("id", -1)])
+    await db.reports.create_index([("status", 1), ("created_at", 1), ("id", 1)])
+    await db.tickets.create_index([("status", 1), ("updated_at", -1)])
+    await db.tickets.create_index([("assignee_id", 1), ("status", 1), ("updated_at", -1)])
     # Product analytics: unique event id, and name+ts for the 24h / 7d rollup.
     await analytics.ensure_indexes(db)
     # Bound at the bottom of this module (gyms imports wearables, which imports server).

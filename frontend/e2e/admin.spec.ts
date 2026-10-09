@@ -497,4 +497,293 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await expect(page.getByTestId("accounting-section-gym_partner_plans")).toContainText("No gym plan amount is stored.");
     await expect(page.getByTestId("accounting-section-commissions-clawed_back")).toContainText("Nothing in this period.");
   });
+
+  test("accounting stays up when subscription amounts are missing", async ({ page }) => {
+    const empty = { state: "none_in_period" as const };
+    await fixtures(page, { ...support, staff_role: "admin" }, async (route, path) => {
+      if (path === "/admin/overview") {
+        await route.fulfill({ json: {
+          users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+          queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
+          activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+          permissions: [...PERMISSIONS.support, "accounting.read"],
+          staff_role: "admin",
+        } });
+        return true;
+      }
+      if (path === "/admin/accounting/summary") {
+        await route.fulfill({ json: {
+          period: { from: "2026-09-01", to: "2026-09-30" },
+          generated_at: "2026-09-30T12:00:00Z",
+          sections: {
+            gross_collected: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 1250, currency: "USD" }] },
+            platform_fees: empty, owed_to_coaches: empty, refunds: empty, chargebacks: empty,
+            commissions: { pending: empty, paid: empty, clawed_back: empty },
+            referrals: { pending: empty, paid: empty },
+            gym_partner_plans: empty,
+            active_subscriptions: empty,
+          },
+          recent_lines: [],
+        } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-accounting").click();
+    await expect(page.getByTestId("accounting-panel")).toBeVisible();
+    await expect(page.getByTestId("accounting-subscriptions-incomplete")).toContainText("incomplete, not zero");
+    await expect(page.getByTestId("accounting-section-gross_collected")).toContainText("$12.50");
+    await expect(page.getByTestId("accounting-section-subscription-stripe-pro_monthly")).toBeVisible();
+  });
+
+  test("system status is Healthy only when the health check verified it", async ({ page }) => {
+    await fixtures(page, support);
+    await page.goto("/");
+    await expect(page.getByTestId("admin-operations-title")).toHaveText("IRONFLOW / OPERATIONS");
+    await expect(page.getByTestId("admin-workspace-badge")).toContainText("Admin workspace");
+    await expect(page.getByTestId("admin-system-status")).toContainText("Unverified");
+    await expect(page.getByTestId("admin-system-status")).not.toContainText("Healthy");
+    await expect(page.getByTestId("admin-priority-reports")).toContainText("Reports awaiting review");
+    await expect(page.getByTestId("admin-priority-alerts")).toContainText("No verified security alerts");
+  });
+
+  test("a verified health check shows Healthy", async ({ page }) => {
+    await fixtures(page, support, async (route, path) => {
+      if (path === "/health") {
+        await route.fulfill({ json: { status: "ok", mongo: true, ai_configured: false, ai_provider: "none" } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("admin-system-status")).toContainText("Healthy");
+    await expect(page.getByTestId("admin-system-status")).toContainText("Verified by the health check");
+  });
+
+  test("account pages keep the cursor and the total", async ({ page }) => {
+    const second = { ...target, id: "u-2", full_name: "Second Athlete", email: "second@example.invalid" };
+    await fixtures(page, support, async (route, path) => {
+      if (path !== "/admin/users" || route.request().method() !== "GET") return false;
+      const cursor = new URL(route.request().url()).searchParams.get("cursor");
+      if (cursor === "page-2") {
+        await route.fulfill({ json: { users: [second], total: 2, next_cursor: null } });
+        return true;
+      }
+      await route.fulfill({ json: { users: [target], total: 2, next_cursor: "page-2" } });
+      return true;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-users").click();
+    await expect(page.getByText("Showing 1 of 2.", { exact: true })).toBeVisible();
+    await page.getByTestId("admin-load-more").click();
+    await expect(page.getByTestId("admin-user-u-2")).toBeVisible();
+    await expect(page.getByTestId(`admin-user-${target.id}`)).toBeVisible();
+    await expect(page.getByText("Showing 2 of 2.", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("admin-load-more")).toHaveCount(0);
+  });
+
+  test("support filters stay in the address bar across reload", async ({ page }) => {
+    await fixtures(page, support, async (route, path) => {
+      if (path === "/admin/tickets" && route.request().method() === "GET") {
+        await route.fulfill({ json: { tickets: [], count: 0, total: 0, next_cursor: null } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/?tab=support&ticketStatus=pending");
+    await expect(page.getByTestId("ticket-filter-pending")).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("ticket-filter-closed").click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("ticketStatus")).toBe("closed");
+    await page.reload();
+    await expect(page.getByTestId("ticket-filter-closed")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("ticket-filter-pending")).toHaveAttribute("aria-selected", "false");
+  });
+
+  test("a slower account search does not replace a newer result", async ({ page }) => {
+    let releaseSlow = () => {};
+    const slowGate = new Promise<void>(resolve => { releaseSlow = resolve; });
+    let markSlow = () => {};
+    const slowSeen = new Promise<void>(resolve => { markSlow = resolve; });
+    await fixtures(page, support, async (route, path) => {
+      if (path !== "/admin/users" || route.request().method() !== "GET") return false;
+      const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+      if (q === "slow") {
+        markSlow();
+        await slowGate;
+        try {
+          await route.fulfill({ json: { users: [{ ...target, id: "slow", full_name: "Slow Result", email: "slow@example.invalid" }], total: 1 } });
+        } catch {
+          // The client aborted this request after a newer search started.
+        }
+        return true;
+      }
+      if (q === "fast") {
+        await route.fulfill({ json: { users: [{ ...target, id: "fast", full_name: "Fast Result", email: "fast@example.invalid" }], total: 1 } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-users").click();
+    await page.getByTestId("admin-user-search").fill("slow");
+    await slowSeen;
+    await page.getByTestId("admin-user-search").fill("fast");
+    await expect(page.getByText("Fast Result", { exact: true })).toBeVisible();
+    releaseSlow();
+    await page.waitForTimeout(400);
+    await expect(page.getByText("Slow Result", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Fast Result", { exact: true })).toBeVisible();
+  });
+
+  test("a failed suspend stays on the account and a second click does not send twice", async ({ page }) => {
+    const calls: string[] = [];
+    let fail = true;
+    let suspended: { suspended_at: string; suspension_reason: string } | null = null;
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await fixtures(page, moderator, async (route, path) => {
+      if (path === `/admin/users/${target.id}` && suspended) {
+        await route.fulfill({ json: { ...target, ...suspended, stats: { workouts: 12, posts: 3, communities: 1, reports_against: 1 }, notes: [] } });
+        return true;
+      }
+      if (path !== `/admin/users/${target.id}/suspend`) return false;
+      calls.push("suspend");
+      if (calls.length === 1) await gate;
+      if (fail) {
+        await route.fulfill({ status: 500, json: { detail: "Could not suspend" } });
+        return true;
+      }
+      suspended = { suspended_at: "2026-09-13T09:00:00Z", suspension_reason: "Repeated dangerous advice" };
+      await route.fulfill({ json: { ...target, ...suspended } });
+      return true;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-users").click();
+    await page.getByTestId(`admin-user-${target.id}`).click();
+    await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
+    const suspend = page.getByTestId("admin-suspend");
+    await suspend.click();
+    await expect(suspend).toBeDisabled();
+    await suspend.click({ force: true }).catch(() => undefined);
+    release();
+    await expect(page.getByText("Could not suspend", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Suspended:/)).toHaveCount(0);
+    expect(calls).toEqual(["suspend"]);
+    fail = false;
+    await page.getByRole("button", { name: "Retry" }).click();
+    await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
+    await page.getByTestId("admin-suspend").click();
+    await expect(page.getByText(/Suspended:/)).toBeVisible();
+    expect(calls).toEqual(["suspend", "suspend"]);
+  });
+
+  test("a partial report stays on the queue until the side effect is retried", async ({ page }) => {
+    const reviews: unknown[] = [];
+    const retries: string[] = [];
+    await fixtures(page, moderator, async (route, path) => {
+      if (path === "/admin/reports/rep-1" && route.request().method() === "PATCH") {
+        reviews.push(route.request().postDataJSON());
+        await route.fulfill({ json: { ...report, status: "resolved", resolution: "content_removed", resolution_status: "partial", side_effect_error: "content_removal_failed" } });
+        return true;
+      }
+      if (path === "/admin/reports/rep-1/retry-side-effect") {
+        retries.push(path);
+        await route.fulfill({ json: { ...report, status: "resolved", resolution: "content_removed", resolution_status: "complete", side_effect_error: null } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-reports").click();
+    await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
+    await page.getByTestId("resolve-content_removed-rep-1").click();
+    await expect(page.getByTestId("report-retry-rep-1")).toBeVisible();
+    await expect(page.getByText("The moderation queue is empty.", { exact: true })).toHaveCount(0);
+    expect(reviews).toEqual([{ resolution: "content_removed", note: "Unsafe dosing advice" }]);
+    await page.getByTestId("report-retry-rep-1").click();
+    const confirm = page.getByTestId("report-retry-dialog-rep-1-confirm");
+    await expect(confirm).toBeFocused();
+    await confirm.click();
+    await expect(page.getByText("The moderation queue is empty.", { exact: true })).toBeVisible();
+    expect(retries).toEqual(["/admin/reports/rep-1/retry-side-effect"]);
+  });
+
+  test("resolving a report brings the tab count in line with the queue", async ({ page }) => {
+    let resolved = false;
+    await fixtures(page, moderator, async (route, path) => {
+      if (path === "/admin/overview") {
+        await route.fulfill({ json: {
+          users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+          queues: { open_reports: resolved ? 0 : 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
+          activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+          permissions: PERMISSIONS.moderator,
+          staff_role: "moderator",
+        } });
+        return true;
+      }
+      if (path === "/admin/reports") {
+        await route.fulfill({ json: resolved ? [] : [report] });
+        return true;
+      }
+      if (path === "/admin/reports/rep-1") {
+        resolved = true;
+        await route.fulfill({ json: { ...report, status: "resolved", resolution_status: "complete" } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("admin-tab-reports")).toContainText("1");
+    await page.getByTestId("admin-tab-reports").click();
+    await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
+    await page.getByTestId("resolve-content_removed-rep-1").click();
+    await expect(page.getByText("The moderation queue is empty.", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("admin-tab-reports")).not.toContainText("1");
+  });
+
+  test("the oldest unassigned ticket shows its age and the queue target", async ({ page }) => {
+    await fixtures(page, support, async (route, path) => {
+      if (path !== "/admin/overview") return false;
+      await route.fulfill({ json: {
+        users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+        queues: {
+          open_reports: 1,
+          pending_coach_applications: 3,
+          pending_memberships: 5,
+          open_tickets: 2,
+          pending_tickets: 1,
+          unassigned_open_tickets: 1,
+          oldest_open_report_at: "2026-01-01T00:00:00Z",
+          oldest_unassigned_ticket_at: "2026-01-02T00:00:00Z",
+        },
+        activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+        permissions: PERMISSIONS.support,
+        staff_role: "support",
+      } });
+      return true;
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("admin-priority-unassigned-age")).toContainText(/Oldest unassigned ticket opened \d+d ago/);
+    await expect(page.getByTestId("admin-priority-unassigned")).toContainText("Past the 24h target.");
+    await expect(page.getByTestId("admin-priority-reports")).toContainText("Past the 24h target.");
+    await page.getByTestId("admin-tab-reports").click();
+    await expect(page.getByText(/Oldest report opened \d+d ago/)).toBeVisible();
+    await expect(page.getByText("Past the 24h target.").first()).toBeVisible();
+  });
+
+  test("keyboard focus reaches the reports priority row and opens it", async ({ page }) => {
+    await fixtures(page, support);
+    await page.goto("/");
+    await expect(page.getByTestId("admin-priority-reports")).toBeVisible();
+    for (let step = 0; step < 40; step += 1) {
+      const focused = await page.getByTestId("admin-priority-reports").evaluate(element => element === document.activeElement);
+      if (focused) break;
+      await page.keyboard.press("Tab");
+    }
+    await expect(page.getByTestId("admin-priority-reports")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("report-rep-1")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
 });

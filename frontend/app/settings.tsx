@@ -44,6 +44,19 @@ function rewardText(section: AccountingBucket, translate: (source: string) => st
           ? formatMinor(row.amount_cents, row.currency, locale)
           : `${row.amount_cents} · ${translate("Currency not recorded")}`
       )).join(" · ");
+    case "incomplete": {
+      const figures = section.amounts_stored && section.totals
+        ? section.totals.map((row) => (
+          row.currency
+            ? formatMinor(row.amount_cents, row.currency, locale)
+            : `${row.amount_cents} · ${translate("Currency not recorded")}`
+        )).join(" · ")
+        : translate("Amounts are not stored on these rows.");
+      const label = section.reason === "row_cap"
+        ? translate("Incomplete: the row cap was hit.")
+        : translate("Incomplete: some rows could not be read.");
+      return `${label} ${figures}`;
+    }
     default: {
       const unreachable: never = section;
       return unreachable;

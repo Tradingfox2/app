@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { api, type AccountingBucket, type AccountingCounts, type AccountingLine, type AccountingSummary } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
@@ -26,13 +26,13 @@ const PLANS = [
   ["pro_yearly", "Yearly"],
   ["other", "Other plan"],
 ] as const;
-const MONEY = [
-  ["gross_collected", "Gross collected"],
+const COLLECTED = [["gross_collected", "Gross collected"]] as const;
+const DEDUCTIONS = [
   ["platform_fees", "Platform fees"],
-  ["owed_to_coaches", "Owed to coaches"],
   ["refunds", "Refunds"],
   ["chargebacks", "Chargebacks"],
 ] as const;
+const LIABILITIES = [["owed_to_coaches", "Owed to coaches"]] as const;
 
 function periodFor(days: Days): { from: string; to: string } {
   const end = new Date();
@@ -40,6 +40,22 @@ function periodFor(days: Days): { from: string; to: string } {
   const start = new Date(endUtc);
   start.setUTCDate(start.getUTCDate() - (days - 1));
   return { from: start.toISOString().slice(0, 10), to: endUtc.toISOString().slice(0, 10) };
+}
+
+const MISSING_BUCKET: AccountingBucket = { state: "unavailable" };
+
+function asBucket(value: unknown): AccountingBucket {
+  if (!value || typeof value !== "object") return MISSING_BUCKET;
+  const state = (value as { state?: unknown }).state;
+  if (state === "none_in_period" || state === "unavailable" || state === "recorded" || state === "incomplete") return value as AccountingBucket;
+  return MISSING_BUCKET;
+}
+
+function asCounts(value: unknown): AccountingCounts {
+  if (!value || typeof value !== "object") return { state: "unavailable" };
+  const state = (value as { state?: unknown }).state;
+  if (state === "none_in_period" || state === "unavailable" || state === "recorded" || state === "incomplete") return value as AccountingCounts;
+  return { state: "unavailable" };
 }
 
 function periodLabel(days: Days): string {
@@ -61,16 +77,21 @@ export function AccountingPanel() {
   const [data, setData] = useState<AccountingSummary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
   const load = useCallback(async () => {
+    const id = ++requestId.current;
     setError("");
     const period = periodFor(days);
     try {
-      setData(await api.adminAccounting(period.from, period.to));
+      const next = await api.adminAccounting(period.from, period.to);
+      if (id !== requestId.current) return;
+      setData(next);
     } catch (cause) {
+      if (id !== requestId.current) return;
       setData(null);
       setError(cause instanceof Error ? cause.message : t("Could not load accounting"));
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [days, t]);
   useEffect(() => { void load(); }, [load]);
@@ -89,6 +110,9 @@ export function AccountingPanel() {
   const empty = (state: "none_in_period" | "unavailable", none = "Nothing in this period.") => (
     <Text style={styles.hint}>{t(state === "none_in_period" ? none : "Could not read this section.")}</Text>
   );
+  const figures = (rows: { amount_cents: number; currency: string | null }[]) => (
+    <>{rows.map(row => <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{moneyText(row.amount_cents, row.currency)}</Text>)}</>
+  );
   const bucket = (section: AccountingBucket, none?: string) => {
     switch (section.state) {
       case "none_in_period":
@@ -96,7 +120,19 @@ export function AccountingPanel() {
         return empty(section.state, none);
       case "recorded":
         if (!section.amounts_stored) return <Text style={styles.hint}>{t("Amounts are not stored on these rows.")}</Text>;
-        return <>{section.totals.map(row => <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{moneyText(row.amount_cents, row.currency)}</Text>)}</>;
+        return <>
+          <Text style={styles.hint}>{t("Recorded")}</Text>
+          {figures(section.totals)}
+        </>;
+      case "incomplete": {
+        const note = section.reason === "row_cap"
+          ? t("Incomplete: this section hit the row cap. Totals below are only the rows that were read.")
+          : t("Incomplete: some rows could not be read. Totals below omit those rows.");
+        return <>
+          <Text style={styles.hint}>{note}</Text>
+          {section.amounts_stored && section.totals ? figures(section.totals) : <Text style={styles.hint}>{t("Amounts are not stored on these rows.")}</Text>}
+        </>;
+      }
       default: {
         const exhaustive: never = section;
         return exhaustive;
@@ -109,9 +145,19 @@ export function AccountingPanel() {
       case "unavailable":
         return empty(section.state);
       case "recorded":
-        return <>{section.counts.map(row => (
-          <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{formatNumber(row.count)} · {row.currency ?? t("Currency not recorded")}</Text>
-        ))}</>;
+        return <>
+          <Text style={styles.hint}>{t("Recorded")}</Text>
+          {section.counts.map(row => (
+            <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{formatNumber(row.count)} · {row.currency ?? t("Currency not recorded")}</Text>
+          ))}
+        </>;
+      case "incomplete":
+        return <>
+          <Text style={styles.hint}>{t("Incomplete: this section hit the row cap. Totals below are only the rows that were read.")}</Text>
+          {section.counts.map(row => (
+            <Text key={row.currency ?? "unrecorded"} style={styles.figure}>{formatNumber(row.count)} · {row.currency ?? t("Currency not recorded")}</Text>
+          ))}
+        </>;
       default: {
         const exhaustive: never = section;
         return exhaustive;
@@ -119,12 +165,16 @@ export function AccountingPanel() {
     }
   };
   const lineAmount = (line: AccountingLine) => (typeof line.cents === "number" ? moneyText(line.cents, line.currency) : t("Amount not recorded"));
-  const nested: { label: string; section: AccountingBucket; testID?: string }[] = data ? [
-    { label: "Commissions pending", section: data.sections.commissions.pending },
-    { label: "Commissions paid", section: data.sections.commissions.paid },
-    { label: "Commissions clawed back", section: data.sections.commissions.clawed_back, testID: "accounting-section-commissions-clawed_back" },
-    { label: "Referral rewards pending", section: data.sections.referrals.pending },
-    { label: "Referral rewards paid", section: data.sections.referrals.paid },
+  const sections = data?.sections;
+  const subscriptionAmounts = sections?.subscription_amounts;
+  const liabilities: { label: string; section: AccountingBucket }[] = data ? [
+    { label: "Commissions pending", section: asBucket(sections?.commissions?.pending) },
+    { label: "Referral rewards pending", section: asBucket(sections?.referrals?.pending) },
+  ] : [];
+  const payouts: { label: string; section: AccountingBucket; testID?: string }[] = data ? [
+    { label: "Commissions paid", section: asBucket(sections?.commissions?.paid) },
+    { label: "Commissions clawed back", section: asBucket(sections?.commissions?.clawed_back), testID: "accounting-section-commissions-clawed_back" },
+    { label: "Referral rewards paid", section: asBucket(sections?.referrals?.paid) },
   ] : [];
 
   return (
@@ -150,20 +200,44 @@ export function AccountingPanel() {
       {data ? (
         <>
           <Text style={styles.hint}>{data.period.from} – {data.period.to}</Text>
-          {MONEY.map(([id, label]) => (
+          <Text style={styles.section}>{t("Collected")}</Text>
+          {COLLECTED.map(([id, label]) => (
             <View key={id} testID={`accounting-section-${id}`}>
               <Text style={styles.section}>{t(label)}</Text>
-              {bucket(data.sections[id])}
+              {bucket(asBucket(sections?.[id]))}
+            </View>
+          ))}
+          <Text style={styles.section}>{t("Deductions")}</Text>
+          {DEDUCTIONS.map(([id, label]) => (
+            <View key={id} testID={`accounting-section-${id}`}>
+              <Text style={styles.section}>{t(label)}</Text>
+              {bucket(asBucket(sections?.[id]))}
+            </View>
+          ))}
+          <Text style={styles.section}>{t("Liabilities")}</Text>
+          {LIABILITIES.map(([id, label]) => (
+            <View key={id} testID={`accounting-section-${id}`}>
+              <Text style={styles.section}>{t(label)}</Text>
+              {bucket(asBucket(sections?.[id]))}
+            </View>
+          ))}
+          {liabilities.map(item => (
+            <View key={item.label}>
+              <Text style={styles.section}>{t(item.label)}</Text>
+              {bucket(item.section)}
             </View>
           ))}
           <Text style={styles.hint}>{t("Last amount on file. Monthly and yearly are never added together.")}</Text>
+          {!subscriptionAmounts ? (
+            <Text style={styles.hint} testID="accounting-subscriptions-incomplete">{t("Subscription amounts were not in this response. Those rows are incomplete, not zero.")}</Text>
+          ) : null}
           {PROVIDERS.map(([provider, label]) => (
             <View key={provider}>
               <Text style={styles.section}>{t(label)}</Text>
               {PLANS.map(([plan, planLabel]) => (
                 <View key={plan} testID={`accounting-section-subscription-${provider}-${plan}`}>
                   <Text style={styles.name}>{t(planLabel)}</Text>
-                  {bucket(data.sections.subscription_amounts[provider][plan])}
+                  {bucket(asBucket(subscriptionAmounts?.[provider]?.[plan]))}
                 </View>
               ))}
             </View>
@@ -171,13 +245,14 @@ export function AccountingPanel() {
           <View testID="accounting-section-gym_partner_plans">
             <Text style={styles.section}>{t("Gym partner plans")}</Text>
             <Text style={styles.hint}>{t("Last Stripe amount stored on the gym. Not limited to this period.")}</Text>
-            {bucket(data.sections.gym_partner_plans, "No gym plan amount is stored.")}
+            {bucket(asBucket(sections?.gym_partner_plans), "No gym plan amount is stored.")}
           </View>
-          {nested.map(item => (
+          <Text style={styles.section}>{t("Recorded payouts")}</Text>
+          {payouts.map(item => (
             <View key={item.label} testID={item.testID}><Text style={styles.section}>{t(item.label)}</Text>{bucket(item.section)}</View>
           ))}
           <Text style={styles.section}>{t("Active subscriptions")}</Text>
-          {counts(data.sections.active_subscriptions)}
+          {counts(asCounts(sections?.active_subscriptions))}
           <Text style={styles.section}>{t("Recent lines")}</Text>
           {data.recent_lines.length === 0 ? <Text style={styles.hint}>{t("Nothing in this period.")}</Text> : null}
           {data.recent_lines.map((line, index) => (
