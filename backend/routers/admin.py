@@ -689,6 +689,14 @@ async def retry_report_side_effect(report_id: str, user: dict = Depends(staff.re
             raise HTTPException(409, "You cannot suspend your own account")
         if not account.get("suspended_at"):
             _staff_guard(account, user, "suspend")
+    # One retry owns the partial row. A second caller loses before it can
+    # suspend or notify again. The row returns to partial or complete below.
+    claimed = await db.reports.update_one(
+        {"id": report_id, "status": "resolved", "resolution_status": "partial"},
+        {"$set": {"resolution_status": "retrying"}},
+    )
+    if claimed.modified_count != 1:
+        raise HTTPException(409, "This report does not have a partial resolution to retry")
     code = await _report_side_effects(user, report, resolution, note, account)
     await _mark_resolution(report_id, code)
     await staff.audit(

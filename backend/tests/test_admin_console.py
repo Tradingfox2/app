@@ -514,6 +514,11 @@ def test_failed_side_effect_is_partial_and_retryable(monkeypatch):
         assert await db.notifications.count_documents({"type": "moderation_action"}) == 0
 
         async def remove(target_type, target_id, *, actor):
+            stored_mid = await db.reports.find_one({"id": "r-partial"})
+            assert stored_mid["resolution_status"] == "retrying"
+            with pytest.raises(HTTPException) as overlap:
+                await admin.retry_report_side_effect("r-partial", moderator)
+            assert overlap.value.status_code == 409
             await db.posts.update_one({"id": target_id}, {"$set": {"status": "deleted"}})
             return True
 

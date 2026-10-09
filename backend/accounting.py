@@ -198,20 +198,23 @@ _PLAN_KEYS = ("pro_monthly", "pro_yearly", "other")
 def _plan_key(row: dict) -> str:
     plan = row.get("plan")
     return plan if plan in ("pro_monthly", "pro_yearly") else "other"
-def _by_plan(rows: list[dict]) -> dict:
+def _by_plan(rows: list[dict], *, truncated: bool = False) -> dict:
     grouped: dict[str, list[dict]] = {key: [] for key in _PLAN_KEYS}
     for row in rows:
         grouped[_plan_key(row)].append(row)
     parse = lambda row: _positive(row, "amount_cents")
-    return {key: _totals(grouped[key], parse) for key in _PLAN_KEYS}
-def _subscription_amounts(rows: list[dict] | None) -> dict:
+    # The cap applies to the subscription read, not to one plan. Every plan
+    # built from a capped read is incomplete, including a plan with no rows
+    # in the slice that was loaded.
+    return {key: _totals(grouped[key], parse, truncated=truncated) for key in _PLAN_KEYS}
+def _subscription_amounts(rows: list[dict] | None, *, truncated: bool = False) -> dict:
     """Last amount on file, split by channel and plan. Plans are never added together."""
     if rows is None:
         blank = lambda: {key: dict(_DOWN) for key in _PLAN_KEYS}
         return {"stripe": blank(), "revenuecat": blank()}
     return {
-        "stripe": _by_plan([row for row in rows if _channel(row) == "stripe"]),
-        "revenuecat": _by_plan([row for row in rows if _channel(row) == "revenuecat"]),
+        "stripe": _by_plan([row for row in rows if _channel(row) == "stripe"], truncated=truncated),
+        "revenuecat": _by_plan([row for row in rows if _channel(row) == "revenuecat"], truncated=truncated),
     }
 def _gym_amount(row: dict) -> tuple:
     """Current gym Stripe amount. A row with no integer amount does not invent one."""
@@ -264,7 +267,7 @@ async def summary(start: datetime, end: datetime, start_day: date, end_day: date
     commission_amount = lambda row: _positive(row, "amount_cents", "cents")
     commission_sections = _split(commissions, _PENDING, _PAID, commission_amount, truncated=commissions_capped)
     commission_sections["clawed_back"] = _clawed(commissions, commission_amount, truncated=commissions_capped)
-    subscription_amounts = _subscription_amounts(subscriptions)
+    subscription_amounts = _subscription_amounts(subscriptions, truncated=subscriptions_capped)
     if subscriptions_capped:
         subscription_amounts = {**subscription_amounts, "state": "incomplete", "reason": "row_cap"}
     return {
