@@ -5,6 +5,7 @@ import {
   type PressableStateCallbackType,
   type StyleProp,
   type TextInputProps,
+  type TextStyle,
   type ViewProps,
   type ViewStyle,
 } from "react-native";
@@ -39,6 +40,23 @@ type MotionStyle = ViewStyle & {
   transitionDuration?: string;
   transitionTimingFunction?: string;
 };
+
+/** Text inputs accept TextStyle. ViewStyle is not assignable because `userSelect` differs. */
+export type FieldTextStyle = TextStyle & {
+  transitionProperty?: string;
+  transitionDuration?: string;
+  transitionTimingFunction?: string;
+};
+
+export function fieldTextStyle(style: ViewStyle): FieldTextStyle {
+  const source = style as FieldTextStyle;
+  const next: FieldTextStyle = {};
+  if (typeof source.borderColor === "string") next.borderColor = source.borderColor;
+  if (source.transitionProperty) next.transitionProperty = source.transitionProperty;
+  if (source.transitionDuration) next.transitionDuration = source.transitionDuration;
+  if (source.transitionTimingFunction) next.transitionTimingFunction = source.transitionTimingFunction;
+  return next;
+}
 
 let reducedMotion = false;
 let motionStarted = false;
