@@ -35,7 +35,7 @@ import {
   readTrainingTotals,
   readWorkoutCount,
 } from "@/src/training-week";
-import { weeklyReviewDue, type WeeklyReview } from "@/src/weekly-review";
+import { readWeeklyReview, weeklyReviewDue, type WeeklyReview } from "@/src/weekly-review";
 
 function unreadLabel(count: number): string | null {
   if (count <= 0) return null;
@@ -197,7 +197,9 @@ export default function Home() {
     let cancelled = false;
     const timer = setTimeout(() => {
       void api.weeklyReview().then((row) => {
-        if (!cancelled) setReview(row);
+        if (cancelled) return;
+        const next = readWeeklyReview(row);
+        if (next) setReview(next);
       }).catch(() => undefined);
     }, 0);
     return () => {

@@ -91,7 +91,7 @@ test("an athlete without a club is pointed at joining or starting one", async ({
     return false;
   });
   await page.goto("/community");
-  await expect(page.getByTestId("community-primary-cta")).toHaveText("FIND A CLUB");
+  await expect(page.getByTestId("community-primary-cta")).toHaveAccessibleName("FIND A CLUB");
   await expect(page.getByText("BECOME A COACH", { exact: true })).toHaveCount(0);
   await page.getByTestId("community-primary-cta").click();
   await expect(page.getByTestId("community-tab-discover")).toHaveAttribute("aria-selected", "true");
@@ -112,7 +112,7 @@ test("an athlete who already has a club can still become a coach", async ({ page
     return false;
   });
   await page.goto("/community");
-  await expect(page.getByTestId("community-primary-cta")).toHaveText("BECOME A COACH");
+  await expect(page.getByTestId("community-primary-cta")).toHaveAccessibleName("BECOME A COACH");
   await expect(page.getByTestId("community-start-club")).toHaveCount(0);
 });
 

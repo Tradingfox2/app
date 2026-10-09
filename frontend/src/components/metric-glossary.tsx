@@ -9,7 +9,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { colors } from "@/src/theme";
+import { colors, radius } from "@/src/theme";
 
 type Props = {
   /** Plain-language meaning of the number. Already translated. */
@@ -21,6 +21,11 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   valueStyle?: StyleProp<TextStyle>;
   labelStyle?: StyleProp<TextStyle>;
+  /**
+   * `overlay` draws the sentence over the page so opening it does not
+   * reflow the list underneath. Inline is the staff console's layout.
+   */
+  placement?: "inline" | "overlay";
 };
 
 /**
@@ -37,6 +42,7 @@ export function MetricGlossary({
   style,
   valueStyle,
   labelStyle,
+  placement = "inline",
 }: Props) {
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -55,7 +61,7 @@ export function MetricGlossary({
     <Pressable
       {...a11y}
       testID={testID}
-      style={style}
+      style={[style, placement === "overlay" ? styles.overlayHost : null]}
       delayLongPress={350}
       onHoverIn={Platform.OS === "web" ? () => setHovered(true) : undefined}
       onHoverOut={Platform.OS === "web" ? () => setHovered(false) : undefined}
@@ -80,7 +86,7 @@ export function MetricGlossary({
       {open ? (
         <Text
           accessibilityLiveRegion="polite"
-          style={styles.glossary}
+          style={placement === "overlay" ? styles.glossaryOverlay : styles.glossary}
           testID={testID ? `${testID}-glossary` : undefined}
         >
           {glossary}
@@ -92,4 +98,21 @@ export function MetricGlossary({
 
 const styles = StyleSheet.create({
   glossary: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 6 },
+  overlayHost: { position: "relative", overflow: "visible", zIndex: 2 },
+  glossaryOverlay: {
+    position: "absolute",
+    zIndex: 3,
+    left: 0,
+    top: "100%",
+    width: 260,
+    marginTop: 4,
+    padding: 8,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
 });

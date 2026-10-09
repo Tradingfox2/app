@@ -151,7 +151,7 @@ export default function CommunityDetail() {
         <Affordance signal="brand" accessibilityRole="button" testID="invite-share" onPress={() => void shareInvite()} style={styles.invitePrimary}><Text style={styles.invitePrimaryText}>{t("SHARE")}</Text></Affordance>
       </View>
     </View> : null}
-    {inviteError ? <View accessibilityRole="alert" testID="invite-error" style={styles.notice}><Ionicons name="information-circle" size={18} color={colors.warning} /><Text style={styles.noticeText}>{inviteError}</Text></View> : null}
+    {inviteError ? <View accessibilityRole="alert" accessibilityLabel={inviteError} testID="invite-error" style={styles.notice}><Ionicons name="information-circle" size={18} color={colors.warning} aria-hidden accessibilityElementsHidden importantForAccessibility="no" /><Text style={styles.noticeText}>{inviteError}</Text></View> : null}
     {community ? <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.hero}>
         {community.cover_url ? <Image source={{ uri: mediaUrl(community.cover_url) }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors /> : null}
@@ -160,7 +160,7 @@ export default function CommunityDetail() {
           {community.avatar_url ? <Image source={{ uri: mediaUrl(community.avatar_url) }} style={styles.communityAvatar} accessibilityIgnoresInvertColors /> : null}
           <Text style={styles.kicker}>{community.join_policy === "open" ? t(joinPolicyPhrase("open")) : community.join_policy === "approval" ? t("APPLICATION REQUIRED") : t("PAID MEMBERSHIP")}{community.category && community.category !== "general" ? ` · ${t(community.category.replace("_", " ").toUpperCase())}` : ""}</Text>
         </View>
-        <Text style={styles.title}>{community.name}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{community.name}</Text>
         {community.redacted ? null : <Text style={styles.description} numberOfLines={3}>{community.description || t("A focused place to train and progress together.")}</Text>}
         <View style={styles.meta}><Ionicons name="people" size={16} color={colors.text} /><Text style={styles.metaText}>{formatNumber(community.member_count)} {t("members")}</Text><Text style={styles.metaText}>· {community.owner?.full_name || t("Coach")}</Text>{community.is_public ? <Text style={styles.metaText}>· {t(LISTED_PUBLICLY_LABEL)}</Text> : null}</View>
       </View>

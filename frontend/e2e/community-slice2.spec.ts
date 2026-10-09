@@ -270,7 +270,7 @@ test("a pending member of a private club sees the request, not the room", async 
   await expect(page.getByText("secret plan")).toHaveCount(0);
   await expect(page.getByText("no secrets")).toHaveCount(0);
   await expect(page.getByTestId("community-about")).toHaveCount(0);
-  await expect(page.getByText("Iron Club", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Iron Club", exact: true })).toBeVisible();
 });
 
 test("a declined request says so and can be sent again", async ({ page }) => {
@@ -298,7 +298,7 @@ test("an invite failure shows the API error, and a failed share is not silent", 
   });
   await page.goto("/community/c-1");
   await page.getByTestId("invite-people").click();
-  await expect(page.getByTestId("invite-error")).toHaveText("Invite limit reached");
+  await expect(page.getByTestId("invite-error")).toHaveAccessibleName("Invite limit reached");
 });
 
 test("sharing an invite reports a failure instead of swallowing it", async ({ page }) => {

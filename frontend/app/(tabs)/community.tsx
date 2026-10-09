@@ -123,19 +123,19 @@ export default function CommunityScreen() {
             <Text style={styles.signalBody}>{t("Join focused training groups, learn from coaches, and keep the conversation moving between sessions.")}</Text>
           </View>
           <View style={styles.signalActions}>
-            {isCoach ? <Affordance signal="brand" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/community/new")}>
-              <Ionicons name="add" size={17} color={colors.brandOn} />
+            {isCoach ? <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/community/new")}>
+              <Ionicons name="add" size={17} color={colors.brandOn} aria-hidden accessibilityElementsHidden importantForAccessibility="no" />
               <Text style={styles.primaryActionText}>{t("CREATE")}</Text>
             </Affordance> : clubFirst ? <>
-              <Affordance signal="brand" style={styles.primaryAction} testID="community-primary-cta" onPress={() => setTab("discover")}>
-                <Ionicons name="search" size={17} color={colors.brandOn} />
+              <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => setTab("discover")}>
+                <Ionicons name="search" size={17} color={colors.brandOn} aria-hidden accessibilityElementsHidden importantForAccessibility="no" />
                 <Text style={styles.primaryActionText}>{t("FIND A CLUB")}</Text>
               </Affordance>
-              <Affordance style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
+              <Affordance accessibilityRole="button" style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
                 <Text style={styles.secondaryActionText}>{t("START A CLUB")}</Text>
               </Affordance>
-            </> : !loading ? <Affordance signal="brand" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
-              <Ionicons name="arrow-forward" size={17} color={colors.brandOn} />
+            </> : !loading ? <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
+              <Ionicons name="arrow-forward" size={17} color={colors.brandOn} aria-hidden accessibilityElementsHidden importantForAccessibility="no" />
               <Text style={styles.primaryActionText}>{t("BECOME A COACH")}</Text>
             </Affordance> : null}
           </View>
