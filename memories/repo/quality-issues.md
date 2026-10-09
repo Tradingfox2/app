@@ -50,6 +50,9 @@ enough.
 
 ## Fixed — kept as precedent
 
+### Home rings painted missing recovery and sleep as zero (2026-10-09)
+`frontend/app/(tabs)/home.tsx` used `?? 0` for strain, recovery, sleep, HRV, and resting HR. A null recovery drew `0%`. HRV used a truthy check, so a real `0` became an em dash. `readMeasured` in `frontend/src/metric-state.ts` keeps null as unknown and `0` as a recorded zero. Readiness null stays unknown, per `docs/COMPUTED_METRICS.md`. Regression: `frontend/e2e/wave-a.spec.ts` and `yarn test:metric-state`.
+
 ### Home week card painted zeros and an endless skeleton (2026-10-01)
 `training-week-card` used `?? 0` and left `home-stats-skeleton` up after
 `GET /home/today` failed. `readTrainingTotals` now refuses a partial block,

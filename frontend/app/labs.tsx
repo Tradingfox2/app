@@ -65,7 +65,7 @@ function MarkerCard({ m }: { m: BiomarkerSeries }) {
       <View style={{ flex: 1 }}>
         <Text style={styles.markerName}>{m.name}</Text>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-          <Text style={[styles.markerVal, out && { color: colors.error }]}>{formatNumber(m.latest)}</Text>
+          <Text style={[styles.markerVal, out && { color: colors.errorText }]}>{formatNumber(m.latest)}</Text>
           <Text style={styles.markerUnit}>{m.unit}</Text>
         </View>
         {m.ref_low != null && m.ref_high != null && (
@@ -207,7 +207,7 @@ function ReportCard({ report }: { report: LabReport }) {
             const sev = SEVERITY[f.severity] ?? SEVERITY.info;
             return (
               <View key={i} style={[styles.flagCard, { borderLeftColor: sev.color }]}>
-                <Text style={[styles.flagSev, { color: sev.color }]}>{t(sev.label)}</Text>
+                <Text style={[styles.flagSev, { color: sev.color === colors.error ? colors.errorText : sev.color === colors.warning ? colors.warningText : colors.infoText }]}>{t(sev.label)}</Text>
                 <Text style={styles.flagTxt}>{f.comment}</Text>
               </View>
             );
@@ -328,7 +328,7 @@ export default function LabsScreen() {
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>{t("BLOOD PANELS")}</Text>
+        <Text style={styles.headerTitle}>{t("Blood panels")}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -346,6 +346,12 @@ export default function LabsScreen() {
           />
         }
       >
+        <View style={styles.education} testID="labs-education">
+          <Ionicons name="information-circle-outline" size={16} color={colors.infoText} />
+          <Text style={styles.educationTxt}>
+            {t("Figures are educational. A value inside or outside a reference range is not a diagnosis.")}
+          </Text>
+        </View>
         <View style={styles.uploadRow}>
           <Pressable
             testID="upload-pdf-btn"
@@ -403,7 +409,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: "600", letterSpacing: 0.2 },
+  education: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", marginBottom: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  educationTxt: { color: colors.text, fontSize: 14, lineHeight: 20, flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   uploadRow: { flexDirection: "row", gap: spacing.sm },
   uploadBtn: {

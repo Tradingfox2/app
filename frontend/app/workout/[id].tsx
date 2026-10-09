@@ -21,7 +21,8 @@ import { track } from "@/src/analytics";
 import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
 import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
 import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
-import { colors, radius, spacing } from "@/src/theme";
+import { colors, fonts, radius, spacing } from "@/src/theme";
+import { storage } from "@/src/utils/storage";
 import { useI18n } from "@/src/i18n";
 
 /** Club is `community_id`. `public` and `friends` are the only audience values sent. */
@@ -90,17 +91,46 @@ function rememberedLogger(id: string | string[] | undefined): LoggerMemory | und
   return key ? loggerMemory.get(key) : undefined;
 }
 
+function persistLoggerMap() {
+  const payload = JSON.stringify(Object.fromEntries(loggerMemory));
+  if (Platform.OS === "web" && typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.setItem(LOGGER_MEMORY_KEY, payload);
+    } catch {
+      // Quota or private mode: the in-memory copy still covers this document.
+    }
+  }
+  void storage.setItem(LOGGER_MEMORY_KEY, payload);
+}
+
+async function hydrateLoggerMemory() {
+  if (Platform.OS === "web") return;
+  const raw = await storage.getItem(LOGGER_MEMORY_KEY, "");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, LoggerMemory>;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (loggerMemory.has(key)) continue;
+      if (!value || !Array.isArray(value.sets) || !Array.isArray(value.planned)) continue;
+      loggerMemory.set(key, {
+        sets: value.sets,
+        planned: value.planned,
+        title: typeof value.title === "string" ? value.title : null,
+        sourceExercises: Array.isArray(value.sourceExercises) ? value.sourceExercises : [],
+        selectedEx: value.selectedEx ?? null,
+      });
+    }
+  } catch {
+    // A bad snapshot must not block the logger.
+  }
+}
+
 function rememberLogger(key: string, snapshot: LoggerMemory) {
   const existing = loggerMemory.get(key);
   const blank = snapshot.sets.length === 0 && snapshot.planned.length === 0 && !snapshot.title && !snapshot.selectedEx;
   if (blank && existing && (existing.sets.length > 0 || existing.planned.length > 0)) return;
   loggerMemory.set(key, snapshot);
-  if (Platform.OS !== "web" || typeof sessionStorage === "undefined") return;
-  try {
-    sessionStorage.setItem(LOGGER_MEMORY_KEY, JSON.stringify(Object.fromEntries(loggerMemory)));
-  } catch {
-    // Quota or private mode: the in-memory copy still covers this document.
-  }
+  persistLoggerMap();
 }
 
 function isOptimisticSet(row: { id?: string }): boolean {
@@ -177,6 +207,21 @@ export default function WorkoutLogger() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    await hydrateLoggerMemory();
+    const key = Array.isArray(id) ? id[0] : id;
+    const snap = key ? loggerMemory.get(key) : undefined;
+    if (snap && setsRef.current.length === 0 && snap.sets.length > 0) {
+      setsRef.current = snap.sets;
+      setSets(snap.sets);
+    }
+    if (snap && plannedRef.current.length === 0 && snap.planned.length > 0) {
+      plannedRef.current = snap.planned;
+      setPlanned(snap.planned);
+    }
+    if (snap && !selectedExRef.current && snap.selectedEx) {
+      selectedExRef.current = snap.selectedEx;
+      setSelectedEx(snap.selectedEx);
+    }
     const notes: string[] = [];
     try {
       await flushQueue();
@@ -530,8 +575,8 @@ export default function WorkoutLogger() {
         <View style={styles.timer} testID="rest-timer">
           <Text style={styles.timerLabel}>{t("Rest")}</Text>
           <Text style={styles.timerVal}>{restRemaining}s</Text>
-          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Rest")} style={press("ghost", styles.skipBtn)}>
-            <Ionicons name="close" color={colors.textDim} size={18} />
+          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Skip rest")} style={press("ghost", styles.skipBtn)}>
+            <Text style={styles.skipTxt}>{t("Skip")}</Text>
           </Pressable>
         </View>
       )}
@@ -547,7 +592,7 @@ export default function WorkoutLogger() {
         behavior="padding"
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: spacing.lg, paddingBottom: finished ? spacing.xxl : 240 }}>
           <Pressable
             testID="pick-exercise-btn"
             style={press("surface", styles.exSelector)}
@@ -578,6 +623,7 @@ export default function WorkoutLogger() {
                   <Text style={styles.setValDim}>
                     {s.rpe ? `RPE ${s.rpe}` : "—"}
                   </Text>
+                  {isOptimisticSet(s) ? <Text style={styles.setSaving}>{t("Saving")}</Text> : null}
                 </View>
               ))}
               {(setsByEx[selectedEx.id] || []).length === 0 && (
@@ -598,7 +644,7 @@ export default function WorkoutLogger() {
           )}
         </ScrollView>
 
-        {/* Fast-entry bar */}
+        {finished ? null : (
         <View style={styles.entryBar}>
           <FieldCol label="REPS" value={reps} onChange={setReps} testID="input-reps" />
           <FieldCol label="KG" value={weight} onChange={setWeight} testID="input-weight" />
@@ -607,10 +653,13 @@ export default function WorkoutLogger() {
             style={press("primary", styles.addBtn)}
             onPress={quickAddSet}
             testID="add-set-btn"
+            accessibilityRole="button"
+            accessibilityLabel={t("Add set")}
           >
-            <Ionicons name="add" color={colors.brandOn} size={26} />
+            <Ionicons name="add" color={colors.brandOn} size={28} />
           </Pressable>
         </View>
+        )}
       </KeyboardAvoidingView>
 
       <Modal
@@ -787,7 +836,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
+  title: { color: colors.text, fontFamily: fonts.display, fontWeight: "600", letterSpacing: 0.4, fontSize: 22 },
   subtitle: { color: colors.textMuted, fontSize: 11, marginTop: 2, maxWidth: 220 },
   planWrap: { marginBottom: spacing.sm },
   planLabel: {
@@ -851,25 +900,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: "transparent",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.brand,
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    minHeight: 44,
+    minHeight: 64,
     borderRadius: radius.md,
     marginBottom: spacing.sm,
   },
-  timerLabel: { color: colors.textDim, fontWeight: "400", fontSize: 13 },
+  timerLabel: { color: colors.textMuted, fontFamily: fonts.textStrong, fontWeight: "600", fontSize: 13 },
   timerVal: {
     color: colors.text,
-    fontWeight: "700",
+    fontFamily: fonts.numeric,
+    fontWeight: "400",
     flex: 1,
-    fontSize: 20,
+    fontSize: 32,
     fontVariant: ["tabular-nums"],
   },
+  skipTxt: { color: colors.text, fontFamily: fonts.textStrong, fontSize: 14 },
   exSelector: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -953,11 +1004,12 @@ const styles = StyleSheet.create({
   colInput: {
     backgroundColor: colors.surface2,
     color: colors.text,
-    fontSize: 20,
-    fontWeight: "800",
+    fontFamily: fonts.numeric,
+    fontSize: 24,
+    fontWeight: "400",
     textAlign: "center",
     borderRadius: radius.md,
-    minHeight: 48,
+    minHeight: 56,
     borderWidth: 1,
     borderColor: colors.border,
     fontVariant: ["tabular-nums"],
@@ -970,12 +1022,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   skipBtn: {
-    width: 36,
-    height: 36,
+    minWidth: 64,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.pill,
   },
+  setSaving: { color: colors.warningText, fontSize: 12, fontFamily: fonts.textStrong },
   finishBtn: {
     minHeight: 44,
     justifyContent: "center",

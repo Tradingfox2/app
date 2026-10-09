@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontWeight: "600", letterSpacing: 0.2, fontSize: 22 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   cameraWrap: { borderRadius: radius.lg, overflow: "hidden" },
   camera: { width: "100%", height: 380 },

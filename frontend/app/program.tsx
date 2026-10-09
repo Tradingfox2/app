@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
   musclesLinkTxt: { color: colors.text, fontWeight: "800" },
   mergeBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: spacing.xl },
   mergeSheet: { backgroundColor: colors.surface2, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: "600", letterSpacing: 0.2 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   sectionTitle: {
     color: colors.textMuted,
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm,
   },
-  phaseTxt: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 12 },
+  phaseTxt: { color: colors.text, fontWeight: "700", letterSpacing: 0.6, fontSize: 12 },
   startDayBtn: {
     marginTop: spacing.md,
     minHeight: 44,

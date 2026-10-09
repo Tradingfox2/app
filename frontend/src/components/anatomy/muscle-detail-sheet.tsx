@@ -443,6 +443,7 @@ export function MuscleDetailSheet({
               <StatRow label={t("Status")} value={t(LOAD_LABELS[state])} />
               <StatRow label={t("Last trained")} value={lastTrained} />
             </View>
+            <Text style={styles.loadNote}>{t("Load is this muscle's share of logged volume. It is not a body scan.")}</Text>
           </>
         ) : (
           <View style={styles.emptyState}>
@@ -796,6 +797,12 @@ const styles = StyleSheet.create({
     color: muted,
     textAlign: "center",
     lineHeight: 22,
+  },
+  loadNote: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
   overviewContent: {
     flex: 1,

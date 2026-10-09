@@ -16,7 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
 import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
-import { card, colors, radius, spacing } from "@/src/theme";
+import { card, colors, radius, spacing, type } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
 import type { MuscleSlug, RecommendationExercise } from "@/src/components/anatomy/muscle-types";
@@ -169,7 +169,9 @@ export default function Workouts() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="workouts-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{t("WORKOUTS")}</Text>
+        <Text style={styles.kicker}>{t("TRAINING")}</Text>
+        <Text style={styles.title}>{t("Sessions")}</Text>
+        <Text style={styles.lede}>{t("Start a planned day, or open the library and build one.")}</Text>
       </View>
 
       <View style={styles.segment}>
@@ -249,6 +251,7 @@ export default function Workouts() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.sessionTitle}>{item.title}</Text>
                 <Text style={styles.sessionMeta} testID={`workout-meta-${item.id}`}>{sessionMeta(item)}</Text>
+                {!item.ended_at ? <Text style={styles.progressPill}>{t("In progress")}</Text> : null}
               </View>
               <Ionicons name="chevron-forward" color={colors.textMuted} size={20} />
             </Pressable>
@@ -494,7 +497,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  title: { color: colors.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
+  kicker: { ...type.eyebrow, marginBottom: 2 },
+  title: { ...type.screenTitle },
+  lede: { ...type.caption, marginTop: 4, maxWidth: 520 },
+  progressPill: { color: colors.warningText, fontSize: 12, marginTop: 4, fontWeight: "600" },
   segment: {
     flexDirection: "row",
     marginHorizontal: spacing.lg,
@@ -548,7 +554,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.sm,
   },
-  searchInput: { flex: 1, color: colors.text, fontSize: 14, paddingVertical: spacing.sm },
+  searchInput: { flex: 1, color: colors.text, fontSize: 16, minHeight: 44, paddingVertical: spacing.sm },
   listPad: { padding: spacing.lg, paddingBottom: 140 },
   sessionCard: {
     flexDirection: "row",

@@ -141,7 +141,13 @@ export default function SourcesScreen() {
               <View
                 style={[
                   styles.dot,
-                  { backgroundColor: connected ? colors.success : colors.textDim },
+                  {
+                    backgroundColor: !connected
+                      ? colors.textDim
+                      : s.mode === "simulated" || s.mode === "pending"
+                        ? colors.warning
+                        : colors.success,
+                  },
                 ]}
               />
               {badge ? (
@@ -164,8 +170,13 @@ export default function SourcesScreen() {
                 ? s.last_sync_at
                   ? t("Last sync {date}", { date: formatDate(s.last_sync_at, { dateStyle: "short", timeStyle: "short" }) })
                   : t("Connected — not synced yet")
-                : t("Not connected")}
+                : pending
+                  ? t("Awaiting authorisation")
+                  : t("Not connected")}
             </Text>
+            {s.mode === "simulated" ? (
+              <Text style={styles.sampleNote}>{t("Sample data. This is not a live reading.")}</Text>
+            ) : null}
             {provides.length ? (
               <View style={styles.chipRow}>
                 {provides.map((p) => (
@@ -311,7 +322,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontWeight: "600", letterSpacing: 0.2, fontSize: 22 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   infoBanner: {
     flexDirection: "row",
@@ -347,6 +358,7 @@ const styles = StyleSheet.create({
   },
   chipTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
   noteTxt: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
+  sampleNote: { color: colors.warningText, fontSize: 12, marginTop: 4, lineHeight: 16 },
   agreementNote: { color: colors.warning, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
   docsLink: { color: colors.text, fontWeight: "700" },
   card: {

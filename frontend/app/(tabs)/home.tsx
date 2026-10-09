@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, type Href } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
@@ -18,7 +19,8 @@ import { DidYouKnow } from "@/src/components/did-you-know";
 import { LiveNowStrip } from "@/src/components/live-now-strip";
 import { ActivityRing } from "@/src/components/activity-ring";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
-import { colors, radius, spacing, type, card } from "@/src/theme";
+import { colors, radius, spacing, type, card, raised } from "@/src/theme";
+import { measuredNumber, metricCaption, readReadiness } from "@/src/metric-state";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
 import { useI18n } from "@/src/i18n";
@@ -49,6 +51,7 @@ function Ring({
   color,
   label,
   unit,
+  caption,
   testID,
 }: {
   value: number | null;
@@ -57,6 +60,7 @@ function Ring({
   color: string;
   label: string;
   unit?: string;
+  caption?: string;
   testID?: string;
 }) {
   const size = 96;
@@ -110,8 +114,36 @@ function Ring({
         )}
       </View>
       <Text style={styles.ringLabel}>{label}</Text>
+      {caption ? <Text style={styles.ringCaption}>{caption}</Text> : null}
     </View>
   );
+}
+
+function greetingKey(date: Date): "Good morning" | "Good afternoon" | "Good evening" {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function captionLabel(
+  kind: ReturnType<typeof metricCaption>,
+  t: (source: string) => string,
+): string {
+  switch (kind) {
+    case "not_connected":
+      return t("Not connected");
+    case "not_measured":
+      return t("Not measured");
+    case "recorded_zero":
+      return t("Recorded zero");
+    case "measured":
+      return t("Measured");
+    default: {
+      const unreachable: never = kind;
+      return unreachable;
+    }
+  }
 }
 
 export default function Home() {
@@ -208,18 +240,20 @@ export default function Home() {
     };
   }, [dashSettled, opened]);
 
-  const strain = data?.strain?.value ?? 0;
+  const strain = measuredNumber(data?.strain);
   const trainingLoad = readTrainingLoad(data);
   const loadWeek = trainingLoad?.week ?? null;
   const showSessionLoad = data?.strain == null;
-  const recovery = data?.recovery?.value ?? 0;
-  const sleep = data?.sleep?.value ?? 0;
-  const hrv = data?.hrv?.value ?? 0;
-  const restingHr = data?.resting_hr?.value ?? 0;
+  const recovery = measuredNumber(data?.recovery);
+  const sleep = measuredNumber(data?.sleep);
+  const hrv = measuredNumber(data?.hrv);
+  const restingHr = measuredNumber(data?.resting_hr);
+  const readiness = readReadiness(data);
   const workoutCount = readWorkoutCount(data);
   const training = readTrainingTotals(data);
   const calendar = workoutStamps ? weekActivity(workoutStamps) : null;
   const wearableConnected = Boolean(data?.wearable_connected);
+  const ringNote = (value: number | null) => captionLabel(metricCaption(value, wearableConnected), t);
   const readinessConfidence = data?.readiness?.confidence;
   const showMorning = typeof readinessConfidence === "number" && readinessConfidence < 0.5;
   const activeWorkout = data?.active_workout ?? null;
@@ -285,7 +319,7 @@ export default function Home() {
       >
         <View style={styles.header}>
           <View style={styles.headerCopy}>
-            <Text style={type.eyebrow}>{t("READY TO TRAIN")}</Text>
+            <Text style={type.eyebrow}>{t(greetingKey(new Date()))}</Text>
             <Text style={styles.name} numberOfLines={1}>{user?.full_name ?? user?.email}</Text>
           </View>
           <View style={styles.headerActions}>
@@ -318,8 +352,6 @@ export default function Home() {
           </View>
         </View>
 
-        <LiveNowStrip affordance />
-
         {dashError ? (
           <View style={styles.errorBanner} accessibilityRole="alert">
             <Ionicons name="alert-circle" color={colors.live} size={16} />
@@ -335,88 +367,13 @@ export default function Home() {
           </View>
         ) : null}
 
-        <View style={styles.ringsCard} testID="rings-card">
-          <View style={styles.cardHead}>
-            <Text style={styles.cardTitle}>{t("TODAY")}</Text>
-            {data && !wearableConnected ? (
-              <Text style={styles.cardHint}>{t("NO WEARABLE DATA")}</Text>
-            ) : null}
-          </View>
-          {showSkeleton ? (
-            <View style={styles.ringPlate}>
-              <View style={styles.rings} testID="home-skeleton" accessibilityLabel={t("Loading home")}>
-                <View style={styles.skeletonRing} />
-                <View style={styles.skeletonRing} />
-                <View style={styles.skeletonRing} />
-              </View>
-            </View>
-          ) : data ? (
-            <>
-              <View style={styles.ringPlate}>
-                <View style={styles.rings}>
-                  {showSessionLoad ? (
-                    <Ring
-                      value={loadWeek}
-                      figure={loadWeek == null ? "—" : formatNumber(Math.round(loadWeek))}
-                      max={loadRingMax(trainingLoad)}
-                      color={colors.blaze}
-                      label={t("LOAD")}
-                      testID="ring-load"
-                    />
-                  ) : (
-                    <Ring value={strain} max={21} color={colors.blaze} label={t("STRAIN")} testID="ring-strain" />
-                  )}
-                  <Ring value={recovery} max={100} color={colors.success} label={t("RECOVERY")} unit="%" />
-                  <Ring value={sleep} max={10} color={colors.info} label={t("SLEEP")} unit="h" />
-                </View>
-              </View>
-              {!wearableConnected && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t("Connect a wearable source")}
-                  onPress={() => router.push("/sources")}
-                  style={(state) => [styles.connectRow, pressableStyle(state, { variant: "hairline", reduceMotion })]}
-                  testID="connect-source-cta"
-                >
-                  <Ionicons name="watch-outline" size={16} color={colors.text} />
-                  <Text style={styles.connectTxt}>
-                    {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.text} />
-                </Pressable>
-              )}
-            </>
-          ) : null}
-        </View>
-
-        {review ? (
-          <View style={styles.statsCard} testID="weekly-review-card">
-            <Text style={styles.cardTitle}>{t("WEEKLY REVIEW")}</Text>
-            <Text style={styles.todayMeta} testID="weekly-review-headline">{review.headline}</Text>
-            <Text style={styles.weekEmpty}>{t("WINS")}</Text>
-            <Text style={styles.todayMeta}>{review.wins}</Text>
-            <Text style={styles.weekEmpty}>{t("WATCH")}</Text>
-            <Text style={styles.todayMeta}>{review.watch}</Text>
-            <Text style={styles.weekEmpty}>{t("NEXT WEEK")}</Text>
-            <Text style={styles.todayMeta}>{review.next_week_change}</Text>
-          </View>
-        ) : null}
-
-        {showMorning ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("Tell your coach how you slept.")}
-            testID="home-morning"
-            onPress={() => router.push("/morning" as Href)}
-            style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
-          >
-            <Ionicons name="moon-outline" size={18} color={colors.text} />
-            <Text style={styles.coachRowTxt}>{t("HOW YOU SLEPT")}</Text>
-          </Pressable>
-        ) : null}
-
-        {/* The LIVE NOW strip above owns the band under the header. This card sits under the rings. */}
-        <View style={styles.todayCard} testID="today-card">
+        <LinearGradient
+          colors={[colors.brandWash, colors.surface]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.todayCard, raised("card")]}
+          testID="today-card"
+        >
           <Text style={styles.cardTitle}>{t("TODAY'S SESSION")}</Text>
           {activeWorkout ? (
             <Text style={styles.todayMeta}>{activeWorkout.title}</Text>
@@ -497,7 +454,143 @@ export default function Home() {
               <Text style={styles.errorTxt} testID="start-error">{startError}</Text>
             </View>
           ) : null}
+        </LinearGradient>
+
+        <LiveNowStrip affordance />
+
+        {data ? (
+          <View style={styles.statsCard} testID="readiness-card">
+            <Text style={styles.cardTitle}>{t("READINESS")}</Text>
+            <Text style={type.hero} testID="readiness-value">
+              {readiness.kind === "scored" ? formatNumber(readiness.score) : "—"}
+            </Text>
+            <Text style={styles.readinessNote} testID="readiness-note">
+              {readiness.kind === "unavailable"
+                ? t("Today's readiness score was not returned.")
+                : readiness.kind === "unknown"
+                  ? t("Unknown. Not enough measured inputs to score readiness.")
+                  : t("Training guidance from the inputs that were present. Not a medical assessment.")}
+            </Text>
+            {readiness.kind === "scored" && readiness.verdict === "push" ? <Text style={styles.ringCaption}>{t("Push day")}</Text> : null}
+            {readiness.kind === "scored" && readiness.verdict === "steady" ? <Text style={styles.ringCaption}>{t("Steady day")}</Text> : null}
+            {readiness.kind === "scored" && readiness.verdict === "rest" ? <Text style={styles.ringCaption}>{t("Rest day")}</Text> : null}
+            {readiness.kind !== "unavailable" && readiness.missing.length > 0 ? (
+              <Text style={styles.ringCaption} testID="readiness-missing">
+                {t("Missing")}: {readiness.missing.join(", ")}
+              </Text>
+            ) : null}
+            {readiness.kind !== "unavailable" && readiness.confidence != null ? (
+              <Text style={styles.ringCaption} testID="readiness-confidence">
+                {t("Input coverage {pct}%", { pct: formatNumber(Math.round(readiness.confidence * 100)) })}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {showMorning ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Tell your coach how you slept.")}
+            testID="home-morning"
+            onPress={() => router.push("/morning" as Href)}
+            style={(state) => [styles.coachRow, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          >
+            <Ionicons name="moon-outline" size={18} color={colors.text} />
+            <Text style={styles.coachRowTxt}>{t("HOW YOU SLEPT")}</Text>
+          </Pressable>
+        ) : null}
+
+        <View style={styles.ringsCard} testID="rings-card">
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle}>{t("TODAY")}</Text>
+            {data && !wearableConnected ? (
+              <Text style={styles.cardHint}>{t("NO WEARABLE DATA")}</Text>
+            ) : null}
+          </View>
+          {showSkeleton ? (
+            <View style={styles.ringPlate}>
+              <View style={styles.rings} testID="home-skeleton" accessibilityLabel={t("Loading home")}>
+                <View style={styles.skeletonRing} />
+                <View style={styles.skeletonRing} />
+                <View style={styles.skeletonRing} />
+              </View>
+            </View>
+          ) : data ? (
+            <>
+              <View style={styles.ringPlate}>
+                <View style={styles.rings}>
+                  {showSessionLoad ? (
+                    <Ring
+                      value={loadWeek}
+                      figure={loadWeek == null ? "—" : formatNumber(Math.round(loadWeek))}
+                      max={loadRingMax(trainingLoad)}
+                      color={colors.blaze}
+                      label={t("LOAD")}
+                      caption={loadWeek == null ? t("Not measured") : loadWeek === 0 ? t("Recorded zero") : t("From finished sessions")}
+                      testID="ring-load"
+                    />
+                  ) : (
+                    <Ring
+                      value={strain}
+                      max={21}
+                      color={colors.blaze}
+                      label={t("STRAIN")}
+                      caption={ringNote(strain)}
+                      testID="ring-strain"
+                    />
+                  )}
+                  <Ring
+                    value={recovery}
+                    max={100}
+                    color={colors.success}
+                    label={t("RECOVERY")}
+                    unit="%"
+                    caption={ringNote(recovery)}
+                    testID="ring-recovery"
+                  />
+                  <Ring
+                    value={sleep}
+                    figure={sleep == null ? "—" : formatNumber(sleep)}
+                    max={10}
+                    color={colors.info}
+                    label={t("SLEEP")}
+                    unit="h"
+                    caption={ringNote(sleep)}
+                    testID="ring-sleep"
+                  />
+                </View>
+              </View>
+              {!wearableConnected && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Connect a wearable source")}
+                  onPress={() => router.push("/sources")}
+                  style={(state) => [styles.connectRow, pressableStyle(state, { variant: "hairline", reduceMotion })]}
+                  testID="connect-source-cta"
+                >
+                  <Ionicons name="watch-outline" size={16} color={colors.text} />
+                  <Text style={styles.connectTxt}>
+                    {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.text} />
+                </Pressable>
+              )}
+            </>
+          ) : null}
         </View>
+
+        {review ? (
+          <View style={styles.statsCard} testID="weekly-review-card">
+            <Text style={styles.cardTitle}>{t("WEEKLY REVIEW")}</Text>
+            <Text style={styles.todayMeta} testID="weekly-review-headline">{review.headline}</Text>
+            <Text style={styles.weekEmpty}>{t("WINS")}</Text>
+            <Text style={styles.todayMeta}>{review.wins}</Text>
+            <Text style={styles.weekEmpty}>{t("WATCH")}</Text>
+            <Text style={styles.todayMeta}>{review.watch}</Text>
+            <Text style={styles.weekEmpty}>{t("NEXT WEEK")}</Text>
+            <Text style={styles.todayMeta}>{review.next_week_change}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.statsCard} testID="training-week-card">
           <View style={styles.cardHead}>
@@ -565,11 +658,19 @@ export default function Home() {
         </Pressable>
 
         <View style={styles.metricRow}>
-          <MetricCard label="HRV" value={hrv ? `${Math.round(hrv)}` : "—"} unit="ms" />
           <MetricCard
+            testID="metric-hrv"
+            label="HRV"
+            value={hrv == null ? "—" : formatNumber(Math.round(hrv))}
+            unit="ms"
+            note={ringNote(hrv)}
+          />
+          <MetricCard
+            testID="metric-rhr"
             label={t("RESTING HR")}
-            value={restingHr ? `${Math.round(restingHr)}` : "—"}
+            value={restingHr == null ? "—" : formatNumber(Math.round(restingHr))}
             unit="bpm"
+            note={ringNote(restingHr)}
           />
         </View>
 
@@ -868,14 +969,15 @@ function Stat({ label, value, unit }: { label: string; value: string; unit?: str
   );
 }
 
-function MetricCard({ label, value, unit }: { label: string; value: string; unit: string }) {
+function MetricCard({ label, value, unit, note, testID }: { label: string; value: string; unit: string; note: string; testID: string }) {
   return (
-    <View style={styles.metricCard}>
+    <View style={styles.metricCard} testID={testID}>
       <Text style={styles.metricLabel}>{label}</Text>
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
         <Text style={type.metric}>{value}</Text>
         <Text style={styles.metricUnit}>{unit}</Text>
       </View>
+      <Text style={styles.metricNote}>{note}</Text>
     </View>
   );
 }
@@ -924,7 +1026,7 @@ const styles = StyleSheet.create({
   errorTxt: { color: colors.text, fontSize: 13, fontWeight: "400", flex: 1 },
   retryBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
   retryTxt: { color: colors.text, fontWeight: "800" },
-  todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md },
+  todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md, overflow: "hidden" },
   todayMeta: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: spacing.md },
   secondaryCta: {
     minHeight: 44,
@@ -1048,11 +1150,22 @@ const styles = StyleSheet.create({
   },
   ringLabel: {
     color: colors.textMuted,
+    fontFamily: type.eyebrow.fontFamily,
     fontSize: 10,
     letterSpacing: 1.5,
     fontWeight: "700",
     marginTop: spacing.sm,
   },
+  ringCaption: {
+    color: colors.textDim,
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 2,
+    textAlign: "center",
+    maxWidth: 96,
+  },
+  readinessNote: { color: colors.text, fontSize: 14, lineHeight: 20, marginBottom: spacing.sm },
+  metricNote: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   metricRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.md },
   quickRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
   quickBtn: {

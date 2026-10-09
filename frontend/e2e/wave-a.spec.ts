@@ -254,6 +254,30 @@ test("no finished-session load stays blank instead of zero", async ({ page }) =>
   await expect(page.getByTestId("ring-load").getByText("0", { exact: true })).toHaveCount(0);
 });
 
+test("missing recovery, sleep, and HRV stay unknown while a real resting heart rate of zero stays zero", async ({ page }) => {
+  await openHome(page, {
+    ...todayBase,
+    strain: { value: 14 },
+    recovery: null,
+    sleep: null,
+    hrv: null,
+    resting_hr: { value: 0 },
+    wearable_connected: true,
+    readiness: { score: null, verdict: null, confidence: 0.25, components: {}, missing: ["hrv", "sleep"] },
+  });
+  await expect(page.getByTestId("ring-recovery")).toContainText("—");
+  await expect(page.getByTestId("ring-recovery")).toContainText("Not measured");
+  await expect(page.getByTestId("ring-recovery").getByText("0", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("ring-sleep")).toContainText("—");
+  await expect(page.getByTestId("ring-sleep").getByText("0", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("metric-hrv")).toContainText("—");
+  await expect(page.getByTestId("metric-rhr")).toContainText("0");
+  await expect(page.getByTestId("metric-rhr")).toContainText("Recorded zero");
+  await expect(page.getByTestId("readiness-value")).toContainText("—");
+  await expect(page.getByTestId("readiness-note")).toContainText("Unknown");
+  await expect(page.getByTestId("readiness-missing")).toContainText("hrv");
+});
+
 test("a failed training-day load keeps the week totals and retries into the calendar", async ({ page }) => {
   let workoutCalls = 0;
   await signIn(page);

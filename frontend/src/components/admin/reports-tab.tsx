@@ -1,7 +1,7 @@
 import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
-import { colors } from "@/src/theme";
+import { staffColors as colors } from "./staff-theme";
 import { ADMIN_QUEUE_TARGET_HOURS, agePhrase, isOverdue, queueAge } from "./queue-age";
 import { RESOLUTIONS, isReportTargetType, reportTypeLabel } from "./admin-labels";
 import { consoleStyles as styles } from "./console-styles";

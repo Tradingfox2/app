@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
 const surface = "rgb(26, 31, 36)";
 const surface2 = "rgb(36, 42, 49)";
 const brand = "rgb(214, 227, 90)";
-const hairline = "rgb(52, 59, 68)";
+const hairline = "rgb(58, 70, 82)";
 
 const me = {
   id: "me-1", full_name: "Ada Lift", email: "ada@example.com", role: "athlete",

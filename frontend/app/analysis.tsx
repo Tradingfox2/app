@@ -71,9 +71,10 @@ export default function AnalysisScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")}>
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
-        <Text style={styles.title}>{t("TRENDS")}</Text>
+        <Text style={styles.title}>{t("Trends")}</Text>
         <View style={styles.spacer} />
       </View>
+      <Text style={styles.provenance}>{t("Charts plot returned points only. A gap is a missing day, not a zero.")}</Text>
       <View style={styles.tabs}>
         {([30, 90] as const).map((option) => {
           const selected = days === option;
@@ -130,9 +131,10 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   spacer: { width: 26 },
-  title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
+  title: { color: colors.text, fontSize: 22, fontWeight: "600", letterSpacing: 0.2 },
+  provenance: { color: colors.textMuted, fontSize: 13, lineHeight: 18, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   tabs: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  tab: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.surface2 },
+  tab: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.surface2 },
   tabOn: { backgroundColor: colors.brand },
   tabTxt: { color: colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.6 },
   tabTxtOn: { color: colors.brandOn },
@@ -144,6 +146,6 @@ const styles = StyleSheet.create({
   muted: { color: colors.textMuted, paddingVertical: spacing.md },
   range: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   errorRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  errorTxt: { color: colors.live, flex: 1 },
+  errorTxt: { color: colors.errorText, flex: 1 },
   retry: { color: colors.text, fontWeight: "800" },
 });

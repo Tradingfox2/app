@@ -7,6 +7,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
+import { useAthleteFonts } from "@/src/athlete-fonts";
+import { useReducedMotion } from "@/src/affordance";
 import { AuthProvider } from "@/src/auth-context";
 import { I18nProvider } from "@/src/i18n";
 import { wrapRoot } from "@/src/sentry";
@@ -16,7 +18,11 @@ LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 
 function RootLayout() {
-  const [loaded, error] = useIconFonts();
+  const [iconsLoaded, iconError] = useIconFonts();
+  const [fontsLoaded, fontError] = useAthleteFonts();
+  const reduceMotion = useReducedMotion();
+  const loaded = iconsLoaded && (fontsLoaded || Boolean(fontError));
+  const error = iconError;
 
   useEffect(() => {
     if (loaded || error) SplashScreen.hideAsync();
@@ -40,7 +46,8 @@ function RootLayout() {
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.bg },
-                  animation: "fade",
+                  animation: reduceMotion ? "none" : "fade",
+                  animationDuration: reduceMotion ? 0 : 180,
                 }}
               />
             </View>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform, Text, TextInput, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
-import { colors } from "@/src/theme";
+import { staffColors as colors } from "./staff-theme";
 import { consoleStyles as styles } from "./console-styles";
 
 type Translate = (source: string, values?: Record<string, string | number>) => string;

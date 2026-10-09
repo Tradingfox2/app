@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
+  title: { color: colors.text, fontWeight: "600", letterSpacing: 0.2, fontSize: 22 },
   exName: { color: colors.text, fontSize: 22, fontWeight: "900", marginBottom: spacing.lg },
   prCard: {
     backgroundColor: colors.surface,
