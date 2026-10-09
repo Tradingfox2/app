@@ -19,7 +19,7 @@ import { api, type Community } from "@/src/api";
 import { track } from "@/src/analytics";
 import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
 import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
-import { useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
+import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -560,7 +560,7 @@ export default function WorkoutLogger() {
             <TextInput
               placeholder={t("Search…")}
               placeholderTextColor={colors.textDim}
-              style={[styles.pickerSearch, pickerSearch.style]}
+              style={[styles.pickerSearch, fieldTextStyle(pickerSearch.style)]}
               value={pickerQuery}
               onChangeText={setPickerQuery}
               testID="picker-search"
@@ -670,7 +670,7 @@ function FieldCol({
         value={value}
         onChangeText={onChange}
         keyboardType="decimal-pad"
-        style={[styles.colInput, field.style]}
+        style={[styles.colInput, fieldTextStyle(field.style)]}
         selectTextOnFocus
         {...field.hover}
         {...field.focus}

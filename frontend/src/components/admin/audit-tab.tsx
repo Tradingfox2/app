@@ -1,6 +1,7 @@
 import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
+import { selectedControl } from "@/src/community-copy";
 import { colors } from "@/src/theme";
 import { consoleStyles as styles } from "./console-styles";
 import { QueueList } from "./queue-list";
@@ -9,12 +10,23 @@ import type { AdminConsoleModel } from "./use-admin-console";
 export function AuditTab({ model }: { model: AdminConsoleModel }) {
   const {
     t, formatDate, audit, auditTotal, auditCursor, auditActor, setAuditActor, auditAction, setAuditAction,
-    auditTarget, setAuditTarget, auditFrom, setAuditFrom, auditTo, setAuditTo, working, sectionErrors,
+    auditTarget, setAuditTarget, auditFrom, setAuditFrom, auditTo, setAuditTo, auditOutcome, setAuditOutcome, working, sectionErrors,
     updatedAt, loading, searchAudit, moreAudit, retrySection,
   } = model;
   return (
     <>
-      <Text style={styles.hint}>{t("Append-only record of every staff action. Filters run on the server. A failed request is not written here, so the action name is the recorded outcome.")}</Text>
+      <Text style={styles.hint}>{t("Append-only record of staff actions. Failed and denied attempts are stored with an outcome and a reason code. The request body is not copied.")}</Text>
+      <View style={styles.filters}>
+        {(["", "success", "failed", "denied"] as const).map(item => {
+          const label = item === "" ? "All outcomes" : item === "success" ? "Succeeded" : item === "failed" ? "Failed" : "Denied";
+          const selected = auditOutcome === item;
+          return (
+            <Affordance key={label} accessibilityRole="button" accessibilityLabel={t(label)} {...selectedControl(selected)} testID={`audit-outcome-${item || "all"}`} onPress={() => setAuditOutcome(item)} style={[styles.chip, selected && styles.chipActive]}>
+              <Text style={[styles.chipText, selected && styles.chipTextActive]}>{t(label)}</Text>
+            </Affordance>
+          );
+        })}
+      </View>
       <TextInput value={auditActor} onChangeText={setAuditActor} maxLength={80} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t("Actor email or id")} placeholder={t("Actor email or id")} placeholderTextColor={colors.textDim} style={styles.input} testID="audit-filter-actor" />
       <TextInput value={auditAction} onChangeText={setAuditAction} maxLength={80} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t("Action prefix")} placeholder={t("Action prefix")} placeholderTextColor={colors.textDim} style={styles.input} testID="audit-filter-action" />
       <TextInput value={auditTarget} onChangeText={setAuditTarget} maxLength={80} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t("Target id")} placeholder={t("Target id")} placeholderTextColor={colors.textDim} style={styles.input} testID="audit-filter-target" />
@@ -45,9 +57,11 @@ export function AuditTab({ model }: { model: AdminConsoleModel }) {
           const from = entry.metadata?.from;
           const to = entry.metadata?.to;
           const change = typeof from === "string" && typeof to === "string" ? `${from} → ${to}` : null;
+          const outcome = entry.outcome === "failed" || entry.outcome === "denied" ? entry.outcome : null;
           return (
             <View key={entry.id} style={styles.auditRow}>
               <Text style={styles.auditAction}>{entry.action}</Text>
+              {outcome ? <Text style={styles.meta}>{t(outcome === "failed" ? "Failed" : "Denied")}{entry.reason_code ? ` · ${entry.reason_code}` : ""}</Text> : null}
               <Text style={styles.meta}>{entry.actor_email} → {entry.target_type}:{entry.target_id.slice(0, 8)}</Text>
               {entry.reason ? <Text style={styles.snapshot}>{entry.reason}</Text> : null}
               {change ? <Text style={styles.meta}>{t("Recorded change:")} {change}</Text> : null}

@@ -291,3 +291,154 @@ Date: 2026-10-09. Continues on `cursor/admin-console-audit-9d72` after `c46d88d`
 - Accounting totals marked incomplete are the rows read before the cap or the rows that parsed. They are not a complete-period figure. A capped subscription read marks each plan bucket incomplete as well as the parent object.
 - A process kill during a side-effect retry can leave `resolution_status=retrying`. The retry route will not take that row, because it only claims `partial`.
 - Subscription plan amounts stay next to the liability group as “last amount on file”. They are not added into owed-to-coaches.
+
+## Phase 3 + final review
+
+Date: 2026-10-09. Branch `cursor/admin-console-phase3-89ef` from `da894b0`.
+
+### Executive summary
+
+Phase 3 closes the remaining staff-console gaps from the Phase 2 risk list. Coach approval and rejection now claim the pending row, so one reviewer wins and the loser gets 409 with no audit row. Destructive staff actions ask in a focus-trapped dialog before they run, and the reason field enforces the existing length rules. A report side-effect retry holds a five-minute lease; a killed worker can be reclaimed after that, including from the resolved queue. Free-text search stays in `sessionStorage`. Failed and denied mutations are audit rows with a stable reason code, and the audit API and console filter on outcome. Analytics panel opens write at most one `analytics.viewed` row per actor per 15 minutes. `npx tsc --noEmit` is clean. `public.reports` is an unused SQL mirror, so this phase adds no migration. An independent review then found three cross-writer holes (stuck `retrying` rows hidden in the console, community report and membership updates that ignored a staff claim, and a late coach reapply that could replace an approval). Those are fixed on this branch.
+
+### Architecture map
+
+Staff identity is `users.staff_role`. Product `users.role` does not grant console permissions. The sets live in `backend/staff_roles.py`: support ⊂ moderator ⊂ admin. `staff.require` loads the account on each request through `current_user`. HTTP writes that lack the permission append `staff.permission_denied` via `backend/request_context.py`. Reads that 403 do not.
+
+Mutations that can race use a conditional `update_one` on the status that was read. `modified_count != 1` is 409 and writes no audit row and no side effect. A later request that reads an already-closed row writes `outcome=failed` with a stable `reason_code`.
+
+Audit rows live in Mongo `audit_log`. `outcome` is `success`, `failed`, or `denied`. Failed and denied rows keep `reason` empty and replace `metadata` with `{reason_code}` only. Success rows keep the caller’s reason and the from/to metadata. `GET /admin/audit-log?outcome=success` also returns rows written before `outcome` existed.
+
+Reports stay in Mongo. A resolve claims `open` → `resolved` with `resolution_status=partial`. The retry route claims `partial`, or `retrying` when `side_effect_lease_at` is missing or older than `REPORT_SIDE_EFFECT_LEASE` (5 minutes), sets `retrying` plus a new lease, then marks `partial` or `complete` and clears the lease. List and detail payloads include `retry_claimable`.
+
+The console is `frontend/staff/index.tsx` plus `frontend/src/components/admin/`. Chartreuse (`colors.brand`) stays on the selected tab and primary fills. Filter chips and dialogs use the existing surface and text styles. `ConfirmAction` is a web dialog (`role=dialog`, `aria-modal`), traps Tab, closes on Escape, and restores the opener. Confirm is disabled until `minReason` is met.
+
+### Confirmed defects
+
+These were still true at the start of the independent review and are fixed on this branch.
+
+1. A killed retry left `resolution_status=retrying`. The API could reclaim it after five minutes, but the console only rendered Retry for `partial`, and the client type omitted `retrying`. The resolved queue now shows Retry when `retry_claimable` is true, and “A retry is in progress.” while the lease is fresh.
+2. `review_community_report` removed content and then updated the report by id. A community moderator could overwrite a staff resolution and still write `community.report_*`. The update now matches `status: open` before removal. A loss is 409 with no removal and no audit. If removal throws, the row is put back to `open` and the exception propagates.
+3. Community `review_membership` updated the member by id. A manager who had read `pending` could overwrite a staff decision. The update now matches the status that was read. A loss is 409 with no notification and no audit.
+4. `apply_to_coach` replaced the application by `user_id` after reading `rejected`. An approval that landed in between was written back to `pending` while `role` stayed `coach`. The replace now matches the status that was read. If that row is already `pending` or `approved`, the current row is returned and `coach_status` is left alone.
+
+### Rejected hypotheses
+
+- Support adding a staff note with `users.read`. There is no separate notes permission. The success audit is `user.note_added` and does not store the note. A missing account is `failed` / `not_found` and does not store the draft.
+- Reinstate using `users.suspend`. There is no separate reinstate permission. Staff targets still go through `_staff_guard`, so a moderator cannot reinstate an admin.
+- Membership and community lists using `users.read` while the decision uses `content.moderate`. The list is a read. The decision is the mutation.
+- Report `content_snapshot` in the staff queue. It is the excerpt the reporter filed. Account detail does not join biomarkers, lab rows, or live direct-message documents. Ticket bodies stay on the ticket. `ticket.replied` stores `message_id`, from/to status, and `has_attachment`.
+- A partial side effect recorded as `outcome=success`. The decision completed. The report stays `partial` with a stable `side_effect_error`.
+- Approve, dismiss, and warning staying one click. The confirm list is resolve-with-remove, resolve-with-suspend, suspend, reinstate, role change, coach reject, and membership approve/reject. Coach approve stays one click. A suspended coach is changed from the account suspend dialog.
+- `public.reports` needing a `resolution_status` migration. The running app reads and writes Mongo `db.reports` only. Nothing in the backend reads or writes that SQL table. No migration was added. A future SQL port would need `resolution_status`, `side_effect_error`, and `side_effect_lease_at`.
+- `accounting.viewed` should share the analytics dedupe window. Each open carries a different period in metadata, and `test_accounting` expects two rows for two periods. The 15-minute window applies to `analytics.viewed` (`target_type=analytics`, `target_id=product_events`).
+
+### Roadmap status
+
+1. Coach application review is a conditional claim on `status: pending`. The loser is 409 with no audit row. A sequential review of a row that is already decided is `failed` / `not_pending` and does not store the note. Covered by `test_coach_review_is_a_single_winner`.
+2. Confirm-before-act is in place for the destructive actions listed above. The dialog traps focus and requires a reason where the policy already did (suspend and report-suspend 10, reinstate, role, and membership 5, content removal and coach reject confirm with the page note). Playwright clicks the confirm control. It does not skip the action.
+3. Stuck `retrying` reports carry `side_effect_lease_at`. The retry route reclaims a missing lease or a lease older than 5 minutes. A fresh lease is 409 with no audit. Covered by `test_stale_retry_lease_can_be_reclaimed`. The console uses `retry_claimable`.
+4. `q`, `tq`, and `actor` are stripped from the address bar and stored in `sessionStorage` key `ironflow.staff.search`. Structured filters, including `outcome`, stay in the query string. Covered by the Playwright test “free-text search stays out of the address bar”.
+5. Failed and denied staff mutations write `outcome` and `reason_code`. The audit API accepts `outcome`. The console chips are All outcomes, Succeeded, Failed, and Denied. Lost concurrent claims still write no row.
+6. `analytics.viewed` is deduped for `ANALYTICS_VIEW_WINDOW` (15 minutes) per actor, action, and panel. Covered by `test_analytics_view_is_deduped`.
+7. The three `userSelect` `TextInput` errors are fixed by copying border and transition fields into a `TextStyle` (`fieldTextStyle`). Global React Native types are unchanged. `npx tsc --noEmit` exits 0.
+8. `public.reports` is documented as unused. No SQL migration.
+9. Independent review completed. The four defects above are fixed. Authorization on the admin routes matches `staff_roles.py`: overview, users, notes, report list, membership list, and community list are `users.read`; report resolve and retry are `reports.resolve`; suspend and reinstate are `users.suspend`; staff role is `staff.manage`; membership decision is `content.moderate`; tickets split `tickets.read` / `tickets.write`; audit is `audit.read`; accounting is `accounting.read`; analytics is `analytics.read`; coach directory and review are `coaches.review`.
+10. Test commands and results are in the tests section.
+
+### What changed
+
+- `staff.audit` accepts `outcome` and `reason_code`. Non-success rows drop the caller note and any extra metadata.
+- `staff.require` records `staff.permission_denied` on POST, PUT, PATCH, and DELETE when the request context is set.
+- `staff.audit_view` skips a second success row for the same actor, action, and target inside 15 minutes.
+- Report retry sets and clears `side_effect_lease_at`. `_mark_resolution` unsets the lease when the attempt finishes.
+- Coach review, community report review, community membership review, and coach reapply match the status they read.
+- A missing account on suspend, reinstate, role change, and staff note is `failed` / `not_found`.
+- The console confirm dialog, session search, outcome filter, and `retry_claimable` display are in the admin components. Playwright specs click confirm and assert that search text stays out of the URL.
+
+### Files
+
+- `backend/request_context.py` (new), `backend/staff.py`, `backend/server.py`
+- `backend/routers/admin.py`, `backend/routers/analytics.py`, `backend/routers/community.py`, `backend/routers/tickets.py`
+- `backend/tests/test_admin_console.py`, `backend/tests/test_support_tickets.py`, `backend/tests/test_community_complete.py`
+- `frontend/src/press-feedback.ts`, `frontend/app/(tabs)/workouts.tsx`, `frontend/app/workout/[id].tsx`
+- `frontend/src/api.ts`, `frontend/src/components/admin/*` (confirm, query, hook, reports, users, coaches, memberships, audit)
+- `frontend/e2e/admin.spec.ts`, `frontend/e2e/management.spec.ts`
+- `docs/admin-console-audit.md`
+
+### API, schema, and migrations
+
+| Method | Path | Change |
+| --- | --- | --- |
+| GET | `/admin/audit-log` | Query `outcome` is `success`, `failed`, or `denied`. `success` includes rows with no `outcome` field. |
+| GET | `/admin/reports` | Each row includes `retry_claimable`. |
+| PATCH | `/admin/reports/{id}` | Response includes `retry_claimable`. `resolution_status` may be `retrying` while a retry owns the row. |
+| POST | `/admin/reports/{id}/retry-side-effect` | Also claims `retrying` when the lease is missing or older than 5 minutes. A fresh lease is 409 with no audit. A finished row is 409 with `failed` / `not_retryable`. |
+| PATCH | `/admin/coach-applications/{id}` | Updates only while `status` is `pending`. |
+| PATCH | `/communities/{id}/reports/{report_id}` | Updates only while `status` is `open`, and removes content only after that claim. |
+| PATCH | `/communities/{id}/members/{member_id}` | Updates only while `status` is the status that was read. |
+| POST | `/coach/applications` | Replaces a rejected application only while it is still rejected. |
+
+Audit documents gained `outcome` and `reason_code`. Report documents may carry `side_effect_lease_at` during a retry. Mongo indexes added in the existing lifespan hook: `audit_log (outcome, created_at)` and `audit_log (actor_id, action, target_id, created_at)`. No SQL migration.
+
+Stable reason codes used by the new failed and denied rows: `permission_denied`, `not_found`, `not_pending`, `already_resolved`, `reason_too_short`, `no_account`, `not_removable`, `staff_target`, `self_target`, `owner_locked`, `paid_plan`, `not_retryable`, `assignee_not_staff`, `no_changes`, `status_required`, `media_not_owned`, `reply_rejected`, `unspecified`.
+
+### Tests
+
+Backend, serial, after Mongo was restarted on a fresh dbpath because the previous mongod aborted with “Too many open files”:
+
+`/tmp/ironflow-venv/bin/python -m pytest -q --tb=line -n 0 --continue-on-collection-errors`
+
+**360 passed, 5 warnings, 2 collection errors, 22.29s.** Exit code 1 because of the collection errors.
+
+Pre-existing collection errors, unchanged by this branch: `tests/backend_test.py` and `tests/test_community_integration.py` raise `KeyError: EXPO_PUBLIC_BACKEND_URL` at import. They are live HTTP suites. This environment has no `frontend/.env` and no `EXPO_PUBLIC_BACKEND_URL`. With the default `-n 2` they also fail collection; `--continue-on-collection-errors` is what lets the unit suite finish in one process.
+
+`npx tsc --noEmit` in `frontend/`: exit 0.
+
+`yarn lint` (`expo lint`): exit 0.
+
+Playwright, full `e2e/` on desktop and mobile (374 tests, 1 worker, both Expo web servers):
+
+**359 passed, 13 failed, 2 skipped, 14.5m.** Exit code 1.
+
+One failure was this branch: desktop “free-text search stays out of the address bar” expected `aria-selected="true"` on the Failed outcome chip. React Native Web does not copy `accessibilityState.selected` onto `aria-selected`. The chip now uses `selectedControl`, the same helper as the ticket filters. The mobile copy of that test passed after the helper was saved (Metro reloaded). Desktop is re-run after the full suite; the result of that re-run is recorded at the end of this section once it finishes.
+
+The other 12 failures are outside the staff-console diff. Both projects failed the same way, and the screens are not in this change:
+
+- `community-slice2` “pending member of a private club”: `getByText('Iron Club')` matches two nodes (strict mode).
+- `community-slice2` “invite failure”: `invite-error` text is `"Invite limit reached"` because the icon glyph is inside the text node. Expected `"Invite limit reached"`.
+- `community.spec` “FIND A CLUB” and “become a coach”: the same icon-glyph prefix on `community-primary-cta`.
+- `wave-a` logger: after `goBack()` from `/muscles` the muscles screen is still showing, so `planned-bench-press` is absent. The workout edit on this branch only wraps `TextInput` styles.
+- `activity-day` mobile only: the today card extends past the fold. Desktop passed.
+- `community-complete` mobile only: `remove-reported-rep-1` stays “not stable” until the 45s timeout. Desktop passed.
+
+### Security and privacy review
+
+The permission matrix is unchanged. Write denials on staff routes are audited as `denied` / `permission_denied` with the permission name as `target_id`. The caller’s body is not stored. Lost claims stay silent so the winner’s row is the only success record. Sequential policy failures (already resolved, not pending, staff target, self target, short reason, missing assignee) are audited and do not copy the note, the ticket body, or the exception string. Side-effect failures stay the existing codes (`content_removal_failed`, `suspension_failed`, `notice_failed`, `side_effect_failed`).
+
+Account responses still use `ACCOUNT_FIELDS` and omit biomarkers and labs. Direct-message bodies are not loaded for account detail. A reported message can still appear as `content_snapshot` because the reporter filed that excerpt. Search terms that can be emails are kept in `sessionStorage` for the tab and are removed from the query string if someone pastes them into the URL.
+
+### Known limits
+
+- Two analytics opens in the same instant can both pass the find-then-insert dedupe and write two rows. The window is not a unique lock.
+- Request bodies rejected by Pydantic before the handler (for example a suspend reason shorter than the schema minimum) do not get an audit row. The report-suspend short note is checked in the handler and is audited as `reason_too_short`.
+- A suspended account’s 403 from `current_user`, before staff authorization, is not a staff-decision audit row.
+- `accounting.viewed` is still one row per open.
+- GET 403 is not audited.
+- A live two-socket race is not in the suite. Lost-claim tests force `modified_count == 0` or replace the row inside the intercepted write.
+- The 24 hour queue highlight remains a product target, not a legal SLA.
+- Subscription plan amounts remain “last amount on file”. They are not added into owed-to-coaches.
+- `public.reports` can drift from Mongo. The app does not read it.
+
+### Next phase
+
+Keyboard coverage for the whole console is still the open P4 item: a desktop Playwright path that tabs from the header through the priority queue and activates a card. The retry dialog and the new confirm dialogs already trap Tab. A unique index, or an insert that treats duplicate-key as success, would close the analytics double-write window. If SQL ever becomes the report store, add `resolution_status`, `side_effect_error`, and `side_effect_lease_at` in a new migration rather than editing `003_community_social.sql`.
+
+### Playwright re-run
+
+After the outcome chip used `selectedControl`, the same spec was run again:
+
+`npx playwright test e2e/admin.spec.ts -g "free-text search stays out"`
+
+**2 passed (desktop and mobile), 12.2s.** Exit code 0.
+
+With that fix, the full-suite picture is 360 passed, 12 failed, 2 skipped. The 12 failures are the pre-existing cases listed above. The full 374-test process was not started a second time.

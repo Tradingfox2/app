@@ -4,6 +4,7 @@ import { Affordance } from "@/src/press-affordance";
 import type { StaffRole } from "@/src/api";
 import { colors } from "@/src/theme";
 import type { AccountStatus } from "./admin-labels";
+import { ConfirmAction } from "./confirm-action";
 import { consoleStyles as styles } from "./console-styles";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
@@ -13,7 +14,7 @@ import type { AdminConsoleModel } from "./use-admin-console";
 const STATUSES: AccountStatus[] = ["all", "active", "suspended", "staff"];
 
 export function UsersTab({ model }: { model: AdminConsoleModel }) {
-  const { t, formatDate, formatNumber, users, userTotal, userCursor, query, onUserQuery, status, search, moreUsers, selected, reason, setReason, note, setNote, working, can, sectionErrors, updatedAt, loading, openUser, suspend, setRole, addNote, retrySection } = model;
+  const { t, formatDate, formatNumber, users, userTotal, userCursor, query, onUserQuery, status, search, moreUsers, selected, reason, setReason, note, setNote, working, can, sectionErrors, updatedAt, loading, openUser, pending, setPending, confirmPending, addNote, retrySection } = model;
   const suspendDisabled = working || reason.trim().length < (selected?.suspended_at ? 5 : 10);
   return (
     <>
@@ -67,16 +68,44 @@ export function UsersTab({ model }: { model: AdminConsoleModel }) {
         {selected.suspended_at ? <Text style={styles.suspendedNote}>{t("Suspended:")} {selected.suspension_reason}</Text> : null}
         <TextInput value={reason} onChangeText={setReason} maxLength={500} accessibilityLabel={t("Reason (required, saved to the audit log)")} placeholder={t("Reason (required, saved to the audit log)")} placeholderTextColor={colors.textDim} style={styles.input} testID="admin-reason" />
         <View style={styles.actions}>
-          {can("users.suspend") ? <Affordance accessibilityRole="button" accessibilityLabel={t(selected.suspended_at ? "Reinstate {name}" : "Suspend {name}", { name: selected.full_name || selected.email })} testID="admin-suspend" disabled={suspendDisabled} onPress={() => void suspend(selected)} style={[styles.action, suspendDisabled && styles.disabled]}>
+          {can("users.suspend") ? <Affordance accessibilityRole="button" accessibilityLabel={t(selected.suspended_at ? "Reinstate {name}" : "Suspend {name}", { name: selected.full_name || selected.email })} testID="admin-suspend" disabled={suspendDisabled} onPress={() => setPending({ kind: "suspend", account: selected })} style={[styles.action, suspendDisabled && styles.disabled]}>
             <Ionicons name={selected.suspended_at ? "lock-open-outline" : "lock-closed-outline"} size={15} color={selected.suspended_at ? colors.success : colors.error} />
             <Text style={styles.actionText}>{t(selected.suspended_at ? "REINSTATE" : "SUSPEND")}</Text>
           </Affordance> : null}
           {can("staff.manage") ? ([null, "support", "moderator", "admin"] as (StaffRole | null)[]).map(role => (
-            <Affordance key={role ?? "none"} accessibilityRole="button" accessibilityLabel={t("Set staff role {role}", { role: t((role ?? "no staff").toUpperCase()) })} testID={`admin-role-${role ?? "none"}`} disabled={working || reason.trim().length < 5 || selected.staff_role === role} onPress={() => void setRole(selected, role)} style={[styles.action, (working || reason.trim().length < 5 || selected.staff_role === role) && styles.disabled]}>
+            <Affordance key={role ?? "none"} accessibilityRole="button" accessibilityLabel={t("Set staff role {role}", { role: t((role ?? "no staff").toUpperCase()) })} testID={`admin-role-${role ?? "none"}`} disabled={working || reason.trim().length < 5 || selected.staff_role === role} onPress={() => setPending({ kind: "role", account: selected, role })} style={[styles.action, (working || reason.trim().length < 5 || selected.staff_role === role) && styles.disabled]}>
               <Text style={styles.actionText}>{t((role ?? "no staff").toUpperCase())}</Text>
             </Affordance>
           )) : null}
         </View>
+        {pending?.kind === "suspend" && pending.account.id === selected.id ? (
+          <ConfirmAction
+            testID={selected.suspended_at ? "confirm-reinstate" : "confirm-suspend"}
+            title={t(selected.suspended_at ? "Reinstate this account" : "Suspend this account")}
+            body={t(selected.suspended_at ? "The account can sign in again." : "This blocks sign-in until the account is reinstated.")}
+            confirmLabel={t(selected.suspended_at ? "REINSTATE" : "SUSPEND")}
+            reason={reason}
+            minReason={selected.suspended_at ? 5 : 10}
+            onConfirm={next => confirmPending(next)}
+            onCancel={() => setPending(null)}
+            busy={working}
+            t={t}
+          />
+        ) : null}
+        {pending?.kind === "role" && pending.account.id === selected.id ? (
+          <ConfirmAction
+            testID={`confirm-role-${pending.role ?? "none"}`}
+            title={t("Change the staff role")}
+            body={t("This changes what the account can do in the console.")}
+            confirmLabel={t("CHANGE ROLE")}
+            reason={reason}
+            minReason={5}
+            onConfirm={next => confirmPending(next)}
+            onCancel={() => setPending(null)}
+            busy={working}
+            t={t}
+          />
+        ) : null}
         <Text style={styles.section}>{t("STAFF NOTES")}</Text>
         {selected.notes?.length
           ? selected.notes.map(item => <View key={item.id} style={styles.note}><Text style={styles.meta}>{item.author_email} · {formatDate(item.created_at, { dateStyle: "short" })}</Text><Text style={styles.noteText}>{item.note}</Text></View>)

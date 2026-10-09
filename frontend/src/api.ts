@@ -85,8 +85,10 @@ export type ModerationReport = {
   content_snapshot: string;
   status: "open" | "resolved";
   resolution: string | null;
-  /** `partial` means the decision was saved and a side effect still needs a retry. */
-  resolution_status?: "complete" | "partial" | null;
+  /** `partial` means the decision was saved and a side effect still needs a retry. `retrying` means a retry owns the row. */
+  resolution_status?: "complete" | "partial" | "retrying" | null;
+  /** True when staff can call the retry route: partial, or a retrying row whose lease has expired. */
+  retry_claimable?: boolean;
   side_effect_error?: string | null;
   created_at: string;
   /** Set when staff closes the report. Absent on an open row. */
@@ -94,6 +96,8 @@ export type ModerationReport = {
   reporter: { id: string; full_name: string | null; email: string } | null;
   reported_user: { id: string; full_name: string | null; email: string } | null;
 };
+
+export type AuditOutcome = "success" | "failed" | "denied";
 
 export type AuditEntry = {
   id: string;
@@ -103,6 +107,8 @@ export type AuditEntry = {
   target_type: string;
   target_id: string;
   reason: string | null;
+  reason_code?: string | null;
+  outcome?: AuditOutcome | null;
   metadata: Record<string, unknown>;
   created_at: string;
 };
@@ -897,6 +903,7 @@ export type AuditQuery = {
   targetType?: string;
   from?: string;
   to?: string;
+  outcome?: AuditOutcome | "";
   cursor?: string;
 };
 
@@ -1438,6 +1445,7 @@ export const api = {
     if (query.targetType) params.set("target_type", query.targetType);
     if (query.from) params.set("from", query.from);
     if (query.to) params.set("to", query.to);
+    if (query.outcome) params.set("outcome", query.outcome);
     if (query.cursor) params.set("cursor", query.cursor);
     const suffix = params.toString();
     return staffPage<AuditEntry>(await request<unknown>(`/admin/audit-log${suffix ? `?${suffix}` : ""}`, { signal }), "entries");

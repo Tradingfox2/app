@@ -166,6 +166,7 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
   await page.getByTestId("admin-tab-reports").click();
   await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
   await page.getByTestId("resolve-content_removed-rep-1").click();
+  await page.getByTestId("confirm-resolve-content_removed-rep-1-confirm").click();
   await expect(page.getByText("The moderation queue is empty.", { exact: true })).toBeVisible();
   expect(resolved).toEqual([{ resolution: "content_removed", note: "Unsafe dosing advice" }]);
 
@@ -178,8 +179,70 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
   await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
   await expect(suspend).toBeEnabled();
   await suspend.click();
+  await expect.poll(() => suspensions).toEqual([]);
+  await page.getByTestId("confirm-suspend-confirm").click();
   await expect.poll(() => suspensions).toEqual([{ reason: "Repeated dangerous advice" }]);
   await expect(page.getByText(/Suspended:/)).toBeVisible();
+});
+
+test("a staff role change waits for the confirm dialog", async ({ page }) => {
+  const roles: unknown[] = [];
+  const adminUser = { ...support, staff_role: "admin" };
+  await fixtures(page, adminUser, async (route, path) => {
+    if (path === "/admin/overview") {
+      await route.fulfill({ json: {
+        users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+        queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
+        activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+        permissions: [...PERMISSIONS.moderator, "staff.manage", "coaches.review", "accounting.read", "analytics.read"],
+        staff_role: "admin",
+      } });
+      return true;
+    }
+    if (path === `/admin/users/${target.id}/staff-role` && route.request().method() === "PATCH") {
+      roles.push(route.request().postDataJSON());
+      await route.fulfill({ json: { ...target, staff_role: "support" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/");
+  await page.getByTestId("admin-tab-users").click();
+  await page.getByTestId(`admin-user-${target.id}`).click();
+  await page.getByTestId("admin-reason").fill("New support hire");
+  await page.getByTestId("admin-role-support").click();
+  await expect.poll(() => roles).toEqual([]);
+  await expect(page.getByTestId("confirm-role-support")).toHaveAttribute("role", "dialog");
+  await page.getByTestId("confirm-role-support-confirm").click();
+  await expect.poll(() => roles).toEqual([{ staff_role: "support", reason: "New support hire" }]);
+});
+
+test("a membership decision waits for the confirm dialog", async ({ page }) => {
+  const decisions: unknown[] = [];
+  const join = {
+    id: "mem-1", user_id: target.id, community_id: "c-1", status: "pending",
+    created_at: "2026-09-01T00:00:00Z",
+    user: { id: target.id, full_name: target.full_name, email: target.email },
+    community: { id: "c-1", name: "Crew", join_policy: "request" },
+  };
+  await fixtures(page, moderator, async (route, path) => {
+    if (path === "/admin/memberships" && route.request().method() === "GET") {
+      await route.fulfill({ json: { memberships: [join], total: 1, next_cursor: null } });
+      return true;
+    }
+    if (path === "/admin/memberships/mem-1" && route.request().method() === "PATCH") {
+      decisions.push(route.request().postDataJSON());
+      await route.fulfill({ json: { ...join, status: "active" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/?tab=joins");
+  await page.getByPlaceholder("Reason (required, saved to the audit log)").fill("Known member");
+  await page.getByRole("button", { name: "Approve request mem-1" }).click();
+  await expect.poll(() => decisions).toEqual([]);
+  await page.getByTestId("confirm-membership-active-mem-1-confirm").click();
+  await expect.poll(() => decisions).toEqual([{ status: "active", reason: "Known member" }]);
 });
 
 test("analytics tab renders the counts the API returned", async ({ page }) => {
@@ -600,6 +663,30 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await expect(page.getByTestId("ticket-filter-pending")).toHaveAttribute("aria-selected", "false");
   });
 
+  test("free-text search stays out of the address bar", async ({ page }) => {
+    await fixtures(page, support);
+    await page.goto("/?tab=users&userStatus=suspended&q=leak@example.invalid");
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBeNull();
+    await expect.poll(() => new URL(page.url()).searchParams.get("userStatus")).toBe("suspended");
+    await expect(page.getByTestId("admin-user-search")).toHaveValue("");
+    await page.getByTestId("admin-user-search").fill("sam@example.invalid");
+    await expect.poll(() => page.url()).not.toContain("sam@example.invalid");
+    await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("ironflow.staff.search"))).toContain("sam@example.invalid");
+    await page.reload();
+    await expect(page.getByTestId("admin-user-search")).toHaveValue("sam@example.invalid");
+    await expect(page.url()).not.toContain("sam@example.invalid");
+    await page.getByTestId("admin-tab-audit").click();
+    await page.getByTestId("audit-filter-actor").fill("sam@example.invalid");
+    await expect.poll(() => page.url()).not.toContain("actor=");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("audit");
+    await page.getByTestId("audit-outcome-failed").click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("outcome")).toBe("failed");
+    await expect(page.url()).not.toContain("actor=");
+    await page.reload();
+    await expect(page.getByTestId("audit-outcome-failed")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("audit-filter-actor")).toHaveValue("sam@example.invalid");
+  });
+
   test("a slower account search does not replace a newer result", async ({ page }) => {
     let releaseSlow = () => {};
     const slowGate = new Promise<void>(resolve => { releaseSlow = resolve; });
@@ -664,8 +751,11 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
     const suspend = page.getByTestId("admin-suspend");
     await suspend.click();
-    await expect(suspend).toBeDisabled();
-    await suspend.click({ force: true }).catch(() => undefined);
+    const confirm = page.getByTestId("confirm-suspend-confirm");
+    await expect(confirm).toBeFocused();
+    await confirm.click();
+    await expect(confirm).toBeDisabled();
+    await confirm.click({ force: true }).catch(() => undefined);
     release();
     await expect(page.getByText("Could not suspend", { exact: true })).toBeVisible();
     await expect(page.getByText(/Suspended:/)).toHaveCount(0);
@@ -674,6 +764,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.getByRole("button", { name: "Retry" }).click();
     await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
     await page.getByTestId("admin-suspend").click();
+    await page.getByTestId("confirm-suspend-confirm").click();
     await expect(page.getByText(/Suspended:/)).toBeVisible();
     expect(calls).toEqual(["suspend", "suspend"]);
   });
@@ -698,11 +789,16 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.getByTestId("admin-tab-reports").click();
     await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
     await page.getByTestId("resolve-content_removed-rep-1").click();
+    await page.getByTestId("confirm-resolve-content_removed-rep-1-confirm").click();
     await expect(page.getByTestId("report-retry-rep-1")).toBeVisible();
     await expect(page.getByText("The moderation queue is empty.", { exact: true })).toHaveCount(0);
     expect(reviews).toEqual([{ resolution: "content_removed", note: "Unsafe dosing advice" }]);
     await page.getByTestId("report-retry-rep-1").click();
     const confirm = page.getByTestId("report-retry-dialog-rep-1-confirm");
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("report-retry-dialog-rep-1-cancel")).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(confirm).toBeFocused();
     await confirm.click();
     await expect(page.getByText("The moderation queue is empty.", { exact: true })).toBeVisible();
@@ -738,6 +834,8 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.getByTestId("admin-tab-reports").click();
     await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
     await page.getByTestId("resolve-content_removed-rep-1").click();
+    expect(resolved).toBe(false);
+    await page.getByTestId("confirm-resolve-content_removed-rep-1-confirm").click();
     await expect(page.getByText("The moderation queue is empty.", { exact: true })).toBeVisible();
     await expect(page.getByTestId("admin-tab-reports")).not.toContainText("1");
   });

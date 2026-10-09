@@ -351,7 +351,26 @@ async def apply_to_coach(body: CoachApplicationIn, user: dict = Depends(current_
         "updated_at": timestamp,
         "created_at": existing.get("created_at", timestamp) if existing else timestamp,
     }
-    await db.coach_applications.replace_one({"user_id": user["id"]}, doc, upsert=True)
+    # Match the status we just read. An approval that lands after that read
+    # must not be replaced by this pending application.
+    if existing:
+        replaced = await db.coach_applications.replace_one(
+            {"user_id": user["id"], "status": existing.get("status")},
+            doc,
+        )
+        if replaced.modified_count != 1:
+            current = await db.coach_applications.find_one({"user_id": user["id"]}, {"_id": 0})
+            if current and current.get("status") in {"pending", "approved"}:
+                return clean(current)
+            raise HTTPException(409, "This application changed. Refresh and try again.")
+    else:
+        try:
+            await db.coach_applications.insert_one(doc)
+        except DuplicateKeyError:
+            current = await db.coach_applications.find_one({"user_id": user["id"]}, {"_id": 0})
+            if current and current.get("status") in {"pending", "approved"}:
+                return clean(current)
+            raise HTTPException(409, "This application changed. Refresh and try again.")
     await db.users.update_one({"id": user["id"]}, {"$set": {"coach_status": "pending"}})
     return clean(doc)
 
@@ -369,13 +388,28 @@ async def review_coach_application(
     user: dict = Depends(current_user),
 ):
     if "coaches.review" not in staff.permissions_for(user):
+        await staff.audit_denied(
+            user, "coach_application.review", target_type="coach_application", target_id=application_id,
+            outcome="denied", reason_code="permission_denied",
+        )
         raise HTTPException(403, "Staff permission required")
     application = await db.coach_applications.find_one({"id": application_id})
     if not application:
+        await staff.audit_denied(
+            user, "coach_application.review", target_type="coach_application", target_id=application_id,
+            outcome="failed", reason_code="not_found",
+        )
         raise HTTPException(404, "Coach application not found")
+    if application.get("status") != "pending":
+        await staff.audit_denied(
+            user, "coach_application.review", target_type="coach_application", target_id=application_id,
+            outcome="failed", reason_code="not_pending",
+        )
+        raise HTTPException(409, "Only a pending application can be reviewed")
     timestamp = now()
-    await db.coach_applications.update_one(
-        {"id": application_id},
+    # Match the pending row. Approve and reject cannot both win.
+    claimed = await db.coach_applications.update_one(
+        {"id": application_id, "status": "pending"},
         {"$set": {
             "status": body.status,
             "review_note": body.review_note,
@@ -384,6 +418,9 @@ async def review_coach_application(
             "updated_at": timestamp,
         }},
     )
+    if claimed.modified_count != 1:
+        # The other reviewer won. No audit row, and the user role stays as they left it.
+        raise HTTPException(409, "Only a pending application can be reviewed")
     await db.users.update_one(
         {"id": application["user_id"]},
         {"$set": {
@@ -1124,7 +1161,13 @@ async def review_membership(
     updates = {"status": body.status, "updated_at": now(), "reviewed_by": user["id"]}
     if body.status == "active":
         updates["joined_at"] = now()
-    await db.community_members.update_one({"id": member_id}, {"$set": updates})
+    # Match the status we read. A staff decision that landed first is left as it is.
+    claimed = await db.community_members.update_one(
+        {"id": member_id, "community_id": community_id, "status": member.get("status")},
+        {"$set": updates},
+    )
+    if claimed.modified_count != 1:
+        raise HTTPException(409, "Membership changed while you were reviewing it")
     if body.status != "active" and member.get("status") == "active" and member.get("stripe_subscription_id"):
         # A removal must stop the billing too. The removal itself stands even if
         # Stripe is down; the flag leaves the cancellation visible to finish by hand.
@@ -1359,12 +1402,30 @@ async def review_community_report(
     if report.get("reported_user_id") == user["id"]:
         # Nobody judges a report about themselves; platform staff will.
         raise HTTPException(409, "A report about you is reviewed by platform staff")
+    # Claim the open row before any removal. A staff resolution that won first
+    # stays in place, and this caller does not delete the content or write an audit.
+    claimed = await db.reports.update_one(
+        {"id": report_id, "community_id": community_id, "status": "open"},
+        {"$set": {
+            "status": "resolved", "resolution": body.resolution, "note": body.note.strip(),
+            "reviewed_by": user["id"], "reviewed_at": now(), "reviewed_in": "community",
+        }},
+    )
+    if claimed.modified_count != 1:
+        raise HTTPException(409, "Report already resolved")
     if body.resolution == "content_removed":
-        await moderation.remove_content(report["target_type"], report["target_id"], actor=user)
-    await db.reports.update_one({"id": report_id}, {"$set": {
-        "status": "resolved", "resolution": body.resolution, "note": body.note.strip(),
-        "reviewed_by": user["id"], "reviewed_at": now(), "reviewed_in": "community",
-    }})
+        try:
+            await moderation.remove_content(report["target_type"], report["target_id"], actor=user)
+        except Exception:
+            # The removal did not happen, so the queue row goes back to open.
+            await db.reports.update_one(
+                {"id": report_id, "status": "resolved", "reviewed_by": user["id"]},
+                {"$set": {
+                    "status": "open", "resolution": None, "note": "",
+                    "reviewed_by": None, "reviewed_at": None, "reviewed_in": None,
+                }},
+            )
+            raise
     await staff.audit(
         user, f"community.report_{body.resolution}", target_type=report["target_type"],
         target_id=report["target_id"], reason=body.note.strip() or None,

@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
-import { useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
+import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { card, colors, radius, spacing } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
@@ -435,7 +435,7 @@ export default function Workouts() {
               testID="input-workout-title"
               placeholder={t("Session name")}
               placeholderTextColor={colors.textDim}
-              style={[styles.sheetInput, titleField.style]}
+              style={[styles.sheetInput, fieldTextStyle(titleField.style)]}
               value={newTitle}
               onChangeText={setNewTitle}
               autoFocus

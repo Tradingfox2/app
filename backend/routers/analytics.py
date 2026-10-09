@@ -129,4 +129,8 @@ async def event_counts(user: dict = Depends(staff.require("analytics.read"))):
     # the dependency. HTTP requests are checked twice; both must agree.
     if "analytics.read" not in staff.permissions_for(user):
         raise HTTPException(403, "Staff permission required")
+    # One row per actor per 15 minutes (`staff.ANALYTICS_VIEW_WINDOW`), not one per open.
+    await staff.audit_view(
+        user, "analytics.viewed", target_type="analytics", target_id="product_events",
+    )
     return await analytics.counts()

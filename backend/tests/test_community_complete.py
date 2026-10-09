@@ -372,6 +372,52 @@ def test_community_moderators_work_their_own_report_queue(monkeypatch):
         await community.review_community_report("c-1", report["id"], community.CommunityReportReviewIn(resolution="content_removed"), account("mod"))
         assert (await db.messages.find_one({"id": message["id"]}))["status"] == "removed"
         await expect(403, community.community_reports("c-1", account("mem")))
+        before = await db.audit_log.count_documents({})
+        await expect(409, community.review_community_report(
+            "c-1", report["id"], community.CommunityReportReviewIn(resolution="content_removed"), account("mod"),
+        ))
+        assert await db.audit_log.count_documents({}) == before
+        assert (await db.messages.find_one({"id": message["id"]}))["status"] == "removed"
+    run_isolated(scenario)
+
+
+def test_a_lost_membership_review_does_not_notify(monkeypatch):
+    async def scenario(db):
+        await seed_all(db, monkeypatch)
+        await db.users.insert_one(account("out"))
+        await db.community_members.insert_one({
+            "id": "m-pending", "community_id": "c-1", "user_id": "out", "role": "member",
+            "status": "pending", "created_at": datetime.now(timezone.utc),
+        })
+
+        class Members:
+            def __init__(self, real):
+                self.real = real
+
+            def __getattr__(self, name):
+                return getattr(self.real, name)
+
+            async def update_one(self, query, update, *args, **kwargs):
+                if query.get("status") == "pending":
+                    await self.real.update_one({"id": query["id"]}, {"$set": {"status": "active"}})
+                    return type("Result", (), {"modified_count": 0})()
+                return await self.real.update_one(query, update, *args, **kwargs)
+
+        class Database:
+            def __init__(self, real):
+                self.real = real
+                self.community_members = Members(real.community_members)
+
+            def __getattr__(self, name):
+                return getattr(self.real, name)
+
+        monkeypatch.setattr(community, "db", Database(db))
+        before = await db.notifications.count_documents({"user_id": "out"})
+        await expect(409, community.review_membership(
+            "c-1", "m-pending", community.MembershipReviewIn(status="rejected"), account("mod"),
+        ))
+        assert (await db.community_members.find_one({"id": "m-pending"}))["status"] == "active"
+        assert await db.notifications.count_documents({"user_id": "out"}) == before
     run_isolated(scenario)
 
 
