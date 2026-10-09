@@ -1,8 +1,10 @@
 import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
-import { selectedControl } from "@/src/community-copy";
 import { colors } from "@/src/theme";
+import { FilterBar } from "./filter-bar";
+import { FilterChip } from "./filter-chip";
+import { StatusBadge } from "./status-badge";
 import { consoleStyles as styles } from "./console-styles";
 import { QueueList } from "./queue-list";
 import type { AdminConsoleModel } from "./use-admin-console";
@@ -16,17 +18,15 @@ export function AuditTab({ model }: { model: AdminConsoleModel }) {
   return (
     <>
       <Text style={styles.hint}>{t("Append-only record of staff actions. Failed and denied attempts are stored with an outcome and a reason code. The request body is not copied.")}</Text>
-      <View style={styles.filters}>
+      <FilterBar label={t("Audit outcome")}>
         {(["", "success", "failed", "denied"] as const).map(item => {
           const label = item === "" ? "All outcomes" : item === "success" ? "Succeeded" : item === "failed" ? "Failed" : "Denied";
           const selected = auditOutcome === item;
           return (
-            <Affordance key={label} accessibilityRole="button" accessibilityLabel={t(label)} {...selectedControl(selected)} testID={`audit-outcome-${item || "all"}`} onPress={() => setAuditOutcome(item)} style={[styles.chip, selected && styles.chipActive]}>
-              <Text style={[styles.chipText, selected && styles.chipTextActive]}>{t(label)}</Text>
-            </Affordance>
+            <FilterChip key={label} label={t(label)} selected={selected} testID={`audit-outcome-${item || "all"}`} onPress={() => setAuditOutcome(item)} />
           );
         })}
-      </View>
+      </FilterBar>
       <TextInput value={auditActor} onChangeText={setAuditActor} maxLength={80} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t("Actor email or id")} placeholder={t("Actor email or id")} placeholderTextColor={colors.textDim} style={styles.input} testID="audit-filter-actor" />
       <TextInput value={auditAction} onChangeText={setAuditAction} maxLength={80} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t("Action prefix")} placeholder={t("Action prefix")} placeholderTextColor={colors.textDim} style={styles.input} testID="audit-filter-action" />
       <TextInput value={auditTarget} onChangeText={setAuditTarget} maxLength={80} autoCapitalize="none" autoCorrect={false} accessibilityLabel={t("Target id")} placeholder={t("Target id")} placeholderTextColor={colors.textDim} style={styles.input} testID="audit-filter-target" />
@@ -61,7 +61,7 @@ export function AuditTab({ model }: { model: AdminConsoleModel }) {
           return (
             <View key={entry.id} style={styles.auditRow}>
               <Text style={styles.auditAction}>{entry.action}</Text>
-              {outcome ? <Text style={styles.meta}>{t(outcome === "failed" ? "Failed" : "Denied")}{entry.reason_code ? ` · ${entry.reason_code}` : ""}</Text> : null}
+              {outcome ? <StatusBadge tone={outcome === "failed" ? "danger" : "warning"} label={`${t(outcome === "failed" ? "Failed" : "Denied")}${entry.reason_code ? ` · ${entry.reason_code}` : ""}`} /> : null}
               <Text style={styles.meta}>{entry.actor_email} → {entry.target_type}:{entry.target_id.slice(0, 8)}</Text>
               {entry.reason ? <Text style={styles.snapshot}>{entry.reason}</Text> : null}
               {change ? <Text style={styles.meta}>{t("Recorded change:")} {change}</Text> : null}

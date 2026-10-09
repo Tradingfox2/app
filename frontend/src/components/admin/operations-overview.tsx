@@ -285,7 +285,7 @@ export function OperationsOverview({
 const styles = StyleSheet.create({
   section: { ...staffType.section, marginTop: spacing.lg },
   hint: { color: colors.textMuted, fontFamily: staffFonts.text, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
-  error: { color: colors.error, marginTop: spacing.sm },
+  error: { color: colors.errorText, marginTop: spacing.sm },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metric: { minWidth: 148, flexGrow: 1, flexBasis: "46%", padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surfaceRaised },
   metricValue: { color: colors.text, fontFamily: staffFonts.display, fontSize: 32, lineHeight: 36, fontVariant: ["tabular-nums"] },
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   queue: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface, overflow: "hidden" },
   queueRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   overdue: { backgroundColor: colors.errorWash, borderBottomColor: colors.error },
-  overdueText: { color: colors.error, fontSize: 12, fontWeight: "800" },
+  overdueText: { color: colors.errorText, fontSize: 12, fontWeight: "800" },
   queueCopy: { flex: 1 },
   name: { color: colors.text, fontWeight: "800" },
   meta: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },

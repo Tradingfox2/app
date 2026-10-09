@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { staffTab } from "./staff-nav";
 
 const previewUrl = (process.env.PREVIEW_URL ?? "").trim().replace(/\/+$/, "");
 const memberURL = previewUrl || "http://localhost:8082";
@@ -111,7 +112,7 @@ test.describe("staff site", () => {
         return false;
       });
       await page.goto("/");
-      await page.getByTestId("admin-tab-accounting").click();
+      await (await staffTab(page, "accounting")).click();
       await expect(page.getByText("Abonnements enregistrés — App Store et Google Play", { exact: true })).toBeVisible();
       await expect(page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly")).toContainText("JPY");
       await expect(page.getByTestId("accounting-section-subscription-revenuecat-pro_yearly")).toContainText("500");
@@ -134,14 +135,14 @@ test("support sees the queue read-only and cannot suspend", async ({ page }) => 
   await fixtures(page, support);
   await page.goto("/");
   await expect(page.getByText("128", { exact: true })).toBeVisible();
-  await page.getByTestId("admin-tab-reports").click();
+  await (await staffTab(page, "reports")).click();
   await expect(page.getByTestId("report-age-rep-1")).toContainText(/Opened \d+d ago/);
   await expect(page.getByTestId("report-type-all")).toBeVisible();
   await expect(page.getByTestId("report-type-post")).toBeVisible();
   await expect(page.getByText("“Just take 10x the dose”", { exact: true })).toBeVisible();
   await expect(page.getByText("Read-only: resolving reports needs the moderator role.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("resolve-content_removed-rep-1")).toHaveCount(0);
-  await page.getByTestId("admin-tab-users").click();
+  await (await staffTab(page, "users")).click();
   await page.getByTestId(`admin-user-${target.id}`).click();
   await expect(page.getByTestId("admin-user-detail")).toBeVisible();
   await expect(page.getByTestId("admin-suspend")).toHaveCount(0);
@@ -163,14 +164,14 @@ test("moderator resolves a report and must give a reason to suspend", async ({ p
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-reports").click();
+  await (await staffTab(page, "reports")).click();
   await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
   await page.getByTestId("resolve-content_removed-rep-1").click();
   await page.getByTestId("confirm-resolve-content_removed-rep-1-confirm").click();
   await expect(page.getByText("The moderation queue is empty.", { exact: true })).toBeVisible();
   expect(resolved).toEqual([{ resolution: "content_removed", note: "Unsafe dosing advice" }]);
 
-  await page.getByTestId("admin-tab-users").click();
+  await (await staffTab(page, "users")).click();
   await page.getByTestId(`admin-user-${target.id}`).click();
   const suspend = page.getByTestId("admin-suspend");
   await expect(suspend).toBeDisabled();
@@ -207,7 +208,7 @@ test("a staff role change waits for the confirm dialog", async ({ page }) => {
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-users").click();
+  await (await staffTab(page, "users")).click();
   await page.getByTestId(`admin-user-${target.id}`).click();
   await page.getByTestId("admin-reason").fill("New support hire");
   await page.getByTestId("admin-role-support").click();
@@ -268,15 +269,15 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
     return false;
   });
   await page.goto("/");
-  await expect(page.getByTestId("admin-tab-analytics")).toBeVisible();
-  await expect(page.getByTestId("admin-tab-support")).toBeVisible();
+  await expect(await staffTab(page, "analytics")).toBeVisible();
+  await expect(await staffTab(page, "support")).toBeVisible();
   const labels = (await page.getByRole("tab").allTextContents()).map(text => text.replace(/\s+/g, " ").trim());
   // Operations (support) sits above Business (analytics) in the grouped shell.
   const supportAt = labels.findIndex(text => text.includes("SUPPORT"));
   const analyticsAt = labels.findIndex(text => text.includes("ANALYTICS"));
   expect(supportAt).toBeGreaterThan(-1);
   expect(analyticsAt).toBeGreaterThan(supportAt);
-  await page.getByTestId("admin-tab-analytics").click();
+  await (await staffTab(page, "analytics")).click();
   await expect(page.getByTestId("analytics-count-post_created-24h")).toHaveText("3");
   await expect(page.getByTestId("analytics-count-post_created-7d")).toHaveText("5");
   await expect(page.getByTestId("analytics-count-screen_view-7d")).toHaveText("1");
@@ -292,7 +293,7 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
 test("audit tab shows who did what", async ({ page }) => {
   await fixtures(page, moderator);
   await page.goto("/");
-  await page.getByTestId("admin-tab-audit").click();
+  await (await staffTab(page, "audit")).click();
   await expect(page.getByText("user.suspended", { exact: true })).toBeVisible();
   await expect(page.getByText(`${support.email} → user:${target.id}`, { exact: true })).toBeVisible();
   await expect(page.getByText("Repeated harassment", { exact: true })).toBeVisible();
@@ -330,7 +331,7 @@ test("support queue shows an empty list and a load error", async ({ page }) => {
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-support").click();
+  await (await staffTab(page, "support")).click();
   await expect(page.getByText("The support queue is empty.", { exact: true })).toBeVisible();
 
   await fixtures(page, support, async (route, path) => {
@@ -385,7 +386,7 @@ test("support saves status, replies, and sees pending in the queue", async ({ pa
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-support").click();
+  await (await staffTab(page, "support")).click();
   await expect(page.getByText("Cannot log in", { exact: true })).toBeVisible();
   await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Needs reply");
   await expect(page.getByTestId("admin-ticket-t-1")).toContainText("Unassigned");
@@ -466,16 +467,16 @@ test("memberships and community rows use waiting copy", async ({ page }) => {
   });
   await page.goto("/");
   await expect(page.getByTestId("admin-tab-joins")).toContainText("Memberships");
-  await page.getByTestId("admin-tab-joins").click();
+  await (await staffTab(page, "joins")).click();
   await expect(page.getByTestId("membership-waiting-hint")).toHaveText("Accept or decline a waiting request. Paid communities still need verified billing.");
   await page.getByTestId("membership-filter-banned").click();
   await expect(page.getByTestId("membership-waiting-hint")).toHaveCount(0);
   await expect(page.getByTestId("membership-filter-removed")).toContainText("Removed");
-  await page.getByTestId("admin-tab-communities").click();
+  await (await staffTab(page, "communities")).click();
   await expect(page.getByTestId("admin-community-c-1")).toContainText("12 members");
   await expect(page.getByTestId("admin-community-c-1")).toContainText("3 waiting to join");
   await expect(page.getByTestId("admin-community-c-1")).toContainText("Active members only");
-  await page.getByTestId("admin-tab-reports").click();
+  await (await staffTab(page, "reports")).click();
   await expect(page.getByTestId("report-rep-1")).toBeVisible();
   await expect(page.getByTestId("report-rep-2")).toBeVisible();
   await expect(page.getByTestId("report-age-rep-1")).toContainText(/Opened /);
@@ -505,7 +506,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-support").click();
+  await (await staffTab(page, "support")).click();
   await expect(page.getByText("Billing question", { exact: true })).toBeVisible();
   await page.getByTestId("ticket-filter-unassigned").click();
   await expect(page.getByText("Billing question", { exact: true })).toHaveCount(0);
@@ -553,7 +554,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
       return false;
     });
     await page.goto("/");
-    await page.getByTestId("admin-tab-accounting").click();
+    await (await staffTab(page, "accounting")).click();
     const gross = page.getByTestId("accounting-section-gross_collected");
     await expect(gross).toContainText("$12.50");
     await expect(gross).toContainText("¥500,000");
@@ -597,7 +598,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
       return false;
     });
     await page.goto("/");
-    await page.getByTestId("admin-tab-accounting").click();
+    await (await staffTab(page, "accounting")).click();
     await expect(page.getByTestId("accounting-panel")).toBeVisible();
     await expect(page.getByTestId("accounting-subscriptions-incomplete")).toContainText("incomplete, not zero");
     await expect(page.getByTestId("accounting-section-gross_collected")).toContainText("$12.50");
@@ -641,7 +642,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
       return true;
     });
     await page.goto("/");
-    await page.getByTestId("admin-tab-users").click();
+    await (await staffTab(page, "users")).click();
     await expect(page.getByText("Showing 1 of 2.", { exact: true })).toBeVisible();
     await page.getByTestId("admin-load-more").click();
     await expect(page.getByTestId("admin-user-u-2")).toBeVisible();
@@ -679,7 +680,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await page.reload();
     await expect(page.getByTestId("admin-user-search")).toHaveValue("sam@example.invalid");
     await expect(page.url()).not.toContain("sam@example.invalid");
-    await page.getByTestId("admin-tab-audit").click();
+    await (await staffTab(page, "audit")).click();
     await page.getByTestId("audit-filter-actor").fill("sam@example.invalid");
     await expect.poll(() => page.url()).not.toContain("actor=");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("audit");
@@ -716,7 +717,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
       return false;
     });
     await page.goto("/");
-    await page.getByTestId("admin-tab-users").click();
+    await (await staffTab(page, "users")).click();
     await page.getByTestId("admin-user-search").fill("slow");
     await slowSeen;
     await page.getByTestId("admin-user-search").fill("fast");
@@ -750,7 +751,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
       return true;
     });
     await page.goto("/");
-    await page.getByTestId("admin-tab-users").click();
+    await (await staffTab(page, "users")).click();
     await page.getByTestId(`admin-user-${target.id}`).click();
     await page.getByTestId("admin-reason").fill("Repeated dangerous advice");
     const suspend = page.getByTestId("admin-suspend");
@@ -790,7 +791,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
       return false;
     });
     await page.goto("/");
-    await page.getByTestId("admin-tab-reports").click();
+    await (await staffTab(page, "reports")).click();
     await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
     await page.getByTestId("resolve-content_removed-rep-1").click();
     await page.getByTestId("confirm-resolve-content_removed-rep-1-confirm").click();
@@ -835,7 +836,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     });
     await page.goto("/");
     await expect(page.getByTestId("admin-tab-reports")).toContainText("1");
-    await page.getByTestId("admin-tab-reports").click();
+    await (await staffTab(page, "reports")).click();
     await page.getByPlaceholder("Decision note (stored in the audit log)").fill("Unsafe dosing advice");
     await page.getByTestId("resolve-content_removed-rep-1").click();
     expect(resolved).toBe(false);
@@ -869,7 +870,7 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await expect(page.getByTestId("admin-priority-unassigned-age")).toContainText(/Oldest unassigned ticket opened \d+d ago/);
     await expect(page.getByTestId("admin-priority-unassigned")).toContainText("Past the 24h target.");
     await expect(page.getByTestId("admin-priority-reports")).toContainText("Past the 24h target.");
-    await page.getByTestId("admin-tab-reports").click();
+    await (await staffTab(page, "reports")).click();
     await expect(page.getByText(/Oldest report opened \d+d ago/)).toBeVisible();
     await expect(page.getByText("Past the 24h target.").first()).toBeVisible();
   });

@@ -1,7 +1,9 @@
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { consoleStyles as styles } from "./console-styles";
 import { QueueList } from "./queue-list";
+import { QueueRow } from "./queue-row";
+import { StatusBadge } from "./status-badge";
 import type { AdminConsoleModel } from "./use-admin-console";
 
 export function StaffRolesTab({ model }: { model: AdminConsoleModel }) {
@@ -24,13 +26,10 @@ export function StaffRolesTab({ model }: { model: AdminConsoleModel }) {
     >
       <Affordance accessibilityRole="button" accessibilityLabel={t("HIRE")} onPress={() => selectTab("users")} style={styles.action}><Text style={styles.actionText}>{t("HIRE")}</Text></Affordance>
       {team.map(account => (
-        <Affordance key={account.id} accessibilityRole="button" accessibilityLabel={account.full_name || account.email} onPress={() => { void openUser(account.id); }} style={styles.row}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.name}>{account.full_name || account.email}</Text>
-            <Text style={styles.meta}>{account.email}</Text>
-          </View>
-          {account.staff_role ? <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(account.staff_role.toUpperCase())}</Text></View> : null}
-        </Affordance>
+        <QueueRow key={account.id} label={account.full_name || account.email} onPress={() => { void openUser(account.id); }} trailing={account.staff_role ? <StatusBadge tone="info" label={t(account.staff_role.toUpperCase())} /> : null}>
+          <Text style={styles.name}>{account.full_name || account.email}</Text>
+          <Text style={styles.meta}>{account.email}</Text>
+        </QueueRow>
       ))}
     </QueueList>
   );

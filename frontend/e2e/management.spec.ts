@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { staffTab } from "./staff-nav";
 
 // Management actions that the backend supported but nothing could trigger.
 const me = { id: "u-1", full_name: "Owner One", email: "owner@example.invalid", role: "coach", coach_status: "approved", preferred_locale: "en", avatar_url: null, staff_role: null };
@@ -298,7 +299,7 @@ test("a pending coach application can be approved from the console", async ({ pa
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-coaches").click();
+  await (await staffTab(page, "coaches")).click();
 
   await expect(page.getByTestId("application-app-1")).toContainText("Ten years coaching strength athletes.");
   await page.getByPlaceholder("Review note (sent to the applicant)").fill("Credentials verified");
@@ -319,7 +320,7 @@ test("rejecting a coach application asks first and then sends the note", async (
     return false;
   });
   await page.goto("/");
-  await page.getByTestId("admin-tab-coaches").click();
+  await (await staffTab(page, "coaches")).click();
   await page.getByPlaceholder("Review note (sent to the applicant)").fill("Missing certification");
   await page.getByTestId("reject-application-app-1").click();
   await expect.poll(() => reviews).toEqual([]);
@@ -333,7 +334,7 @@ test("rejecting a coach application asks first and then sends the note", async (
 test("staff without coaches.review see the queue read-only", async ({ page }) => {
   await consoleFixtures(page, ["users.read", "reports.read", "audit.read"]);
   await page.goto("/");
-  await page.getByTestId("admin-tab-coaches").click();
+  await (await staffTab(page, "coaches")).click();
   // Without the permission the console never loads the queue at all.
   await expect(page.getByText("No coach applications waiting.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("approve-application-app-1")).toHaveCount(0);

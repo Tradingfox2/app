@@ -8,6 +8,8 @@ import { ConfirmAction } from "./confirm-action";
 import { consoleStyles as styles } from "./console-styles";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
+import { FilterChip } from "./filter-chip";
+import { StatusBadge } from "./status-badge";
 import { QueueList } from "./queue-list";
 import type { AdminConsoleModel } from "./use-admin-console";
 
@@ -58,9 +60,7 @@ export function CoachesTab({ model }: { model: AdminConsoleModel }) {
     <>
       <FilterBar label={t("Coach queue")}>
         {FILTERS.map(([item, label]) => (
-          <Affordance key={item} accessibilityRole="button" accessibilityLabel={t(label)} accessibilityState={{ selected: coachFilter === item }} onPress={() => { setCoachFilter(item); }} style={[styles.chip, coachFilter === item && styles.chipActive]}>
-            <Text style={[styles.chipText, coachFilter === item && styles.chipTextActive]}>{t(label)}</Text>
-          </Affordance>
+          <FilterChip key={item} label={t(label)} selected={coachFilter === item} onPress={() => { setCoachFilter(item); }} />
         ))}
       </FilterBar>
       {coachFilter === "suspended" ? <Text style={styles.hint}>{t("A banned coach has a suspended account. Open the account to suspend or reinstate.")}</Text> : null}
@@ -84,7 +84,7 @@ export function CoachesTab({ model }: { model: AdminConsoleModel }) {
         {(coachDirectory || []).map(coach => (
           <DetailPanel key={coach.application_id || coach.user_id} testID={`application-${coach.application_id || coach.user_id}`}>
             <View style={styles.cardHead}>
-              <Text style={styles.tag}>{t(tagCopy(coachFilter))}</Text>
+              <StatusBadge tone={coachFilter === "suspended" || coachFilter === "rejected" ? "danger" : coachFilter === "approved" ? "ok" : "warning"} label={t(tagCopy(coachFilter))} />
               {coach.created_at ? <Text style={styles.time}>{formatDate(coach.created_at, { day: "numeric", month: "short" })}</Text> : null}
             </View>
             <Text style={styles.name}>{coach.full_name || coach.email || t("Unknown")}</Text>

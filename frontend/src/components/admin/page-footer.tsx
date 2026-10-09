@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text } from "react-native";
-import { colors, spacing } from "@/src/theme";
+import { spacing } from "@/src/theme";
+import { staffColors as colors, staffFonts } from "./staff-theme";
 
 type Translate = (source: string, values?: Record<string, string | number>) => string;
 
@@ -49,7 +50,7 @@ export function PageFooter({
 }
 
 const styles = StyleSheet.create({
-  hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
+  hint: { color: colors.textMuted, fontFamily: staffFonts.text, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
   more: { alignSelf: "flex-start", marginTop: spacing.sm, minHeight: 36, justifyContent: "center" },
-  moreText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  moreText: { color: colors.text, fontFamily: staffFonts.text, fontSize: 12, fontWeight: "600" },
 });

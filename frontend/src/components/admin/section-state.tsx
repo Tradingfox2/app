@@ -1,6 +1,6 @@
 import { ActivityIndicator, Text, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
-import { colors } from "@/src/theme";
+import { staffColors } from "./staff-theme";
 import { consoleStyles as styles } from "./console-styles";
 
 type Translate = (source: string, values?: Record<string, string | number>) => string;
@@ -32,7 +32,7 @@ export function SectionState({
       {updatedAt && formatDate ? (
         <Text style={styles.hint}>{t("Updated {time}.", { time: formatDate(updatedAt, { dateStyle: "short", timeStyle: "short" }) })}</Text>
       ) : null}
-      {loading ? <ActivityIndicator color={colors.text} /> : null}
+      {loading ? <ActivityIndicator color={staffColors.text} /> : null}
       {error ? (
         <View accessibilityRole="alert" style={styles.errorBox} testID={testID}>
           <Text style={styles.error}>{error}</Text>

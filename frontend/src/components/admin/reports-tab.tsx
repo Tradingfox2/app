@@ -2,13 +2,14 @@ import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
 import { colors } from "@/src/theme";
-import { selectedControl } from "@/src/community-copy";
 import { ADMIN_QUEUE_TARGET_HOURS, agePhrase, isOverdue, queueAge } from "./queue-age";
 import { RESOLUTIONS, isReportTargetType, reportTypeLabel } from "./admin-labels";
 import { consoleStyles as styles } from "./console-styles";
 import { ConfirmAction } from "./confirm-action";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
+import { FilterChip } from "./filter-chip";
+import { StatusBadge } from "./status-badge";
 import { QueueList } from "./queue-list";
 import type { AdminConsoleModel } from "./use-admin-console";
 
@@ -22,9 +23,9 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
     <>
       <FilterBar label={t("Report status")}>
         {(["open", "resolved"] as const).map(item => (
-          <Affordance key={item} accessibilityRole="button" accessibilityLabel={t(item === "open" ? "Open reports" : "Resolved reports")} accessibilityState={{ selected: reportStatus === item }} onPress={() => void loadReports(item)} style={[styles.chip, reportStatus === item && styles.chipActive]}>
-            <Text style={[styles.chipText, reportStatus === item && styles.chipTextActive]}>{t(item === "open" ? "OPEN" : "RESOLVED")}</Text>
-          </Affordance>
+          <FilterChip key={item} label={t(item === "open" ? "Open reports" : "Resolved reports")} selected={reportStatus === item} onPress={() => void loadReports(item)}>
+            {t(item === "open" ? "OPEN" : "RESOLVED")}
+          </FilterChip>
         ))}
       </FilterBar>
       {reportStatus === "resolved" ? <Text style={styles.hint}>{t("Resolved reports stay here so a decision can be checked later.")}</Text> : null}
@@ -35,13 +36,9 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
         </Text>
       ) : null}
       {reportTypes.length > 0 ? <FilterBar label={t("Report type")}>
-        <Affordance accessibilityRole="button" accessibilityLabel={t("All types")} {...selectedControl(reportType === "all")} testID="report-type-all" onPress={() => { void loadReports(reportStatus, "all"); }} style={[styles.chip, reportType === "all" && styles.chipActive]}>
-          <Text style={[styles.chipText, reportType === "all" && styles.chipTextActive]}>{t("All types")}</Text>
-        </Affordance>
+        <FilterChip label={t("All types")} selected={reportType === "all"} testID="report-type-all" onPress={() => { void loadReports(reportStatus, "all"); }} />
         {reportTypes.map(type => (
-          <Affordance key={type} accessibilityRole="button" accessibilityLabel={t(reportTypeLabel(type))} {...selectedControl(reportType === type)} testID={`report-type-${type}`} onPress={() => { void loadReports(reportStatus, type); }} style={[styles.chip, reportType === type && styles.chipActive]}>
-            <Text style={[styles.chipText, reportType === type && styles.chipTextActive]}>{t(reportTypeLabel(type))}</Text>
-          </Affordance>
+          <FilterChip key={type} label={t(reportTypeLabel(type))} selected={reportType === type} testID={`report-type-${type}`} onPress={() => { void loadReports(reportStatus, type); }} />
         ))}
       </FilterBar> : null}
       <QueueList
@@ -63,7 +60,7 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
         {shownReports.map(report => (
           <DetailPanel key={report.id} testID={`report-${report.id}`}>
             <View style={styles.cardHead}>
-              <Text style={styles.tag}>{t(report.reason.replace(/_/g, " ").toUpperCase())}</Text>
+              <StatusBadge tone="danger" label={t(report.reason.replace(/_/g, " ").toUpperCase())} />
               <Text style={styles.time}>{formatDate(report.created_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
             </View>
             <Text style={styles.meta} testID={`report-age-${report.id}`}>{queueAge(report.created_at, report.reviewed_at, t)}</Text>
@@ -71,9 +68,9 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
             {report.content_snapshot ? <Text style={styles.snapshot}>“{report.content_snapshot}”</Text> : null}
             {report.detail ? <Text style={styles.meta}>{t("Reporter said:")} {report.detail}</Text> : null}
             {report.resolution ? <Text style={styles.meta}>{t(report.resolution.replace(/_/g, " ").toUpperCase())}</Text> : null}
-            {report.resolution_status === "partial" ? <Text style={styles.partial}>{t("Partial resolution. The side effect can be retried.")}</Text> : null}
-            {report.resolution_status === "retrying" && report.retry_claimable ? <Text style={styles.partial}>{t("The previous retry stopped. It can be run again.")}</Text> : null}
-            {report.resolution_status === "retrying" && !report.retry_claimable ? <Text style={styles.meta}>{t("A retry is in progress.")}</Text> : null}
+            {report.resolution_status === "partial" ? <StatusBadge tone="warning" label={t("Partial resolution. The side effect can be retried.")} /> : null}
+            {report.resolution_status === "retrying" && report.retry_claimable ? <StatusBadge tone="warning" label={t("The previous retry stopped. It can be run again.")} /> : null}
+            {report.resolution_status === "retrying" && !report.retry_claimable ? <StatusBadge tone="info" label={t("A retry is in progress.")} /> : null}
             {reportStatus === "open" || report.resolution_status === "partial" || (report.resolution_status === "retrying" && report.retry_claimable) ? (can("reports.resolve") ? <View style={styles.actions}>
               {report.resolution_status === "partial" || report.resolution_status === "retrying" ? (
                 <Affordance accessibilityRole="button" accessibilityLabel={t("Retry side effect for report {id}", { id: report.id })} testID={`report-retry-${report.id}`} disabled={working} onPress={() => setConfirmRetryId(report.id)} style={[styles.action, working && styles.disabled]}>

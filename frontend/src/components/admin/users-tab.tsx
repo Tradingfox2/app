@@ -8,7 +8,10 @@ import { ConfirmAction } from "./confirm-action";
 import { consoleStyles as styles } from "./console-styles";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
+import { FilterChip } from "./filter-chip";
+import { StatusBadge } from "./status-badge";
 import { QueueList } from "./queue-list";
+import { QueueRow } from "./queue-row";
 import type { AdminConsoleModel } from "./use-admin-console";
 
 const STATUSES: AccountStatus[] = ["all", "active", "suspended", "staff"];
@@ -24,9 +27,7 @@ export function UsersTab({ model }: { model: AdminConsoleModel }) {
       </View>
       <FilterBar label={t("Account status")}>
         {STATUSES.map(item => (
-          <Affordance key={item} accessibilityRole="button" accessibilityLabel={t(item.toUpperCase())} accessibilityState={{ selected: status === item }} onPress={() => { void search(item); }} style={[styles.chip, status === item && styles.chipActive]}>
-            <Text style={[styles.chipText, status === item && styles.chipTextActive]}>{t(item.toUpperCase())}</Text>
-          </Affordance>
+          <FilterChip key={item} label={t(item.toUpperCase())} selected={status === item} onPress={() => { void search(item); }} />
         ))}
       </FilterBar>
       <QueueList
@@ -45,16 +46,23 @@ export function UsersTab({ model }: { model: AdminConsoleModel }) {
         footerLoading={working}
       >
         {users.map(account => (
-          <Affordance key={account.id} accessibilityRole="button" accessibilityLabel={account.full_name || account.email} testID={`admin-user-${account.id}`} onPress={() => void openUser(account.id)} style={styles.row}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.name}>{account.full_name || account.email}</Text>
-              <Text style={styles.meta}>{account.email}</Text>
-            </View>
-            {account.staff_role ? <View style={styles.staffTag}><Text style={styles.staffTagText}>{t(account.staff_role.toUpperCase())}</Text></View> : null}
-            {account.gym_owner ? <View style={styles.staffTag} testID={`gym-owner-${account.id}`}><Text style={styles.staffTagText}>{t("GYM OWNER")}</Text></View> : null}
-            {account.suspended_at ? <View style={styles.suspendedTag}><Text style={styles.suspendedTagText}>{t("SUSPENDED")}</Text></View> : null}
-            <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
-          </Affordance>
+          <QueueRow
+            key={account.id}
+            label={account.full_name || account.email}
+            testID={`admin-user-${account.id}`}
+            onPress={() => void openUser(account.id)}
+            trailing={
+              <>
+                {account.staff_role ? <StatusBadge tone="neutral" label={t(account.staff_role.toUpperCase())} /> : null}
+                {account.gym_owner ? <StatusBadge tone="info" label={t("GYM OWNER")} testID={`gym-owner-${account.id}`} /> : null}
+                {account.suspended_at ? <StatusBadge tone="danger" label={t("SUSPENDED")} /> : null}
+                <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
+              </>
+            }
+          >
+            <Text style={styles.name}>{account.full_name || account.email}</Text>
+            <Text style={styles.meta}>{account.email}</Text>
+          </QueueRow>
         ))}
       </QueueList>
       {selected ? <DetailPanel testID="admin-user-detail" label={selected.full_name || selected.email}>
