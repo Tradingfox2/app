@@ -1,6 +1,7 @@
 import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
+import { selectedControl } from "@/src/community-copy";
 import { colors } from "@/src/theme";
 import { consoleStyles as styles } from "./console-styles";
 import { QueueList } from "./queue-list";
@@ -20,7 +21,7 @@ export function AuditTab({ model }: { model: AdminConsoleModel }) {
           const label = item === "" ? "All outcomes" : item === "success" ? "Succeeded" : item === "failed" ? "Failed" : "Denied";
           const selected = auditOutcome === item;
           return (
-            <Affordance key={label} accessibilityRole="button" accessibilityLabel={t(label)} accessibilityState={{ selected }} testID={`audit-outcome-${item || "all"}`} onPress={() => setAuditOutcome(item)} style={[styles.chip, selected && styles.chipActive]}>
+            <Affordance key={label} accessibilityRole="button" accessibilityLabel={t(label)} {...selectedControl(selected)} testID={`audit-outcome-${item || "all"}`} onPress={() => setAuditOutcome(item)} style={[styles.chip, selected && styles.chipActive]}>
               <Text style={[styles.chipText, selected && styles.chipTextActive]}>{t(label)}</Text>
             </Affordance>
           );
