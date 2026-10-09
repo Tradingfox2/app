@@ -70,7 +70,7 @@ After the branch was moved onto `4b86bce` and the Expo servers were restarted fr
 
 `cd frontend && npx playwright test e2e/admin.spec.ts e2e/management.spec.ts --reporter=line`
 
-**84 passed** (desktop and mobile), about 2.5 minutes. Exit code 0.
+**84 passed** (desktop and mobile), about 2.5 minutes. Exit code 0. The same command was run again after the review fixes (tab role, neutral sign-out, badge and error contrast, sign-in gradient) and **84 passed** again.
 
 `npx tsc --noEmit` after regenerating member route types in `.expo/types/router.d.ts`: **exit 0**.
 
