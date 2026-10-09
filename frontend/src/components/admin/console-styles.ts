@@ -17,7 +17,7 @@ export const consoleStyles = StyleSheet.create({
   tabActive: { borderColor: colors.brand, backgroundColor: colors.surface3 },
   tabText: { ...staffType.nav, color: colors.textMuted },
   tabTextActive: { color: colors.brand },
-  badge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
+  badge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: "#9B1C1C", alignItems: "center", justifyContent: "center" },
   badgeText: { color: colors.text, fontSize: 10, fontWeight: "900" },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.sm, width: "100%", maxWidth: 1080, alignSelf: "center" },
   section: { ...staffType.section, marginTop: spacing.lg },

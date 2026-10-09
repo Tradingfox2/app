@@ -270,7 +270,7 @@ test("analytics tab renders the counts the API returned", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("admin-tab-analytics")).toBeVisible();
   await expect(page.getByTestId("admin-tab-support")).toBeVisible();
-  const labels = (await page.getByRole("button").allTextContents()).map(text => text.replace(/\s+/g, " ").trim());
+  const labels = (await page.getByRole("tab").allTextContents()).map(text => text.replace(/\s+/g, " ").trim());
   // Operations (support) sits above Business (analytics) in the grouped shell.
   const supportAt = labels.findIndex(text => text.includes("SUPPORT"));
   const analyticsAt = labels.findIndex(text => text.includes("ANALYTICS"));

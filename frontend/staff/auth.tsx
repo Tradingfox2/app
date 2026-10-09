@@ -52,7 +52,7 @@ export default function StaffAuth() {
 
   return (
     <SafeAreaView style={styles.safe} testID="staff-auth">
-      <LinearGradient colors={[staffColors.bgTint, staffColors.bg, "#090B0D"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[staffColors.bgTint, staffColors.bg]} style={StyleSheet.absoluteFill} />
       <View style={[styles.split, wide && styles.splitWide]}>
         <View style={[styles.panel, wide && styles.panelWide, staffEnter(reduced)]}>
           <Mark />
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     fontFamily: staffFonts.text,
     marginBottom: spacing.md,
   },
-  err: { color: staffColors.error, fontFamily: staffFonts.text, marginBottom: spacing.md },
+  err: { color: "#FF8A8A", fontFamily: staffFonts.text, marginBottom: spacing.md },
   cta: {
     minHeight: 48,
     alignItems: "center",

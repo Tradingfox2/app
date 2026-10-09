@@ -64,7 +64,7 @@ function AdminConsole() {
           return (
             <Affordance
               key={item.id}
-              accessibilityRole="button"
+              accessibilityRole="tab"
               accessibilityLabel={t(item.label)}
               {...selectedControl(selected)}
               testID={`admin-tab-${item.id}`}
@@ -88,7 +88,7 @@ function AdminConsole() {
           <Ionicons name="lock-closed" size={40} color={staffColors.textDim} />
           <Text style={styles.lockedText}>{t("This console is for the IronFlow staff team.")}</Text>
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-          <Affordance accessibilityRole="button" accessibilityLabel={t("SIGN OUT")} onPress={() => { void logout(); }} style={styles.primary} signal="brand"><Text style={styles.primaryText}>{t("SIGN OUT")}</Text></Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("SIGN OUT")} onPress={() => { void logout(); }} style={styles.action}><Text style={styles.actionText}>{t("SIGN OUT")}</Text></Affordance>
         </View>
       </SafeAreaView>
     );

@@ -25,7 +25,7 @@ Rejected: rewriting member screens, adding Three.js, and painting chartreuse on 
 
 **IronFlow Precision Performance**, staff web only.
 
-- Palette: ground `#101418`, surface `#1A1F24`, raised `#242A31`, line `#343B44`. Accent `#D6E35A` on the sign-in button, the locked-screen sign-out, the selected tab (border, label, icon), and the overview queue links (`Open coaches`, `Open memberships`). Status red, amber, and blue-gray stay, always with a text label.
+- Palette: ground `#101418`, surface `#1A1F24`, raised `#242A31`, line `#343B44`. Accent `#D6E35A` on the sign-in button, the selected tab (border, label, icon), and the overview queue links (`Open coaches`, `Open memberships`). Sign out stays neutral. Queue-count badges use `#9B1C1C` so the light numeral clears the fill. Sign-in errors use `#FF8A8A`. Status still pairs a color with a text label.
 - Type: Barlow Condensed for display, Barlow for UI. Both are SIL Open Font License, files in `frontend/assets/fonts`, loaded only from `frontend/staff/_layout.tsx`. Satoshi is not licensed here and is not used. Member web stays on Inter/system.
 - Materials: sidebar, confirm dialog, and sign-in card carry one soft shadow (`boxShadow` on web). Queues, tables, and accounting figures stay flat.
 - Layout: sidebar at ≥1080px; horizontal rail below. Page title repeats the selected section. No command palette.
@@ -103,6 +103,8 @@ None added. `expo-font`, `expo-linear-gradient`, and `react-native-svg` were alr
 Committed only on `design/ironflow-command-center`. Not deployed. Not merged.
 
 ## Phase 8 checklist
+
+[Review staff design diff](bc-3ec5623b-d72c-517d-a588-8a1bdcb0e278) and [Independent staff design review](bc-1609a9be-d56d-5b07-9444-7e3a952813ff) read the diff. Applied from those notes: nav controls are tabs inside each tablist; the locked-screen sign-out is no longer chartreuse; the sign-in gradient ends on `#101418`; the queue badge fill is `#9B1C1C`; the sign-in error is `#FF8A8A`.
 
 Reviewed on the diff against `4b86bce`:
 
