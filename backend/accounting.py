@@ -89,16 +89,16 @@ def _totals(rows: list[dict] | None, parse, *, truncated: bool = False) -> dict:
         elif kind == "ok":
             groups[currency] = groups.get(currency, 0) + cents
     if not groups:
-        if bad:
-            result: dict = {"state": "recorded", "amounts_stored": False, "row_count": len(rows), "incomplete_rows": bad}
-        elif truncated:
-            result = {"state": "incomplete", "reason": "row_cap", "amounts_stored": False, "row_count": len(rows)}
-        else:
-            return dict(_NONE)
+        # Every row lacked an amount. That stays `recorded` with
+        # `amounts_stored` false. A cap on top of that is incomplete.
+        if bad and not truncated:
+            return {"state": "recorded", "amounts_stored": False, "row_count": len(rows)}
         if truncated:
-            result["state"] = "incomplete"
-            result["reason"] = "row_cap"
-        return result
+            result = {"state": "incomplete", "reason": "row_cap", "amounts_stored": False, "row_count": len(rows)}
+            if bad:
+                result["incomplete_rows"] = bad
+            return result
+        return dict(_NONE)
     result = {"state": "recorded", "amounts_stored": True, "totals": [
         {"amount_cents": cents, "currency": currency} for currency, cents in _sorted(groups)
     ]}
