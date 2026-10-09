@@ -8,6 +8,7 @@ import {
   AdminOverview,
   api,
   AuditEntry,
+  AuditOutcome,
   AuditQuery,
   CoachApplicationReview,
   HealthReport,
@@ -34,7 +35,7 @@ import {
   ReportTargetType,
   Tab,
 } from "./admin-labels";
-import { isAbortError, readConsoleQuery, writeConsoleQuery } from "./console-query";
+import { isAbortError, readConsoleQuery, readStaffSearch, writeConsoleQuery, writeStaffSearch } from "./console-query";
 
 type SectionErrors = {
   reports?: string;
@@ -65,6 +66,17 @@ function initialParams() {
 function messageFrom(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback;
 }
+
+function isAuditOutcome(value: string | null): value is AuditOutcome {
+  return value === "success" || value === "failed" || value === "denied";
+}
+
+export type PendingConfirm =
+  | { kind: "resolve"; report: ModerationReport; resolution: "content_removed" | "user_suspended" }
+  | { kind: "suspend"; account: AdminAccount }
+  | { kind: "role"; account: AdminAccount; role: StaffRole | null }
+  | { kind: "coach-reject"; applicationId: string; userId: string }
+  | { kind: "membership"; row: AdminMembership; decision: "active" | "rejected" };
 
 export function useAdminConsole() {
   const { user, logout } = useAuth();
@@ -101,18 +113,19 @@ export function useAdminConsole() {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState<number | null>(null);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
-  const [auditActor, setAuditActor] = useState(() => params.get("actor") ?? "");
+  const [auditActor, setAuditActor] = useState(() => readStaffSearch().actor);
   const [auditAction, setAuditAction] = useState(() => params.get("action") ?? "");
   const [auditTarget, setAuditTarget] = useState(() => params.get("target") ?? "");
   const [auditFrom, setAuditFrom] = useState(() => params.get("from") ?? "");
   const [auditTo, setAuditTo] = useState(() => params.get("to") ?? "");
+  const [auditOutcome, setAuditOutcome] = useState<AuditOutcome | "">(() => (isAuditOutcome(params.get("outcome")) ? params.get("outcome") as AuditOutcome : ""));
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [sectionErrors, setSectionErrors] = useState<SectionErrors>({});
   const [updatedAt, setUpdatedAt] = useState<SectionTimes>({});
   const [ticketStatus, setTicketStatus] = useState<SupportTicketStatus>(() => (isTicketStatus(params.get("ticketStatus")) ? params.get("ticketStatus") as SupportTicketStatus : "open"));
   const [unassignedOnly, setUnassignedOnly] = useState(() => params.get("unassigned") === "1");
-  const [ticketQuery, setTicketQuery] = useState(() => params.get("tq") ?? "");
-  const [ticketSearch, setTicketSearch] = useState(() => params.get("tq") ?? "");
+  const [ticketQuery, setTicketQuery] = useState(() => readStaffSearch().tq);
+  const [ticketSearch, setTicketSearch] = useState(() => readStaffSearch().tq);
   const [tickets, setTickets] = useState<SupportTicket[] | null>(null);
   const [ticketDetail, setTicketDetail] = useState<SupportTicketDetail | null>(null);
   const [draftStatus, setDraftStatus] = useState<SupportTicketStatus>("open");
@@ -122,12 +135,13 @@ export function useAdminConsole() {
   const [ticketReload, setTicketReload] = useState(0);
   const [panelReload, setPanelReload] = useState(0);
   const [selected, setSelected] = useState<AdminAccount | null>(null);
-  const [query, setQuery] = useState(() => params.get("q") ?? "");
+  const [query, setQuery] = useState(() => readStaffSearch().q);
   const [status, setStatus] = useState<AccountStatus>(() => (isAccountStatus(params.get("userStatus")) ? params.get("userStatus") as AccountStatus : "all"));
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [confirmRetryId, setConfirmRetryId] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
   const revision = useRef(0);
   const busy = useRef(false);
   const [working, setWorking] = useState(false);
@@ -158,6 +172,7 @@ export function useAdminConsole() {
       targetId: auditTarget.trim() || undefined,
       from: /^\d{4}-\d{2}-\d{2}$/.test(auditFrom.trim()) ? `${auditFrom.trim()}T00:00:00Z` : undefined,
       to: exclusiveEnd(auditTo.trim()),
+      outcome: auditOutcome || undefined,
     },
   };
 
@@ -267,15 +282,17 @@ export function useAdminConsole() {
       ticketStatus,
       unassigned: unassignedOnly ? "1" : "",
       userStatus: status,
-      q: query,
-      tq: ticketSearch,
-      actor: auditActor,
       action: auditAction,
       target: auditTarget,
       from: auditFrom,
       to: auditTo,
+      outcome: auditOutcome,
     });
-  }, [tab, reportStatus, reportType, coachFilter, joinStatus, ticketStatus, unassignedOnly, status, query, ticketSearch, auditActor, auditAction, auditTarget, auditFrom, auditTo]);
+  }, [tab, reportStatus, reportType, coachFilter, joinStatus, ticketStatus, unassignedOnly, status, auditAction, auditTarget, auditFrom, auditTo, auditOutcome]);
+
+  useEffect(() => {
+    writeStaffSearch({ q: query, tq: ticketQuery, actor: auditActor });
+  }, [query, ticketQuery, auditActor]);
 
   useEffect(() => {
     if (!overview) return undefined;
@@ -450,6 +467,11 @@ export function useAdminConsole() {
   });
   const moreUsers = () => act(async () => { if (userCursor) await fetchUsers(query, status, userCursor); });
   const searchAudit = () => act(async () => { await refreshAudit(); });
+  const chooseAuditOutcome = (next: AuditOutcome | "") => {
+    setAuditOutcome(next);
+    filtersRef.current.audit = { ...filtersRef.current.audit, outcome: next || undefined };
+    void refreshAudit();
+  };
   const onAuditField = (setter: (value: string) => void) => (value: string) => {
     setter(value);
     if (auditTimer.current) clearTimeout(auditTimer.current);
@@ -524,8 +546,8 @@ export function useAdminConsole() {
     setSelected(await api.adminUser(id));
     setReason("");
   });
-  const decideJoin = (row: AdminMembership, decision: "active" | "rejected") => act(async () => {
-    await api.adminReviewMembership(row.id, decision, reason.trim());
+  const decideJoin = (row: AdminMembership, decision: "active" | "rejected", given?: string) => act(async () => {
+    await api.adminReviewMembership(row.id, decision, (given ?? reason).trim());
     setJoins(rows => rows.filter(item => item.id !== row.id));
     setJoinTotal(current => (current == null ? current : Math.max(0, current - 1)));
     setReason("");
@@ -535,8 +557,8 @@ export function useAdminConsole() {
     await refreshOverview();
     await refreshAudit();
   });
-  const resolve = (report: ModerationReport, resolution: string) => act(async () => {
-    const reviewed = await api.adminReviewReport(report.id, resolution, reason.trim());
+  const resolve = (report: ModerationReport, resolution: string, given?: string) => act(async () => {
+    const reviewed = await api.adminReviewReport(report.id, resolution, (given ?? reason).trim());
     setReason("");
     if (reviewed.resolution_status === "partial") {
       setReports(rows => rows.map(row => row.id === report.id ? { ...row, ...reviewed, reporter: row.reporter, reported_user: row.reported_user } : row));
@@ -566,8 +588,9 @@ export function useAdminConsole() {
     await refreshOverview();
     await refreshAudit();
   });
-  const reviewApplication = (application: CoachApplicationReview, next: "approved" | "rejected") => act(async () => {
-    await api.reviewCoachApplication(application.id, next, reason.trim() || undefined);
+  const reviewApplication = (application: CoachApplicationReview, next: "approved" | "rejected", given?: string) => act(async () => {
+    const note = (given ?? reason).trim();
+    await api.reviewCoachApplication(application.id, next, note || undefined);
     setCoachDirectory(rows => rows ? rows.filter(row => row.application_id !== application.id) : rows);
     setCoachTotal(current => (current == null ? current : Math.max(0, current - 1)));
     setReason("");
@@ -583,18 +606,19 @@ export function useAdminConsole() {
     setNote("");
     await refreshAudit();
   });
-  const suspend = (account: AdminAccount) => act(async () => {
+  const suspend = (account: AdminAccount, given?: string) => act(async () => {
+    const text = (given ?? reason).trim();
     const updated = account.suspended_at
-      ? await api.adminReinstate(account.id, reason.trim())
-      : await api.adminSuspend(account.id, reason.trim());
+      ? await api.adminReinstate(account.id, text)
+      : await api.adminSuspend(account.id, text);
     setSelected(await api.adminUser(updated.id));
     setReason("");
     setUsers(rows => rows.map(row => row.id === updated.id ? { ...row, ...updated } : row));
     await refreshOverview();
     await refreshAudit();
   });
-  const setRole = (account: AdminAccount, role: StaffRole | null) => act(async () => {
-    const updated = await api.adminSetStaffRole(account.id, role, reason.trim());
+  const setRole = (account: AdminAccount, role: StaffRole | null, given?: string) => act(async () => {
+    const updated = await api.adminSetStaffRole(account.id, role, (given ?? reason).trim());
     setSelected(await api.adminUser(updated.id));
     setReason("");
     setUsers(rows => rows.map(row => row.id === updated.id ? { ...row, staff_role: updated.staff_role } : row));
@@ -621,6 +645,37 @@ export function useAdminConsole() {
     await refreshOverview();
     await refreshAudit();
   });
+  const confirmPending = (draft: string) => {
+    if (!pending || busy.current) return;
+    const current = pending;
+    void (async () => {
+      try {
+        switch (current.kind) {
+          case "resolve":
+            await resolve(current.report, current.resolution, draft);
+            break;
+          case "suspend":
+            await suspend(current.account, draft);
+            break;
+          case "role":
+            await setRole(current.account, current.role, draft);
+            break;
+          case "coach-reject":
+            await reviewApplication({ id: current.applicationId, user_id: current.userId } as CoachApplicationReview, "rejected", draft);
+            break;
+          case "membership":
+            await decideJoin(current.row, current.decision, draft);
+            break;
+          default: {
+            const exhaustive: never = current;
+            throw new Error(exhaustive);
+          }
+        }
+      } finally {
+        setPending(null);
+      }
+    })();
+  };
   const sendReply = () => act(async () => {
     if (!ticketDetail) return;
     const id = ticketDetail.id;
@@ -662,11 +717,13 @@ export function useAdminConsole() {
     auditTarget, setAuditTarget: onAuditField(setAuditTarget),
     auditFrom, setAuditFrom: onAuditField(setAuditFrom),
     auditTo, setAuditTo: onAuditField(setAuditTo),
+    auditOutcome, setAuditOutcome: chooseAuditOutcome,
     health, sectionErrors, updatedAt, ticketStatus, setTicketStatus, unassignedOnly, setUnassignedOnly,
     ticketQuery, onTicketQuery, submitTicketSearch, tickets, ticketDetail, setTicketDetail,
     draftStatus, setDraftStatus, reply, setReply, ticketTotal, ticketCursor,
     selected, query, onUserQuery, status, reason, setReason, loading, error, working, can,
     confirmRetryId, setConfirmRetryId,
+    pending, setPending, confirmPending,
     search, loadReports, moreReports, moreUsers, searchAudit, moreJoins, moreCommunities, moreTeam,
     moreTickets, moreCoaches, moreAudit, openUser, decideJoin, resolve, retryReport, reviewApplication,
     addNote, suspend, setRole, openTicket, saveTicketStatus, sendReply,

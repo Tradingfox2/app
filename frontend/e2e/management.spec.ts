@@ -308,6 +308,28 @@ test("a pending coach application can be approved from the console", async ({ pa
   await expect(page.getByText("No coach applications waiting.", { exact: true })).toBeVisible();
 });
 
+test("rejecting a coach application asks first and then sends the note", async ({ page }) => {
+  const reviews: unknown[] = [];
+  await consoleFixtures(page, staffOverview.permissions, async (route, path) => {
+    if (path === "/admin/coach-applications/app-1" && route.request().method() === "PATCH") {
+      reviews.push(route.request().postDataJSON());
+      await route.fulfill({ json: { ...application, status: "rejected" } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/");
+  await page.getByTestId("admin-tab-coaches").click();
+  await page.getByPlaceholder("Review note (sent to the applicant)").fill("Missing certification");
+  await page.getByTestId("reject-application-app-1").click();
+  await expect.poll(() => reviews).toEqual([]);
+  const dialog = page.getByTestId("confirm-reject-application-app-1");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("role", "dialog");
+  await page.getByTestId("confirm-reject-application-app-1-confirm").click();
+  await expect.poll(() => reviews).toEqual([{ status: "rejected", review_note: "Missing certification" }]);
+});
+
 test("staff without coaches.review see the queue read-only", async ({ page }) => {
   await consoleFixtures(page, ["users.read", "reports.read", "audit.read"]);
   await page.goto("/");

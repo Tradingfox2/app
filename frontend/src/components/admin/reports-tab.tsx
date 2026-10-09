@@ -13,7 +13,7 @@ import { QueueList } from "./queue-list";
 import type { AdminConsoleModel } from "./use-admin-console";
 
 export function ReportsTab({ model }: { model: AdminConsoleModel }) {
-  const { t, formatDate, reports, reportStatus, reportType, reportTotal, reportCursor, sectionErrors, updatedAt, reason, setReason, working, can, loading, overview, loadReports, moreReports, resolve, retryReport, confirmRetryId, setConfirmRetryId, openUser, retrySection } = model;
+  const { t, formatDate, reports, reportStatus, reportType, reportTotal, reportCursor, sectionErrors, updatedAt, reason, setReason, working, can, loading, overview, loadReports, moreReports, resolve, retryReport, confirmRetryId, setConfirmRetryId, pending, setPending, confirmPending, openUser, retrySection } = model;
   const shownReports = reports.filter(row => reportType === "all" || row.target_type === reportType);
   const reportTypes = reports.map(row => row.target_type).filter(isReportTargetType).filter((type, index, all) => all.indexOf(type) === index);
   const oldest = reportStatus === "open" ? overview?.queues.oldest_open_report_at : null;
@@ -72,8 +72,10 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
             {report.detail ? <Text style={styles.meta}>{t("Reporter said:")} {report.detail}</Text> : null}
             {report.resolution ? <Text style={styles.meta}>{t(report.resolution.replace(/_/g, " ").toUpperCase())}</Text> : null}
             {report.resolution_status === "partial" ? <Text style={styles.partial}>{t("Partial resolution. The side effect can be retried.")}</Text> : null}
-            {reportStatus === "open" || report.resolution_status === "partial" ? (can("reports.resolve") ? <View style={styles.actions}>
-              {report.resolution_status === "partial" ? (
+            {report.resolution_status === "retrying" && report.retry_claimable ? <Text style={styles.partial}>{t("The previous retry stopped. It can be run again.")}</Text> : null}
+            {report.resolution_status === "retrying" && !report.retry_claimable ? <Text style={styles.meta}>{t("A retry is in progress.")}</Text> : null}
+            {reportStatus === "open" || report.resolution_status === "partial" || (report.resolution_status === "retrying" && report.retry_claimable) ? (can("reports.resolve") ? <View style={styles.actions}>
+              {report.resolution_status === "partial" || report.resolution_status === "retrying" ? (
                 <Affordance accessibilityRole="button" accessibilityLabel={t("Retry side effect for report {id}", { id: report.id })} testID={`report-retry-${report.id}`} disabled={working} onPress={() => setConfirmRetryId(report.id)} style={[styles.action, working && styles.disabled]}>
                   <Text style={styles.actionText}>{t("RETRY")}</Text>
                 </Affordance>
@@ -81,7 +83,10 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
                 if (option.key === "user_suspended" && !report.reported_user) return null;
                 const needsReason = option.key === "user_suspended" && reason.trim().length < 10;
                 return (
-                  <Affordance key={option.key} accessibilityRole="button" accessibilityLabel={t("{action} report {id}", { action: t(option.label), id: report.id })} accessibilityState={{ disabled: working || needsReason }} testID={`resolve-${option.key}-${report.id}`} disabled={working || needsReason} onPress={() => void resolve(report, option.key)} style={[styles.action, (working || needsReason) && styles.disabled]}>
+                  <Affordance key={option.key} accessibilityRole="button" accessibilityLabel={t("{action} report {id}", { action: t(option.label), id: report.id })} accessibilityState={{ disabled: working || needsReason }} testID={`resolve-${option.key}-${report.id}`} disabled={working || needsReason} onPress={() => {
+                    if (option.key === "content_removed" || option.key === "user_suspended") setPending({ kind: "resolve", report, resolution: option.key });
+                    else void resolve(report, option.key);
+                  }} style={[styles.action, (working || needsReason) && styles.disabled]}>
                     <Ionicons name={option.icon} size={15} color={option.key === "content_removed" || option.key === "user_suspended" ? colors.error : colors.text} />
                     <Text style={styles.actionText}>{t(option.label)}</Text>
                   </Affordance>
@@ -96,6 +101,20 @@ export function ReportsTab({ model }: { model: AdminConsoleModel }) {
                 confirmLabel={t("RETRY")}
                 onConfirm={() => void retryReport(report)}
                 onCancel={() => setConfirmRetryId(null)}
+                busy={working}
+                t={t}
+              />
+            ) : null}
+            {pending?.kind === "resolve" && pending.report.id === report.id ? (
+              <ConfirmAction
+                testID={`confirm-resolve-${pending.resolution}-${report.id}`}
+                title={t(pending.resolution === "user_suspended" ? "Suspend the reported account" : "Remove the reported content")}
+                body={t(pending.resolution === "user_suspended" ? "The report is resolved and the account is suspended." : "The report is resolved and the content is removed.")}
+                confirmLabel={t(pending.resolution === "user_suspended" ? "SUSPEND" : "REMOVE")}
+                reason={reason}
+                minReason={pending.resolution === "user_suspended" ? 10 : 0}
+                onConfirm={next => confirmPending(next)}
+                onCancel={() => setPending(null)}
                 busy={working}
                 t={t}
               />

@@ -4,6 +4,7 @@ import { Affordance } from "@/src/press-affordance";
 import type { CoachApplicationReview } from "@/src/api";
 import { colors } from "@/src/theme";
 import type { CoachFilter } from "./admin-labels";
+import { ConfirmAction } from "./confirm-action";
 import { consoleStyles as styles } from "./console-styles";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
@@ -52,7 +53,7 @@ function tagCopy(filter: CoachFilter): string {
 }
 
 export function CoachesTab({ model }: { model: AdminConsoleModel }) {
-  const { t, formatDate, coachFilter, setCoachFilter, coachDirectory, coachTotal, coachCursor, sectionErrors, updatedAt, reason, setReason, working, can, moreCoaches, reviewApplication, openUser, retrySection } = model;
+  const { t, formatDate, coachFilter, setCoachFilter, coachDirectory, coachTotal, coachCursor, sectionErrors, updatedAt, reason, setReason, working, can, moreCoaches, reviewApplication, pending, setPending, confirmPending, openUser, retrySection } = model;
   return (
     <>
       <FilterBar label={t("Coach queue")}>
@@ -95,7 +96,7 @@ export function CoachesTab({ model }: { model: AdminConsoleModel }) {
             {coach.review_note ? <Text style={styles.meta}>{coach.review_note}</Text> : null}
             {!coach.application_id ? <Text style={styles.hint}>{t("No application on file.")}</Text> : null}
             {coachFilter === "pending" && coach.application_id ? (can("coaches.review") ? <View style={styles.actions}>
-              <Affordance accessibilityRole="button" accessibilityLabel={t("Reject application {id}", { id: coach.application_id })} testID={`reject-application-${coach.application_id}`} disabled={working} onPress={() => void reviewApplication({ id: coach.application_id!, user_id: coach.user_id } as CoachApplicationReview, "rejected")} style={[styles.action, working && styles.disabled]}>
+              <Affordance accessibilityRole="button" accessibilityLabel={t("Reject application {id}", { id: coach.application_id })} testID={`reject-application-${coach.application_id}`} disabled={working} onPress={() => setPending({ kind: "coach-reject", applicationId: coach.application_id!, userId: coach.user_id })} style={[styles.action, working && styles.disabled]}>
                 <Ionicons name="close" size={15} color={colors.error} />
                 <Text style={styles.actionText}>{t("Reject")}</Text>
               </Affordance>
@@ -104,6 +105,18 @@ export function CoachesTab({ model }: { model: AdminConsoleModel }) {
                 <Text style={styles.actionText}>{t("Approve")}</Text>
               </Affordance>
             </View> : <Text style={styles.hint}>{t("Read-only: reviewing coaches needs the admin role.")}</Text>) : null}
+            {pending?.kind === "coach-reject" && pending.applicationId === coach.application_id ? (
+              <ConfirmAction
+                testID={`confirm-reject-application-${coach.application_id}`}
+                title={t("Reject this application")}
+                body={t("The applicant is told the application was not approved. A suspended coach is changed from the account, which asks before it suspends.")}
+                confirmLabel={t("Reject")}
+                onConfirm={next => confirmPending(next || reason.trim())}
+                onCancel={() => setPending(null)}
+                busy={working}
+                t={t}
+              />
+            ) : null}
             <Affordance accessibilityRole="button" accessibilityLabel={t("Open account")} onPress={() => void openUser(coach.user_id)}><Text style={styles.link}>{t("Open account")}</Text></Affordance>
           </DetailPanel>
         ))}

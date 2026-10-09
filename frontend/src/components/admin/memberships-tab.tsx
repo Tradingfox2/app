@@ -5,6 +5,7 @@ import { colors } from "@/src/theme";
 import { selectedControl } from "@/src/community-copy";
 import { webOrigin } from "@/src/share";
 import { MEMBERSHIP_STATUSES, membershipStatusLabel } from "./admin-labels";
+import { ConfirmAction } from "./confirm-action";
 import { consoleStyles as styles } from "./console-styles";
 import { DetailPanel } from "./detail-panel";
 import { FilterBar } from "./filter-bar";
@@ -18,7 +19,7 @@ function openMemberCommunity(id: string) {
 }
 
 export function MembershipsTab({ model }: { model: AdminConsoleModel }) {
-  const { t, formatDate, joins, joinTotal, joinCursor, joinStatus, setJoinStatus, sectionErrors, updatedAt, reason, setReason, working, can, loading, moreJoins, decideJoin, openUser, retrySection } = model;
+  const { t, formatDate, joins, joinTotal, joinCursor, joinStatus, setJoinStatus, sectionErrors, updatedAt, reason, setReason, working, can, loading, moreJoins, pending, setPending, confirmPending, openUser, retrySection } = model;
   return (
     <>
       <FilterBar label={t("Membership status")}>
@@ -51,15 +52,29 @@ export function MembershipsTab({ model }: { model: AdminConsoleModel }) {
             <Text style={styles.meta}>{row.user?.email}</Text>
             <Text style={styles.meta}>{row.community?.name || t("Unknown")} · {formatDate(row.created_at, { day: "numeric", month: "short" })}</Text>
             {joinStatus === "pending" ? (can("content.moderate") ? <View style={styles.actions}>
-              <Affordance accessibilityRole="button" accessibilityLabel={t("Reject request {id}", { id: row.id })} disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "rejected")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
+              <Affordance accessibilityRole="button" accessibilityLabel={t("Reject request {id}", { id: row.id })} disabled={working || reason.trim().length < 5} onPress={() => setPending({ kind: "membership", row, decision: "rejected" })} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
                 <Ionicons name="close" size={15} color={colors.error} />
                 <Text style={styles.actionText}>{t("Reject")}</Text>
               </Affordance>
-              <Affordance accessibilityRole="button" accessibilityLabel={t("Approve request {id}", { id: row.id })} disabled={working || reason.trim().length < 5} onPress={() => void decideJoin(row, "active")} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
+              <Affordance accessibilityRole="button" accessibilityLabel={t("Approve request {id}", { id: row.id })} disabled={working || reason.trim().length < 5} onPress={() => setPending({ kind: "membership", row, decision: "active" })} style={[styles.action, (working || reason.trim().length < 5) && styles.disabled]}>
                 <Ionicons name="checkmark" size={15} color={colors.text} />
                 <Text style={styles.actionText}>{t("Approve")}</Text>
               </Affordance>
             </View> : <Text style={styles.hint}>{t("Read-only: reviewing requests needs the moderator role.")}</Text>) : null}
+            {pending?.kind === "membership" && pending.row.id === row.id ? (
+              <ConfirmAction
+                testID={`confirm-membership-${pending.decision}-${row.id}`}
+                title={t(pending.decision === "active" ? "Approve this request" : "Decline this request")}
+                body={t(pending.decision === "active" ? "The member joins the community." : "The request is declined.")}
+                confirmLabel={t(pending.decision === "active" ? "Approve" : "Reject")}
+                reason={reason}
+                minReason={5}
+                onConfirm={next => confirmPending(next)}
+                onCancel={() => setPending(null)}
+                busy={working}
+                t={t}
+              />
+            ) : null}
             <View style={styles.actions}>
               <Affordance accessibilityRole="button" accessibilityLabel={t("Open account")} onPress={() => void openUser(row.user_id)} style={styles.action}><Text style={styles.actionText}>{t("Open account")}</Text></Affordance>
               {row.community ? <Affordance accessibilityRole="button" accessibilityLabel={t("OPEN COMMUNITY")} onPress={() => openMemberCommunity(row.community_id)} style={styles.action}><Text style={styles.actionText}>{t("OPEN COMMUNITY")}</Text></Affordance> : null}
