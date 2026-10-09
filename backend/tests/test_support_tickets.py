@@ -233,7 +233,10 @@ def test_member_ticket_round_trip_is_owner_scoped_and_persisted(monkeypatch):
             assert not_staff.status_code == 404
             assert not_staff.json()["detail"] == "Assignee not found"
             assert (await database.tickets.find_one({"id": ticket_id}))["status"] == "open"
-            assert await database.audit_log.count_documents({}) == 0
+            failed = await database.audit_log.find_one({"outcome": "failed"})
+            assert failed["action"] == "ticket.assignee_changed"
+            assert failed["reason_code"] == "assignee_not_staff" and failed["reason"] is None
+            assert "pending" not in str(failed) and "coach" not in str(failed["metadata"])
 
             assigned = await client.patch(
                 f"/api/admin/tickets/{ticket_id}", headers=auth("support"),
@@ -251,7 +254,9 @@ def test_member_ticket_round_trip_is_owner_scoped_and_persisted(monkeypatch):
                 json={"status": "pending"},
             )
             assert same.status_code == 200
-            assert await database.audit_log.count_documents({}) == 2
+            # The failed assignee attempt is kept; the no-op patch adds nothing.
+            assert await database.audit_log.count_documents({"outcome": "success"}) == 2
+            assert await database.audit_log.count_documents({"outcome": "failed"}) == 1
 
             empty = await client.patch(f"/api/admin/tickets/{ticket_id}", headers=auth("support"), json={})
             assert empty.status_code == 422 and empty.json()["detail"] == "No changes"
@@ -288,7 +293,7 @@ def test_member_ticket_round_trip_is_owner_scoped_and_persisted(monkeypatch):
                 json={"body": "Closed after the invoice was reissued."},
             )
             assert closing.status_code == 201 and closing.json()["author_role"] == "staff"
-            closing_audits = [row async for row in database.audit_log.find({"action": "ticket.replied"})]
+            closing_audits = [row async for row in database.audit_log.find({"action": "ticket.replied", "outcome": "success"})]
             assert len(closing_audits) == 2
             assert all("Closed after the invoice was reissued." not in str(row) for row in closing_audits)
             assert all(row["actor_id"] == "support" and row["target_id"] == ticket_id for row in closing_audits)

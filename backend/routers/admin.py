@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,11 @@ REPORT_URGENCY = (
     ("spam", 5),
     ("other", 6),
 )
+# A side-effect retry owns the row for this long. A process that dies while
+# `resolution_status` is `retrying` can be reclaimed once the lease is older
+# than this. Five minutes covers one removal or notice without leaving a
+# killed worker blocking the queue overnight.
+REPORT_SIDE_EFFECT_LEASE = timedelta(minutes=5)
 
 
 async def _people(ids: list[str | None]) -> dict[str, dict]:
@@ -126,11 +131,26 @@ def _page_cursor(rows: list[dict], extra: bool, *fields: str) -> str | None:
     return admin_pages.encode_cursor(*parts)
 
 
+async def _refuse_staff(account: dict, actor: dict, action: str, audit_action: str) -> None:
+    try:
+        _staff_guard(account, actor, action)
+    except HTTPException:
+        await staff.audit_denied(
+            actor, audit_action, target_type="user", target_id=account["id"],
+            outcome="denied", reason_code="staff_target",
+        )
+        raise
+
+
 async def _apply_suspension(actor: dict, account: dict, reason: str, days: int | None) -> dict:
     user_id = account["id"]
     if user_id == actor["id"]:
+        await staff.audit_denied(
+            actor, "user.suspended", target_type="user", target_id=user_id,
+            outcome="denied", reason_code="self_target",
+        )
         raise HTTPException(409, "You cannot suspend your own account")
-    _staff_guard(account, actor, "suspend")
+    await _refuse_staff(account, actor, "suspend", "user.suspended")
     until = now() + timedelta(days=days) if days else None
     await db.users.update_one({"id": user_id}, {"$set": {
         "suspended_at": now(), "suspended_until": until, "suspension_reason": reason,
@@ -435,7 +455,13 @@ async def user_detail(user_id: str, user: dict = Depends(staff.require("users.re
 
 @router.post("/admin/users/{user_id}/notes", status_code=201)
 async def add_note(user_id: str, body: NoteIn, user: dict = Depends(staff.require("users.read"))):
-    await _account_or_404(user_id)
+    account = await db.users.find_one({"id": user_id}, {"_id": 1})
+    if not account:
+        await staff.audit_denied(
+            user, "user.note_added", target_type="user", target_id=user_id,
+            outcome="failed", reason_code="not_found",
+        )
+        raise HTTPException(404, "User not found")
     note = {"id": new_id(), "user_id": user_id, "author_id": user["id"],
             "author_email": user.get("email"), "note": body.note.strip(), "created_at": now()}
     await db.user_notes.insert_one(dict(note))
@@ -443,16 +469,29 @@ async def add_note(user_id: str, body: NoteIn, user: dict = Depends(staff.requir
     return clean(note)
 
 
+async def _missing_account(actor: dict, user_id: str, action: str) -> None:
+    await staff.audit_denied(
+        actor, action, target_type="user", target_id=user_id,
+        outcome="failed", reason_code="not_found",
+    )
+    raise HTTPException(404, "User not found")
+
+
 @router.post("/admin/users/{user_id}/suspend")
 async def suspend_user(user_id: str, body: SuspensionIn, user: dict = Depends(staff.require("users.suspend"))):
-    account = await _account_or_404(user_id)
-    return await _apply_suspension(user, account, body.reason.strip(), body.days)
+    account = await db.users.find_one({"id": user_id}, ACCOUNT_FIELDS)
+    if not account:
+        await _missing_account(user, user_id, "user.suspended")
+    return await _apply_suspension(user, clean(account), body.reason.strip(), body.days)
 
 
 @router.post("/admin/users/{user_id}/reinstate")
 async def reinstate_user(user_id: str, body: ReinstateIn, user: dict = Depends(staff.require("users.suspend"))):
-    account = await _account_or_404(user_id)
-    _staff_guard(account, user, "reinstate")
+    account = await db.users.find_one({"id": user_id}, ACCOUNT_FIELDS)
+    if not account:
+        await _missing_account(user, user_id, "user.reinstated")
+    account = clean(account)
+    await _refuse_staff(account, user, "reinstate", "user.reinstated")
     await db.users.update_one({"id": user_id}, {"$set": {
         "suspended_at": None, "suspended_until": None, "suspension_reason": None, "suspended_by": None,
     }})
@@ -463,8 +502,15 @@ async def reinstate_user(user_id: str, body: ReinstateIn, user: dict = Depends(s
 
 @router.patch("/admin/users/{user_id}/staff-role")
 async def set_staff_role(user_id: str, body: StaffRoleIn, user: dict = Depends(staff.require("staff.manage"))):
-    account = await _account_or_404(user_id)
+    account = await db.users.find_one({"id": user_id}, ACCOUNT_FIELDS)
+    if not account:
+        await _missing_account(user, user_id, "staff.role_changed")
+    account = clean(account)
     if user_id == user["id"]:
+        await staff.audit_denied(
+            user, "staff.role_changed", target_type="user", target_id=user_id,
+            outcome="denied", reason_code="self_target",
+        )
         raise HTTPException(409, "You cannot change your own staff role")
     await db.users.update_one({"id": user_id}, {"$set": {"staff_role": body.staff_role}})
     await staff.audit(user, "staff.role_changed", target_type="user", target_id=user_id,
@@ -534,6 +580,7 @@ async def list_reports(
         report["reporter"] = people.get(report.get("reporter_id") or "")
         report["reported_user"] = people.get(report.get("reported_user_id") or "")
         report.pop("_urgency", None)
+        report["retry_claimable"] = _retry_claimable(report, now())
     if status == "open":
         next_cursor = None
         if extra and reports:
@@ -551,23 +598,54 @@ async def list_reports(
 async def review_report(report_id: str, body: ReportReviewIn, user: dict = Depends(staff.require("reports.resolve"))):
     report = await db.reports.find_one({"id": report_id}, {"_id": 0})
     if not report:
+        await staff.audit_denied(
+            user, "report.review", target_type="report", target_id=report_id,
+            outcome="failed", reason_code="not_found",
+        )
         raise HTTPException(404, "Report not found")
     if report["status"] != "open":
+        await staff.audit_denied(
+            user, "report.review", target_type="report", target_id=report_id,
+            outcome="failed", reason_code="already_resolved",
+        )
         raise HTTPException(409, "Report already resolved")
     note = body.note.strip()
     account = None
     if body.resolution == "content_removed" and report["target_type"] not in moderation.REMOVABLE:
+        await staff.audit_denied(
+            user, "report.content_removed", target_type="report", target_id=report_id,
+            outcome="failed", reason_code="not_removable",
+        )
         raise HTTPException(409, "This target type cannot be removed automatically")
     if body.resolution == "user_suspended":
         if len(note) < 10:
+            await staff.audit_denied(
+                user, "report.user_suspended", target_type="report", target_id=report_id,
+                outcome="failed", reason_code="reason_too_short",
+            )
             raise HTTPException(422, "Suspending an account needs a reason of at least 10 characters")
         reported_id = report.get("reported_user_id")
         if not reported_id:
+            await staff.audit_denied(
+                user, "report.user_suspended", target_type="report", target_id=report_id,
+                outcome="failed", reason_code="no_account",
+            )
             raise HTTPException(409, "This report has no account to suspend")
-        account = await _account_or_404(reported_id)
+        account = await db.users.find_one({"id": reported_id}, ACCOUNT_FIELDS)
+        if not account:
+            await staff.audit_denied(
+                user, "report.user_suspended", target_type="user", target_id=reported_id,
+                outcome="failed", reason_code="not_found",
+            )
+            raise HTTPException(404, "User not found")
+        account = clean(account)
         if account["id"] == user["id"]:
+            await staff.audit_denied(
+                user, "report.user_suspended", target_type="user", target_id=account["id"],
+                outcome="denied", reason_code="self_target",
+            )
             raise HTTPException(409, "You cannot suspend your own account")
-        _staff_guard(account, user, "suspend")
+        await _refuse_staff(account, user, "suspend", "report.user_suspended")
     # Claim the open row before any side effect. A second reviewer loses here
     # and must not suspend an account or remove content for a decision they did not win.
     # `resolution_status` starts partial so a crash after the claim is retryable.
@@ -587,7 +665,7 @@ async def review_report(report_id: str, body: ReportReviewIn, user: dict = Depen
                       metadata={"report_id": report_id, "reason": report["reason"], "from": "open", "to": body.resolution})
     code = await _report_side_effects(user, report, body.resolution, note, account)
     await _mark_resolution(report_id, code)
-    return clean(await db.reports.find_one({"id": report_id}, {"_id": 0}))
+    return _expose_report(await db.reports.find_one({"id": report_id}, {"_id": 0}))
 
 
 _NOTICE = {
@@ -603,14 +681,18 @@ _SIDE_EFFECT_CODE = {
 
 
 async def _mark_resolution(report_id: str, code: str | None) -> None:
+    # The lease only matters while a retry owns the row. A finished attempt
+    # drops it so the next retry of a partial row is not waiting on a dead clock.
     if code:
-        await db.reports.update_one({"id": report_id}, {"$set": {
-            "resolution_status": "partial", "side_effect_error": code,
-        }})
+        await db.reports.update_one({"id": report_id}, {
+            "$set": {"resolution_status": "partial", "side_effect_error": code},
+            "$unset": {"side_effect_lease_at": ""},
+        })
         return
-    await db.reports.update_one({"id": report_id}, {"$set": {
-        "resolution_status": "complete", "side_effect_error": None,
-    }})
+    await db.reports.update_one({"id": report_id}, {
+        "$set": {"resolution_status": "complete", "side_effect_error": None},
+        "$unset": {"side_effect_lease_at": ""},
+    })
 
 
 async def _report_side_effects(
@@ -666,6 +748,50 @@ async def _moderation_notice(report: dict, resolution: str, note: str) -> None:
     )
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _lease_expired(report: dict, moment: datetime) -> bool:
+    """A retrying row with no lease, or a lease older than the timeout, can be taken."""
+    lease = report.get("side_effect_lease_at")
+    if not isinstance(lease, datetime):
+        return True
+    return _as_utc(lease) <= _as_utc(moment) - REPORT_SIDE_EFFECT_LEASE
+
+
+def _expose_report(report: dict | None) -> dict | None:
+    """Staff report payload, including whether a stuck retry can be taken."""
+    row = clean(report)
+    if not row:
+        return row
+    row["retry_claimable"] = _retry_claimable(row, now())
+    return row
+
+
+def _retry_claimable(report: dict, moment: datetime) -> bool:
+    if report.get("status") != "resolved":
+        return False
+    state = report.get("resolution_status")
+    if state == "partial":
+        return True
+    if state == "retrying":
+        return _lease_expired(report, moment)
+    return False
+
+
+def _retry_claim_clauses(moment: datetime) -> list[dict]:
+    cutoff = _as_utc(moment) - REPORT_SIDE_EFFECT_LEASE
+    return [
+        {"resolution_status": "partial"},
+        {"resolution_status": "retrying", "side_effect_lease_at": {"$lte": cutoff}},
+        {"resolution_status": "retrying", "side_effect_lease_at": None},
+        {"resolution_status": "retrying", "side_effect_lease_at": {"$exists": False}},
+    ]
+
+
 @router.post("/admin/reports/{report_id}/retry-side-effect")
 async def retry_report_side_effect(report_id: str, user: dict = Depends(staff.require("reports.resolve"))):
     """Re-run a side effect that failed after the report was claimed.
@@ -674,8 +800,21 @@ async def retry_report_side_effect(report_id: str, user: dict = Depends(staff.re
     """
     report = await db.reports.find_one({"id": report_id}, {"_id": 0})
     if not report:
+        await staff.audit_denied(
+            user, "report.side_effect_retried", target_type="report", target_id=report_id,
+            outcome="failed", reason_code="not_found",
+        )
         raise HTTPException(404, "Report not found")
-    if report.get("status") != "resolved" or report.get("resolution_status") != "partial":
+    moment = now()
+    if not _retry_claimable(report, moment):
+        # A fresh lease is another worker. That loser gets no audit row.
+        # A finished row is a refused repeat, which is recorded.
+        if report.get("status") == "resolved" and report.get("resolution_status") == "retrying":
+            raise HTTPException(409, "This report does not have a partial resolution to retry")
+        await staff.audit_denied(
+            user, "report.side_effect_retried", target_type="report", target_id=report_id,
+            outcome="failed", reason_code="not_retryable",
+        )
         raise HTTPException(409, "This report does not have a partial resolution to retry")
     resolution = report.get("resolution") or ""
     note = (report.get("note") or "").strip()
@@ -683,17 +822,33 @@ async def retry_report_side_effect(report_id: str, user: dict = Depends(staff.re
     if resolution == "user_suspended":
         reported_id = report.get("reported_user_id")
         if not reported_id:
+            await staff.audit_denied(
+                user, "report.side_effect_retried", target_type="report", target_id=report_id,
+                outcome="failed", reason_code="no_account",
+            )
             raise HTTPException(409, "This report has no account to suspend")
-        account = await _account_or_404(reported_id)
+        account = await db.users.find_one({"id": reported_id}, ACCOUNT_FIELDS)
+        if not account:
+            await staff.audit_denied(
+                user, "report.side_effect_retried", target_type="user", target_id=reported_id,
+                outcome="failed", reason_code="not_found",
+            )
+            raise HTTPException(404, "User not found")
+        account = clean(account)
         if account["id"] == user["id"]:
+            await staff.audit_denied(
+                user, "report.side_effect_retried", target_type="user", target_id=account["id"],
+                outcome="denied", reason_code="self_target",
+            )
             raise HTTPException(409, "You cannot suspend your own account")
         if not account.get("suspended_at"):
-            _staff_guard(account, user, "suspend")
-    # One retry owns the partial row. A second caller loses before it can
-    # suspend or notify again. The row returns to partial or complete below.
+            await _refuse_staff(account, user, "suspend", "report.side_effect_retried")
+    # One retry owns the row. A second caller loses before it can suspend or
+    # notify again. The claim matches partial, or a retrying row whose lease
+    # is older than REPORT_SIDE_EFFECT_LEASE (a killed worker).
     claimed = await db.reports.update_one(
-        {"id": report_id, "status": "resolved", "resolution_status": "partial"},
-        {"$set": {"resolution_status": "retrying"}},
+        {"id": report_id, "status": "resolved", "$or": _retry_claim_clauses(moment)},
+        {"$set": {"resolution_status": "retrying", "side_effect_lease_at": moment}},
     )
     if claimed.modified_count != 1:
         raise HTTPException(409, "This report does not have a partial resolution to retry")
@@ -703,12 +858,12 @@ async def retry_report_side_effect(report_id: str, user: dict = Depends(staff.re
         user, "report.side_effect_retried", target_type="report", target_id=report_id,
         metadata={
             "report_id": report_id,
-            "from": "partial",
+            "from": report.get("resolution_status") or "partial",
             "to": "partial" if code else "complete",
             "side_effect_error": code,
         },
     )
-    return clean(await db.reports.find_one({"id": report_id}, {"_id": 0}))
+    return _expose_report(await db.reports.find_one({"id": report_id}, {"_id": 0}))
 
 
 # --------------------------------------------------------------------------- #
@@ -799,21 +954,42 @@ async def review_membership(
 ):
     member = await db.community_members.find_one({"id": member_id}, {"_id": 0})
     if not member:
+        await staff.audit_denied(
+            user, "community.member_review", target_type="community_member", target_id=member_id,
+            outcome="failed", reason_code="not_found",
+        )
         raise HTTPException(404, "Membership not found")
     if member.get("status") != "pending":
+        await staff.audit_denied(
+            user, "community.member_review", target_type="community_member", target_id=member_id,
+            outcome="failed", reason_code="not_pending",
+        )
         raise HTTPException(409, "Only a pending request can be reviewed here")
     if member.get("role") == "owner":
+        await staff.audit_denied(
+            user, "community.member_review", target_type="community_member", target_id=member_id,
+            outcome="denied", reason_code="owner_locked",
+        )
         raise HTTPException(409, "Owner membership cannot be changed")
     community = await db.communities.find_one({"id": member["community_id"]}, {"_id": 0, "id": 1, "name": 1, "join_policy": 1})
     if not community:
+        await staff.audit_denied(
+            user, "community.member_review", target_type="community", target_id=member.get("community_id") or member_id,
+            outcome="failed", reason_code="not_found",
+        )
         raise HTTPException(404, "Community not found")
     if body.status == "active" and community.get("join_policy") == "paid":
+        await staff.audit_denied(
+            user, "community.member_review", target_type="community_member", target_id=member_id,
+            outcome="failed", reason_code="paid_plan",
+        )
         raise HTTPException(402, "Only verified billing can activate paid memberships")
     updates = {"status": body.status, "updated_at": now(), "reviewed_by": user["id"]}
     if body.status == "active":
         updates["joined_at"] = now()
     claimed = await db.community_members.update_one({"id": member_id, "status": "pending"}, {"$set": updates})
     if claimed.modified_count != 1:
+        # The other reviewer won the pending row. No audit row for this loser.
         raise HTTPException(409, "Only a pending request can be reviewed here")
     await staff.audit(
         user, f"community.member_{body.status}", target_type="community_member",
@@ -867,9 +1043,24 @@ async def reply_admin_ticket(
     body: tickets.MessageIn,
     user: dict = Depends(staff.require("tickets.write")),
 ):
-    ticket = await tickets.require_ticket(ticket_id)
+    try:
+        ticket = await tickets.require_ticket(ticket_id)
+    except HTTPException:
+        await staff.audit_denied(
+            user, "ticket.replied", target_type="ticket", target_id=ticket_id,
+            outcome="failed", reason_code="not_found",
+        )
+        raise
     # Staff can still leave a closing note after the member is locked out.
-    message = await tickets.add_message(ticket, user, body, "staff")
+    try:
+        message = await tickets.add_message(ticket, user, body, "staff")
+    except HTTPException as exc:
+        code = "media_not_owned" if exc.status_code == 422 else "reply_rejected"
+        await staff.audit_denied(
+            user, "ticket.replied", target_type="ticket", target_id=ticket_id,
+            outcome="failed", reason_code=code,
+        )
+        raise
     # The reply body stays on the ticket. The audit row names the actor, the
     # ticket, and the status at send time. It does not copy the message.
     await staff.audit(
@@ -899,9 +1090,14 @@ async def audit_log(
     cursor: str | None = None,
     from_: Annotated[datetime | None, Query(alias="from")] = None,
     to: datetime | None = None,
+    outcome: Literal["success", "failed", "denied"] | None = None,
 ):
-    """Read-only. `action` is the recorded outcome; failed attempts are not written."""
+    """Read-only. `outcome` is success, failed, or denied. Rows written before outcomes count as success."""
     query: dict = {key: value for key, value in (("actor_id", actor_id), ("target_id", target_id), ("target_type", target_type)) if value}
+    if outcome == "success":
+        query = admin_pages.and_query(query, {"$or": [{"outcome": "success"}, {"outcome": {"$exists": False}}]})
+    elif outcome in {"failed", "denied"}:
+        query = admin_pages.and_query(query, {"outcome": outcome})
     if actor:
         safe = re.escape(actor.strip()[:80])
         actor_clause = {"$or": [{"actor_id": actor.strip()}, {"actor_email": {"$regex": safe, "$options": "i"}}]}

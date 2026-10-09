@@ -246,12 +246,27 @@ async def list_for_staff(
 
 
 async def update_for_staff(ticket_id: str, body: TicketPatchIn, actor: dict) -> dict:
-    ticket = await require_ticket(ticket_id)
+    try:
+        ticket = await require_ticket(ticket_id)
+    except HTTPException:
+        await staff.audit_denied(
+            actor, "ticket.updated", target_type="ticket", target_id=ticket_id,
+            outcome="failed", reason_code="not_found",
+        )
+        raise
     if not body.model_fields_set:
+        await staff.audit_denied(
+            actor, "ticket.updated", target_type="ticket", target_id=ticket_id,
+            outcome="failed", reason_code="no_changes",
+        )
         raise HTTPException(422, "No changes")
     updates: dict = {}
     if "status" in body.model_fields_set:
         if body.status is None:
+            await staff.audit_denied(
+                actor, "ticket.updated", target_type="ticket", target_id=ticket_id,
+                outcome="failed", reason_code="status_required",
+            )
             raise HTTPException(422, "Status cannot be cleared")
         if body.status != ticket["status"]:
             updates["status"] = body.status
@@ -260,6 +275,10 @@ async def update_for_staff(ticket_id: str, body: TicketPatchIn, actor: dict) -> 
         if assignee_id is not None:
             person = await db.users.find_one({"id": assignee_id}, {"_id": 0, "id": 1, "staff_role": 1})
             if not person or not staff.is_staff(person):
+                await staff.audit_denied(
+                    actor, "ticket.assignee_changed", target_type="ticket", target_id=ticket_id,
+                    outcome="failed", reason_code="assignee_not_staff",
+                )
                 raise HTTPException(404, "Assignee not found")
         if assignee_id != ticket.get("assignee_id"):
             updates["assignee_id"] = assignee_id
@@ -272,6 +291,7 @@ async def update_for_staff(ticket_id: str, body: TicketPatchIn, actor: dict) -> 
             {"$set": updates},
         )
         if claimed.modified_count != 1:
+            # The other writer won. No audit row for this loser.
             raise HTTPException(409, "Ticket changed while you were editing it")
         if "status" in updates:
             await staff.audit(

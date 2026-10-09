@@ -31,6 +31,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 import media_storage
 import readiness
+import request_context
 import training_load
 from ai import provider_configured, resolve_provider
 from locales import DEFAULT_LOCALE, SUPPORTED_LOCALES, normalize_locale
@@ -478,6 +479,8 @@ async def lifespan(app: FastAPI):
     await db.audit_log.create_index([("target_id", 1), ("created_at", -1)])
     await db.audit_log.create_index([("actor_id", 1), ("created_at", -1)])
     await db.audit_log.create_index([("action", 1), ("created_at", -1)])
+    await db.audit_log.create_index([("outcome", 1), ("created_at", -1)])
+    await db.audit_log.create_index([("actor_id", 1), ("action", 1), ("target_id", 1), ("created_at", -1)])
     await db.users.create_index([("created_at", -1), ("id", -1)])
     await db.users.create_index([("staff_role", 1), ("created_at", -1)])
     await db.coach_applications.create_index([("status", 1), ("created_at", 1)])
@@ -532,6 +535,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="IronFlow API", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def bind_request_context(request: Request, call_next):
+    token = request_context.set_request(request)
+    try:
+        return await call_next(request)
+    finally:
+        request_context.reset_request(token)
 api = APIRouter(prefix="/api")
 
 
