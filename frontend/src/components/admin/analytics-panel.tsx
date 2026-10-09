@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { api, type AnalyticsSummary } from "@/src/api";
@@ -25,20 +25,25 @@ const LABELS: Record<string, string> = {
  * A name is drawn only when that window returns a number.
  */
 export function AnalyticsPanel() {
-  const { t, formatNumber } = useI18n();
+  const { t, formatNumber, formatDate } = useI18n();
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const id = ++requestId.current;
     setError("");
     try {
-      setData(await api.adminAnalytics());
+      const next = await api.adminAnalytics();
+      if (id !== requestId.current) return;
+      setData(next);
     } catch (cause) {
+      if (id !== requestId.current) return;
       setData(null);
       setError(cause instanceof Error ? cause.message : t("Could not load analytics"));
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [t]);
 
@@ -81,9 +86,17 @@ export function AnalyticsPanel() {
         <Text style={styles.actionText}>{t("Refresh counts")}</Text>
       </Affordance>
       {loading ? <ActivityIndicator color={colors.text} /> : null}
-      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <View accessibilityRole="alert">
+          <Text style={styles.error}>{error}</Text>
+          <Affordance accessibilityRole="button" testID="analytics-retry" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
+            <Text style={styles.actionText}>{t("Retry")}</Text>
+          </Affordance>
+        </View>
+      ) : null}
       {data ? (
         <>
+          {data.generated_at ? <Text style={styles.hint}>{t("Updated {time}.", { time: formatDate(data.generated_at, { dateStyle: "short", timeStyle: "short" }) })}</Text> : null}
           <Text style={styles.section}>{t("LAST 24 HOURS")}</Text>
           <View style={styles.grid}>
             {names.map(name => chip("24h", name))}

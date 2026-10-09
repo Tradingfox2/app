@@ -147,7 +147,8 @@ def test_report_flow_snapshots_content_and_resolves_once(monkeypatch):
         assert stored["content_snapshot"] == "Take 10x the dose" and stored["reported_user_id"] == "author"
         # Duplicate reports from the same user do not spam the queue.
         assert (await admin.create_report(admin.ReportIn(target_type="post", target_id="p1", reason="dangerous_advice"), account("reporter")))["id"] == report["id"]
-        assert len(await admin.list_reports("open", 50, moderator)) == 1
+        page = await admin.list_reports("open", 50, moderator)
+        assert page["total"] == 1 and len(page["reports"]) == 1 and page["next_cursor"] is None
 
         with pytest.raises(HTTPException) as missing:
             await admin.create_report(admin.ReportIn(target_type="post", target_id="ghost", reason="spam"), account("reporter"))
@@ -196,4 +197,206 @@ def test_overview_and_user_search(monkeypatch):
         assert [row["id"] for row in (await admin.list_users(None, "staff", 25, support))["users"]] == ["support"]
         # Regex metacharacters in search must not blow up or match everything.
         assert (await admin.list_users(".*", "all", 25, support))["count"] == 0
+        assert (await admin.list_users(None, "all", 25, support))["total"] == 3
+    run_isolated(scenario)
+
+
+def test_user_pages_expose_the_total_and_do_not_repeat(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        support = account("support", staff_role="support")
+        stamps = [datetime(2026, 1, day, tzinfo=timezone.utc) for day in (1, 2, 3)]
+        await db.users.insert_many([
+            {**account("a"), "created_at": stamps[0], "suspended_at": None},
+            {**account("b"), "created_at": stamps[1], "suspended_at": None},
+            {**account("c"), "created_at": stamps[2], "suspended_at": None},
+            {**support, "created_at": datetime(2026, 1, 4, tzinfo=timezone.utc), "suspended_at": None},
+        ])
+        first = await admin.list_users(None, "all", 2, support)
+        assert first["total"] == 4 and first["count"] == 2 and first["next_cursor"]
+        second = await admin.list_users(None, "all", 2, support, cursor=first["next_cursor"])
+        seen = {row["id"] for row in first["users"]} | {row["id"] for row in second["users"]}
+        assert seen == {"a", "b", "c", "support"}
+        assert len(first["users"]) + len(second["users"]) == 4
+    run_isolated(scenario)
+
+
+def test_open_reports_sort_by_urgency_then_age(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        moderator = account("mod", staff_role="moderator")
+        older = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        newer = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        await db.reports.insert_many([
+            {"id": "spam", "status": "open", "reason": "spam", "target_type": "post", "created_at": older, "reporter_id": "r", "reported_user_id": "a"},
+            {"id": "violence-new", "status": "open", "reason": "violence", "target_type": "post", "created_at": newer, "reporter_id": "r", "reported_user_id": "a"},
+            {"id": "violence-old", "status": "open", "reason": "violence", "target_type": "post", "created_at": older, "reporter_id": "r", "reported_user_id": "a"},
+        ])
+        page = await admin.list_reports("open", 2, moderator)
+        assert [row["id"] for row in page["reports"]] == ["violence-old", "violence-new"]
+        assert page["total"] == 3 and page["next_cursor"]
+        rest = await admin.list_reports("open", 2, moderator, cursor=page["next_cursor"])
+        assert [row["id"] for row in rest["reports"]] == ["spam"]
+        assert rest["next_cursor"] is None
+    run_isolated(scenario)
+
+
+def test_user_suspended_resolution_suspends_and_a_moderator_cannot_suspend_staff(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        moderator = account("mod", staff_role="moderator")
+        boss = account("boss", staff_role="admin")
+        await db.users.insert_many([account("author"), moderator, boss])
+        await db.reports.insert_one({
+            "id": "r-user", "status": "open", "reason": "harassment", "target_type": "user",
+            "target_id": "author", "reported_user_id": "author", "reporter_id": "mod",
+            "created_at": datetime.now(timezone.utc),
+        })
+        with pytest.raises(HTTPException) as short:
+            await admin.review_report("r-user", admin.ReportReviewIn(resolution="user_suspended", note="too short"), moderator)
+        assert short.value.status_code == 422
+        assert (await db.users.find_one({"id": "author"})).get("suspended_at") is None
+        assert (await db.reports.find_one({"id": "r-user"}))["status"] == "open"
+
+        resolved = await admin.review_report(
+            "r-user", admin.ReportReviewIn(resolution="user_suspended", note="Repeated public harassment"), moderator,
+        )
+        assert resolved["status"] == "resolved" and resolved["resolution"] == "user_suspended"
+        author = await db.users.find_one({"id": "author"})
+        assert author["suspended_at"] is not None and "harassment" in author["suspension_reason"]
+        assert await db.audit_log.count_documents({"action": "user.suspended", "target_id": "author"}) == 1
+        assert await db.audit_log.count_documents({"action": "report.user_suspended"}) == 1
+
+        await db.reports.insert_one({
+            "id": "r-staff", "status": "open", "reason": "harassment", "target_type": "user",
+            "target_id": "boss", "reported_user_id": "boss", "reporter_id": "mod",
+            "created_at": datetime.now(timezone.utc),
+        })
+        with pytest.raises(HTTPException) as denied:
+            await admin.review_report("r-staff", admin.ReportReviewIn(resolution="user_suspended", note="Trying to suspend staff"), moderator)
+        assert denied.value.status_code == 403
+        assert (await db.reports.find_one({"id": "r-staff"}))["status"] == "open"
+        assert (await db.users.find_one({"id": "boss"})).get("suspended_at") is None
+    run_isolated(scenario)
+
+
+def test_lost_report_claim_does_not_suspend(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        moderator = account("mod", staff_role="moderator")
+        await db.users.insert_many([account("author"), moderator])
+        await db.reports.insert_one({
+            "id": "r-race", "status": "open", "reason": "harassment", "target_type": "user",
+            "target_id": "author", "reported_user_id": "author", "reporter_id": "mod",
+            "created_at": datetime.now(timezone.utc),
+        })
+
+        class Reports:
+            def __init__(self, real):
+                self.real = real
+
+            def __getattr__(self, name):
+                return getattr(self.real, name)
+
+            async def update_one(self, query, update, *args, **kwargs):
+                if query.get("status") == "open":
+                    return type("Result", (), {"modified_count": 0})()
+                return await self.real.update_one(query, update, *args, **kwargs)
+
+        class Database:
+            def __init__(self, real):
+                self.real = real
+                self.reports = Reports(real.reports)
+
+            def __getattr__(self, name):
+                return getattr(self.real, name)
+
+        monkeypatch.setattr(admin, "db", Database(db))
+        with pytest.raises(HTTPException) as lost:
+            await admin.review_report(
+                "r-race", admin.ReportReviewIn(resolution="user_suspended", note="Repeated public harassment"), moderator,
+            )
+        assert lost.value.status_code == 409
+        assert (await db.users.find_one({"id": "author"})).get("suspended_at") is None
+        assert await db.audit_log.count_documents({"action": "user.suspended"}) == 0
+        assert (await db.reports.find_one({"id": "r-race"}))["status"] == "open"
+    run_isolated(scenario)
+
+
+def test_moderator_cannot_reinstate_staff_and_last_admin_stays(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        moderator = account("mod", staff_role="moderator")
+        boss = account("boss", staff_role="admin", suspended_at=datetime.now(timezone.utc))
+        other = account("other", staff_role="admin")
+        await db.users.insert_many([moderator, boss, other])
+        with pytest.raises(HTTPException) as denied:
+            await admin.reinstate_user("boss", admin.ReinstateIn(reason="Moderator lifting an admin"), moderator)
+        assert denied.value.status_code == 403
+        assert (await db.users.find_one({"id": "boss"}))["suspended_at"] is not None
+        restored = await admin.reinstate_user("boss", admin.ReinstateIn(reason="Admin lifts the suspension"), other)
+        assert restored["suspended_at"] is None
+        entry = await db.audit_log.find_one({"action": "user.reinstated", "target_id": "boss"})
+        assert entry["metadata"]["from"] == "suspended" and entry["metadata"]["to"] == "active"
+    run_isolated(scenario)
+
+
+def test_membership_review_hides_stripe_ids(monkeypatch):
+    async def scenario(db):
+        import social_graph
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(notifications, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        monkeypatch.setattr(social_graph, "db", db)
+        moderator = account("mod", staff_role="moderator")
+        member = account("member")
+        await db.users.insert_many([moderator, member])
+        await db.communities.insert_one({"id": "c1", "name": "Crew", "join_policy": "request", "status": "active"})
+        await db.community_members.insert_one({
+            "id": "m1", "community_id": "c1", "user_id": "member", "status": "pending", "role": "member",
+            "stripe_customer_id": "cus_secret", "stripe_subscription_id": "sub_secret",
+            "created_at": datetime.now(timezone.utc),
+        })
+        updated = await admin.review_membership(
+            "m1", admin.MembershipDecisionIn(status="active", reason="Checked the request"), moderator,
+        )
+        assert updated["status"] == "active"
+        assert "stripe_customer_id" not in updated and "stripe_subscription_id" not in updated
+        stored = await db.community_members.find_one({"id": "m1"})
+        assert stored["stripe_customer_id"] == "cus_secret"
+    run_isolated(scenario)
+
+
+def test_audit_log_filters_and_pages(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(admin, "db", db)
+        monkeypatch.setattr(staff, "db", db)
+        actor = account("mod", staff_role="moderator")
+        other = account("boss", staff_role="admin")
+        await staff.audit(actor, "user.suspended", target_type="user", target_id="a", reason="one",
+                          metadata={"from": "active", "to": "suspended"})
+        await staff.audit(other, "staff.role_changed", target_type="user", target_id="b", reason="two",
+                          metadata={"from": None, "to": "support"})
+        await db.audit_log.update_one({"action": "user.suspended"}, {"$set": {"created_at": datetime(2026, 1, 2, tzinfo=timezone.utc)}})
+        await db.audit_log.update_one({"action": "staff.role_changed"}, {"$set": {"created_at": datetime(2026, 3, 2, tzinfo=timezone.utc)}})
+        page = await admin.audit_log(limit=1, user=actor, action="user.")
+        assert page["total"] == 1 and page["entries"][0]["action"] == "user.suspended" and page["next_cursor"] is None
+        by_actor = await admin.audit_log(limit=10, user=actor, actor="boss@example.invalid")
+        assert by_actor["total"] == 1 and by_actor["entries"][0]["action"] == "staff.role_changed"
+        early = await admin.audit_log(limit=10, user=actor, to=datetime(2026, 2, 1, tzinfo=timezone.utc))
+        assert [row["action"] for row in early["entries"]] == ["user.suspended"]
+        everything = await admin.audit_log(limit=1, user=actor)
+        assert everything["total"] == 2 and everything["next_cursor"]
+        rest = await admin.audit_log(limit=1, user=actor, cursor=everything["next_cursor"])
+        assert {everything["entries"][0]["id"], rest["entries"][0]["id"]} == {
+            (await db.audit_log.find_one({"action": "user.suspended"}))["id"],
+            (await db.audit_log.find_one({"action": "staff.role_changed"}))["id"],
+        }
     run_isolated(scenario)

@@ -1,0 +1,45 @@
+import { Pressable, StyleSheet, Text } from "react-native";
+import { colors, spacing } from "@/src/theme";
+
+type Translate = (source: string, values?: Record<string, string | number>) => string;
+
+/** Says how much of a filtered collection is on screen. A missing total is not "all of it". */
+export function PageFooter({
+  loaded,
+  total,
+  nextCursor,
+  loading,
+  onMore,
+  t,
+}: {
+  loaded: number;
+  total: number | null;
+  nextCursor: string | null;
+  loading?: boolean;
+  onMore?: () => void;
+  t: Translate;
+}) {
+  if (loaded === 0) return null;
+  const label = total == null
+    ? t("Showing {loaded}. This response did not include a total, so the list may be incomplete.", { loaded })
+    : t("Showing {loaded} of {total}.", { loaded, total });
+  return (
+    <>
+      <Text style={styles.hint}>{label}</Text>
+      {nextCursor && onMore ? (
+        <Pressable accessibilityRole="button" disabled={loading} onPress={onMore} style={styles.more}>
+          <Text style={styles.moreText}>{t("Load more")}</Text>
+        </Pressable>
+      ) : null}
+      {total != null && loaded < total && !nextCursor ? (
+        <Text style={styles.hint}>{t("The total is larger than this page, and the server did not send a cursor.")}</Text>
+      ) : null}
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  hint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
+  more: { alignSelf: "flex-start", marginTop: spacing.sm, minHeight: 36, justifyContent: "center" },
+  moreText: { color: colors.brand, fontSize: 12, fontWeight: "800" },
+});

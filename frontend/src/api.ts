@@ -177,10 +177,30 @@ export type AdminOverview = {
      */
     open_tickets?: number;
     pending_tickets?: number;
+    /** Open tickets with no assignee. Absent on older overview payloads. */
+    unassigned_open_tickets?: number;
+    oldest_open_report_at?: string | null;
+    oldest_unassigned_ticket_at?: string | null;
   };
   activity: { workouts_24h: number; posts_24h: number; messages_24h: number; communities: number };
   permissions: string[];
   staff_role: StaffRole | null;
+  /** When the overview was built. Absent if the response is an older shape. */
+  generated_at?: string;
+};
+
+export type HealthReport = {
+  phase: "verified" | "unverified";
+  status: "ok" | "unavailable" | "unknown";
+  mongo: boolean | null;
+  checked_at: string;
+};
+
+export type StaffPage<T> = {
+  rows: T[];
+  /** Null when the payload did not say how many rows match. That is not "all of them". */
+  total: number | null;
+  next_cursor: string | null;
 };
 
 export type SupportTicketStatus = "open" | "pending" | "closed";
@@ -219,10 +239,12 @@ export type SupportMessage = {
 
 export type SupportTicketDetail = SupportTicket & { messages: SupportMessage[] };
 
-/** Staff queue. `count` is the number of rows in `tickets` (the page), not a second total. */
+/** Staff queue. `count` is the page length. `total` is the filtered queue when the server sends it. */
 export type SupportTicketList = {
   tickets: SupportTicket[];
   count: number;
+  total?: number | null;
+  next_cursor?: string | null;
 };
 
 export type SupportedLocale = "fr" | "en" | "de" | "es" | "it";
@@ -845,6 +867,27 @@ export type Trends = {
 
 const TOKEN_KEY = "ironflow_token";
 
+function staffPage<T>(payload: unknown, key: string): StaffPage<T> {
+  if (Array.isArray(payload)) return { rows: payload as T[], total: null, next_cursor: null };
+  if (!payload || typeof payload !== "object") return { rows: [], total: null, next_cursor: null };
+  const record = payload as Record<string, unknown>;
+  const raw = record[key];
+  const rows = Array.isArray(raw) ? raw as T[] : [];
+  const total = typeof record.total === "number" ? record.total : null;
+  const cursor = record.next_cursor;
+  return { rows, total, next_cursor: typeof cursor === "string" && cursor ? cursor : null };
+}
+
+export type AuditQuery = {
+  actor?: string;
+  action?: string;
+  targetId?: string;
+  targetType?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+};
+
 export const auth = {
   async getToken(): Promise<string | null> {
     return (await storage.secureGet(TOKEN_KEY, null)) as string | null;
@@ -1122,8 +1165,8 @@ export const api = {
   archiveChannel: (channelId: string) => request<void>(`/channels/${channelId}`, { method: "DELETE" }),
   coachApplications: (status: "pending" | "approved" | "rejected" = "pending") =>
     request<CoachApplicationReview[]>(`/admin/coach-applications?status=${status}`),
-  adminCoaches: (status: "pending" | "approved" | "rejected" | "suspended") =>
-    request<AdminCoach[]>(`/admin/coaches?status=${status}`),
+  adminCoaches: async (status: "pending" | "approved" | "rejected" | "suspended") =>
+    staffPage<AdminCoach>(await request<unknown>(`/admin/coaches?status=${status}`), "coaches"),
   reviewCoachApplication: (id: string, status: "approved" | "rejected", review_note?: string) =>
     request<CoachApplicationReview>(`/admin/coach-applications/${id}`, {
       method: "PATCH",
@@ -1306,8 +1349,25 @@ export const api = {
   report: (payload: { target_type: ModerationReport["target_type"]; target_id: string; reason: string; detail?: string }) =>
     request<ModerationReport>("/reports", { method: "POST", body: JSON.stringify(payload) }),
   adminOverview: () => request<AdminOverview>("/admin/overview"),
-  adminUsers: (q: string, status: "all" | "active" | "suspended" | "staff") =>
-    request<{ users: AdminAccount[]; count: number }>(`/admin/users?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+  adminHealth: async (): Promise<HealthReport> => {
+    const checked_at = new Date().toISOString();
+    try {
+      const body = await request<{ status?: unknown; mongo?: unknown }>("/health");
+      const mongo = body?.mongo === true ? true : body?.mongo === false ? false : null;
+      if (body?.status === "ok" && mongo === true) return { phase: "verified", status: "ok", mongo, checked_at };
+      if (body?.status === "unavailable" && mongo === false) return { phase: "verified", status: "unavailable", mongo, checked_at };
+      return { phase: "unverified", status: "unknown", mongo, checked_at };
+    } catch {
+      return { phase: "unverified", status: "unknown", mongo: null, checked_at };
+    }
+  },
+  adminUsers: async (q: string, status: "all" | "active" | "suspended" | "staff", cursor?: string) => {
+    const params = new URLSearchParams({ status });
+    if (q) params.set("q", q);
+    if (cursor) params.set("cursor", cursor);
+    const page = staffPage<AdminAccount>(await request<unknown>(`/admin/users?${params}`), "users");
+    return { users: page.rows, count: page.rows.length, total: page.total, next_cursor: page.next_cursor };
+  },
   adminUser: (id: string) => request<AdminAccount>(`/admin/users/${id}`),
   adminAddNote: (id: string, note: string) =>
     request<unknown>(`/admin/users/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }),
@@ -1317,22 +1377,54 @@ export const api = {
     request<AdminAccount>(`/admin/users/${id}/reinstate`, { method: "POST", body: JSON.stringify({ reason }) }),
   adminSetStaffRole: (id: string, staff_role: StaffRole | null, reason: string) =>
     request<AdminAccount>(`/admin/users/${id}/staff-role`, { method: "PATCH", body: JSON.stringify({ staff_role, reason }) }),
-  adminReports: (status: "open" | "resolved" = "open") => request<ModerationReport[]>(`/admin/reports?status=${status}`),
-  adminTickets: (status: SupportTicketStatus, q = "") =>
-    request<SupportTicketList>(`/admin/tickets?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+  adminReports: async (
+    status: "open" | "resolved" = "open",
+    options?: { cursor?: string; targetType?: string },
+  ) => {
+    const params = new URLSearchParams({ status });
+    if (options?.cursor) params.set("cursor", options.cursor);
+    if (options?.targetType && options.targetType !== "all") params.set("target_type", options.targetType);
+    return staffPage<ModerationReport>(await request<unknown>(`/admin/reports?${params}`), "reports");
+  },
+  adminTickets: (status: SupportTicketStatus, q = "", options?: { unassigned?: boolean; cursor?: string }) => {
+    const params = new URLSearchParams({ status });
+    if (q) params.set("q", q);
+    if (options?.unassigned) params.set("unassigned", "true");
+    if (options?.cursor) params.set("cursor", options.cursor);
+    return request<SupportTicketList>(`/admin/tickets?${params}`);
+  },
   adminTicket: (id: string) => request<SupportTicketDetail>(`/admin/tickets/${id}`),
   adminUpdateTicket: (id: string, patch: { status?: SupportTicketStatus; assignee_id?: string | null }) =>
     request<SupportTicketDetail>(`/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   adminReplyTicket: (id: string, body: string) =>
     request<SupportMessage>(`/admin/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
-  adminMemberships: (status: "pending" | "banned" | "removed" = "pending") =>
-    request<AdminMembership[]>(`/admin/memberships?status=${status}`),
+  adminMemberships: async (status: "pending" | "banned" | "removed" = "pending", cursor?: string) => {
+    const params = new URLSearchParams({ status });
+    if (cursor) params.set("cursor", cursor);
+    return staffPage<AdminMembership>(await request<unknown>(`/admin/memberships?${params}`), "memberships");
+  },
   adminReviewMembership: (id: string, status: "active" | "rejected", reason: string) =>
     request<AdminMembership>(`/admin/memberships/${id}`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
-  adminCommunities: () => request<AdminCommunity[]>("/admin/communities"),
+  adminCommunities: async (cursor?: string) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    const suffix = params.toString();
+    return staffPage<AdminCommunity>(await request<unknown>(`/admin/communities${suffix ? `?${suffix}` : ""}`), "communities");
+  },
   adminReviewReport: (id: string, resolution: string, note: string) =>
     request<ModerationReport>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ resolution, note }) }),
-  adminAuditLog: () => request<AuditEntry[]>("/admin/audit-log"),
+  adminAuditLog: async (query: AuditQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.actor) params.set("actor", query.actor);
+    if (query.action) params.set("action", query.action);
+    if (query.targetId) params.set("target_id", query.targetId);
+    if (query.targetType) params.set("target_type", query.targetType);
+    if (query.from) params.set("from", query.from);
+    if (query.to) params.set("to", query.to);
+    if (query.cursor) params.set("cursor", query.cursor);
+    const suffix = params.toString();
+    return staffPage<AuditEntry>(await request<unknown>(`/admin/audit-log${suffix ? `?${suffix}` : ""}`), "entries");
+  },
   adminAnalytics: () => request<AnalyticsSummary>("/admin/analytics"),
   adminAccounting: (from: string, to: string) =>
     request<AccountingSummary>(`/admin/accounting/summary?from=${from}&to=${to}`),

@@ -497,4 +497,67 @@ test("support queue can hide assigned tickets", async ({ page }) => {
     await expect(page.getByTestId("accounting-section-gym_partner_plans")).toContainText("No gym plan amount is stored.");
     await expect(page.getByTestId("accounting-section-commissions-clawed_back")).toContainText("Nothing in this period.");
   });
+
+  test("accounting stays up when subscription amounts are missing", async ({ page }) => {
+    const empty = { state: "none_in_period" as const };
+    await fixtures(page, { ...support, staff_role: "admin" }, async (route, path) => {
+      if (path === "/admin/overview") {
+        await route.fulfill({ json: {
+          users: { total: 128, new_7d: 9, suspended: 2, coaches: 4 },
+          queues: { open_reports: 1, pending_coach_applications: 3, pending_memberships: 5, open_tickets: 2, pending_tickets: 1 },
+          activity: { workouts_24h: 40, posts_24h: 12, messages_24h: 88, communities: 6 },
+          permissions: [...PERMISSIONS.support, "accounting.read"],
+          staff_role: "admin",
+        } });
+        return true;
+      }
+      if (path === "/admin/accounting/summary") {
+        await route.fulfill({ json: {
+          period: { from: "2026-09-01", to: "2026-09-30" },
+          generated_at: "2026-09-30T12:00:00Z",
+          sections: {
+            gross_collected: { state: "recorded", amounts_stored: true, totals: [{ amount_cents: 1250, currency: "USD" }] },
+            platform_fees: empty, owed_to_coaches: empty, refunds: empty, chargebacks: empty,
+            commissions: { pending: empty, paid: empty, clawed_back: empty },
+            referrals: { pending: empty, paid: empty },
+            gym_partner_plans: empty,
+            active_subscriptions: empty,
+          },
+          recent_lines: [],
+        } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await page.getByTestId("admin-tab-accounting").click();
+    await expect(page.getByTestId("accounting-panel")).toBeVisible();
+    await expect(page.getByTestId("accounting-subscriptions-incomplete")).toContainText("incomplete, not zero");
+    await expect(page.getByTestId("accounting-section-gross_collected")).toContainText("$12.50");
+    await expect(page.getByTestId("accounting-section-subscription-stripe-pro_monthly")).toBeVisible();
+  });
+
+  test("system status is Healthy only when the health check verified it", async ({ page }) => {
+    await fixtures(page, support);
+    await page.goto("/");
+    await expect(page.getByTestId("admin-operations-title")).toHaveText("IRONFLOW / OPERATIONS");
+    await expect(page.getByTestId("admin-workspace-badge")).toContainText("Admin workspace");
+    await expect(page.getByTestId("admin-system-status")).toContainText("Unverified");
+    await expect(page.getByTestId("admin-system-status")).not.toContainText("Healthy");
+    await expect(page.getByTestId("admin-priority-reports")).toContainText("Reports awaiting review");
+    await expect(page.getByTestId("admin-priority-alerts")).toContainText("No verified security alerts");
+  });
+
+  test("a verified health check shows Healthy", async ({ page }) => {
+    await fixtures(page, support, async (route, path) => {
+      if (path === "/health") {
+        await route.fulfill({ json: { status: "ok", mongo: true, ai_configured: false, ai_provider: "none" } });
+        return true;
+      }
+      return false;
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("admin-system-status")).toContainText("Healthy");
+    await expect(page.getByTestId("admin-system-status")).toContainText("Verified by the health check");
+  });
 });

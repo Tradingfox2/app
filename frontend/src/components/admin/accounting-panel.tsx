@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { api, type AccountingBucket, type AccountingCounts, type AccountingLine, type AccountingSummary } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
@@ -42,6 +42,22 @@ function periodFor(days: Days): { from: string; to: string } {
   return { from: start.toISOString().slice(0, 10), to: endUtc.toISOString().slice(0, 10) };
 }
 
+const MISSING_BUCKET: AccountingBucket = { state: "unavailable" };
+
+function asBucket(value: unknown): AccountingBucket {
+  if (!value || typeof value !== "object") return MISSING_BUCKET;
+  const state = (value as { state?: unknown }).state;
+  if (state === "none_in_period" || state === "unavailable" || state === "recorded") return value as AccountingBucket;
+  return MISSING_BUCKET;
+}
+
+function asCounts(value: unknown): AccountingCounts {
+  if (!value || typeof value !== "object") return { state: "unavailable" };
+  const state = (value as { state?: unknown }).state;
+  if (state === "none_in_period" || state === "unavailable" || state === "recorded") return value as AccountingCounts;
+  return { state: "unavailable" };
+}
+
 function periodLabel(days: Days): string {
   switch (days) {
     case 7: return "Last 7 days";
@@ -61,16 +77,21 @@ export function AccountingPanel() {
   const [data, setData] = useState<AccountingSummary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
   const load = useCallback(async () => {
+    const id = ++requestId.current;
     setError("");
     const period = periodFor(days);
     try {
-      setData(await api.adminAccounting(period.from, period.to));
+      const next = await api.adminAccounting(period.from, period.to);
+      if (id !== requestId.current) return;
+      setData(next);
     } catch (cause) {
+      if (id !== requestId.current) return;
       setData(null);
       setError(cause instanceof Error ? cause.message : t("Could not load accounting"));
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [days, t]);
   useEffect(() => { void load(); }, [load]);
@@ -119,12 +140,14 @@ export function AccountingPanel() {
     }
   };
   const lineAmount = (line: AccountingLine) => (typeof line.cents === "number" ? moneyText(line.cents, line.currency) : t("Amount not recorded"));
+  const sections = data?.sections;
+  const subscriptionAmounts = sections?.subscription_amounts;
   const nested: { label: string; section: AccountingBucket; testID?: string }[] = data ? [
-    { label: "Commissions pending", section: data.sections.commissions.pending },
-    { label: "Commissions paid", section: data.sections.commissions.paid },
-    { label: "Commissions clawed back", section: data.sections.commissions.clawed_back, testID: "accounting-section-commissions-clawed_back" },
-    { label: "Referral rewards pending", section: data.sections.referrals.pending },
-    { label: "Referral rewards paid", section: data.sections.referrals.paid },
+    { label: "Commissions pending", section: asBucket(sections?.commissions?.pending) },
+    { label: "Commissions paid", section: asBucket(sections?.commissions?.paid) },
+    { label: "Commissions clawed back", section: asBucket(sections?.commissions?.clawed_back), testID: "accounting-section-commissions-clawed_back" },
+    { label: "Referral rewards pending", section: asBucket(sections?.referrals?.pending) },
+    { label: "Referral rewards paid", section: asBucket(sections?.referrals?.paid) },
   ] : [];
 
   return (
@@ -153,17 +176,20 @@ export function AccountingPanel() {
           {MONEY.map(([id, label]) => (
             <View key={id} testID={`accounting-section-${id}`}>
               <Text style={styles.section}>{t(label)}</Text>
-              {bucket(data.sections[id])}
+              {bucket(asBucket(sections?.[id]))}
             </View>
           ))}
           <Text style={styles.hint}>{t("Last amount on file. Monthly and yearly are never added together.")}</Text>
+          {!subscriptionAmounts ? (
+            <Text style={styles.hint} testID="accounting-subscriptions-incomplete">{t("Subscription amounts were not in this response. Those rows are incomplete, not zero.")}</Text>
+          ) : null}
           {PROVIDERS.map(([provider, label]) => (
             <View key={provider}>
               <Text style={styles.section}>{t(label)}</Text>
               {PLANS.map(([plan, planLabel]) => (
                 <View key={plan} testID={`accounting-section-subscription-${provider}-${plan}`}>
                   <Text style={styles.name}>{t(planLabel)}</Text>
-                  {bucket(data.sections.subscription_amounts[provider][plan])}
+                  {bucket(asBucket(subscriptionAmounts?.[provider]?.[plan]))}
                 </View>
               ))}
             </View>
@@ -171,13 +197,13 @@ export function AccountingPanel() {
           <View testID="accounting-section-gym_partner_plans">
             <Text style={styles.section}>{t("Gym partner plans")}</Text>
             <Text style={styles.hint}>{t("Last Stripe amount stored on the gym. Not limited to this period.")}</Text>
-            {bucket(data.sections.gym_partner_plans, "No gym plan amount is stored.")}
+            {bucket(asBucket(sections?.gym_partner_plans), "No gym plan amount is stored.")}
           </View>
           {nested.map(item => (
             <View key={item.label} testID={item.testID}><Text style={styles.section}>{t(item.label)}</Text>{bucket(item.section)}</View>
           ))}
           <Text style={styles.section}>{t("Active subscriptions")}</Text>
-          {counts(data.sections.active_subscriptions)}
+          {counts(asCounts(sections?.active_subscriptions))}
           <Text style={styles.section}>{t("Recent lines")}</Text>
           {data.recent_lines.length === 0 ? <Text style={styles.hint}>{t("Nothing in this period.")}</Text> : null}
           {data.recent_lines.map((line, index) => (

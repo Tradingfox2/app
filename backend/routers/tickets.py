@@ -18,6 +18,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+import admin_pages
 import ratelimit
 import staff
 from server import clean, current_user, db, new_id, now
@@ -203,12 +204,31 @@ async def _queue_query(status: TicketStatus | None, q: str | None) -> dict:
     return query
 
 
-async def list_for_staff(status: TicketStatus | None, q: str | None, limit: int) -> dict:
+async def list_for_staff(
+    status: TicketStatus | None,
+    q: str | None,
+    limit: int,
+    *,
+    unassigned: bool = False,
+    cursor: str | None = None,
+) -> dict:
     query = await _queue_query(status, q)
+    if unassigned:
+        query = {**query, "assignee_id": None}
+    total = await db.tickets.count_documents(query)
+    window = query
+    if cursor:
+        updated_s, doc_id = admin_pages.decode_cursor(cursor, 2)
+        # Sort is updated_at descending, id ascending.
+        window = admin_pages.and_query(query, admin_pages.before_desc(
+            "updated_at", admin_pages.parse_instant(updated_s), doc_id, id_op="$gt",
+        ))
     rows = [
         clean(row) or {}
-        async for row in db.tickets.find(query, {"_id": 0}).sort([("updated_at", -1), ("id", 1)]).limit(limit)
+        async for row in db.tickets.find(window, {"_id": 0}).sort([("updated_at", -1), ("id", 1)]).limit(limit + 1)
     ]
+    extra = len(rows) > limit
+    rows = rows[:limit]
     people = await _snippets({row.get("user_id") for row in rows} | {row.get("assignee_id") for row in rows})
     tickets = []
     for row in rows:
@@ -216,7 +236,13 @@ async def list_for_staff(status: TicketStatus | None, q: str | None, limit: int)
         view["user"] = people.get(row.get("user_id") or "")
         view["assignee"] = people.get(row["assignee_id"]) if row.get("assignee_id") else None
         tickets.append(view)
-    return {"tickets": tickets, "count": len(tickets)}
+    next_cursor = None
+    if extra and tickets:
+        last = rows[-1]
+        stamp = admin_pages.iso(last.get("updated_at"))
+        if stamp and last.get("id"):
+            next_cursor = admin_pages.encode_cursor(stamp, last["id"])
+    return {"tickets": tickets, "count": len(tickets), "total": total, "next_cursor": next_cursor}
 
 
 async def update_for_staff(ticket_id: str, body: TicketPatchIn, actor: dict) -> dict:
