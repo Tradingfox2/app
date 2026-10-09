@@ -4,6 +4,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,6 +47,62 @@ function shareBody(workoutId: string, audience: ShareAudience) {
 
 const DEFAULT_REST_SEC = 90;
 
+type LoggerMemory = {
+  sets: any[];
+  planned: any[];
+  title: string | null;
+  sourceExercises: any[];
+  selectedEx: any | null;
+};
+
+// Browser back rebuilds this screen. The failed refresh must still show the
+// sets and plan that were on screen before the Muscle Explorer. sessionStorage
+// covers a web history restore that reloads this module.
+const LOGGER_MEMORY_KEY = "ironflow.loggerMemory";
+
+function readLoggerStore(): Map<string, LoggerMemory> {
+  const map = new Map<string, LoggerMemory>();
+  if (Platform.OS !== "web" || typeof sessionStorage === "undefined") return map;
+  try {
+    const raw = sessionStorage.getItem(LOGGER_MEMORY_KEY);
+    if (!raw) return map;
+    const parsed = JSON.parse(raw) as Record<string, LoggerMemory>;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!value || !Array.isArray(value.sets) || !Array.isArray(value.planned)) continue;
+      map.set(key, {
+        sets: value.sets,
+        planned: value.planned,
+        title: typeof value.title === "string" ? value.title : null,
+        sourceExercises: Array.isArray(value.sourceExercises) ? value.sourceExercises : [],
+        selectedEx: value.selectedEx ?? null,
+      });
+    }
+  } catch {
+    // A bad snapshot must not block the logger.
+  }
+  return map;
+}
+
+const loggerMemory = readLoggerStore();
+
+function rememberedLogger(id: string | string[] | undefined): LoggerMemory | undefined {
+  const key = Array.isArray(id) ? id[0] : id;
+  return key ? loggerMemory.get(key) : undefined;
+}
+
+function rememberLogger(key: string, snapshot: LoggerMemory) {
+  const existing = loggerMemory.get(key);
+  const blank = snapshot.sets.length === 0 && snapshot.planned.length === 0 && !snapshot.title && !snapshot.selectedEx;
+  if (blank && existing && (existing.sets.length > 0 || existing.planned.length > 0)) return;
+  loggerMemory.set(key, snapshot);
+  if (Platform.OS !== "web" || typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(LOGGER_MEMORY_KEY, JSON.stringify(Object.fromEntries(loggerMemory)));
+  } catch {
+    // Quota or private mode: the in-memory copy still covers this document.
+  }
+}
+
 function isOptimisticSet(row: { id?: string }): boolean {
   return typeof row.id === "string" && row.id.startsWith("local-");
 }
@@ -66,13 +123,14 @@ export default function WorkoutLogger() {
   const { t, formatNumber } = useI18n();
   const press = usePressFeedback();
   const pickerSearch = useFieldAffordance();
-  const [sets, setSets] = useState<any[]>([]);
+  const remembered = rememberedLogger(id);
+  const [sets, setSets] = useState<any[]>(() => remembered?.sets ?? []);
   const [exercises, setExercises] = useState<any[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerMuscle, setPickerMuscle] = useState<string | null>(null);
   const [muscles, setMuscles] = useState<any[]>([]);
-  const [selectedEx, setSelectedEx] = useState<any | null>(null);
+  const [selectedEx, setSelectedEx] = useState<any | null>(() => remembered?.selectedEx ?? null);
   const [reps, setReps] = useState("8");
   const [lastTime, setLastTime] = useState<{ weight_kg: number; reps: number } | null>(null);
   const [weight, setWeight] = useState("60");
@@ -93,17 +151,29 @@ export default function WorkoutLogger() {
   }, []);
 
   // Exercises queued from the Muscle Explorer / circuits (workout.planned_exercises)
-  const [planned, setPlanned] = useState<any[]>([]);
-  const [workoutTitle, setWorkoutTitle] = useState<string | null>(null);
-  const selectedExRef = useRef<any>(null);
-  const setsRef = useRef<any[]>([]);
-  const plannedRef = useRef<any[]>([]);
+  const [planned, setPlanned] = useState<any[]>(() => remembered?.planned ?? []);
+  const [workoutTitle, setWorkoutTitle] = useState<string | null>(() => remembered?.title ?? null);
+  const selectedExRef = useRef<any>(remembered?.selectedEx ?? null);
+  const setsRef = useRef<any[]>(remembered?.sets ?? []);
+  const plannedRef = useRef<any[]>(remembered?.planned ?? []);
   const exercisesRef = useRef<any[]>([]);
-  const sourceExercisesRef = useRef<any[]>([]);
+  const sourceExercisesRef = useRef<any[]>(remembered?.sourceExercises ?? []);
   const priorSetsRef = useRef<any[]>([]);
   setsRef.current = sets;
   plannedRef.current = planned;
   exercisesRef.current = exercises;
+
+  useEffect(() => {
+    const key = Array.isArray(id) ? id[0] : id;
+    if (!key) return;
+    rememberLogger(key, {
+      sets,
+      planned,
+      title: workoutTitle,
+      sourceExercises: sourceExercisesRef.current,
+      selectedEx,
+    });
+  }, [id, planned, selectedEx, sets, workoutTitle]);
 
   const load = useCallback(async () => {
     if (!id) return;

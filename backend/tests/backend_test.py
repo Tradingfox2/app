@@ -27,7 +27,13 @@ from dotenv import dotenv_values
 from pymongo import MongoClient
 
 _env = dotenv_values(Path(__file__).resolve().parents[2] / "frontend" / ".env")
-BASE_URL = (_env.get("EXPO_PUBLIC_BACKEND_URL") or os.environ["EXPO_PUBLIC_BACKEND_URL"]).rstrip("/")
+_backend_url = (_env.get("EXPO_PUBLIC_BACKEND_URL") or os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "").strip()
+if not _backend_url:
+    pytest.skip(
+        "EXPO_PUBLIC_BACKEND_URL is unset (set it, or add frontend/.env, to run the live API suite)",
+        allow_module_level=True,
+    )
+BASE_URL = _backend_url.rstrip("/")
 API = f"{BASE_URL}/api"
 
 DEMO_EMAIL = "demo@ironflow.app"

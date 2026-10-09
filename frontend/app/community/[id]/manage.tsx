@@ -395,6 +395,7 @@ export default function ManageCommunity() {
           return (
             <MetricGlossary
               key={key}
+              placement="overlay"
               testID={`insights-metric-${key}`}
               value={formatNumber(value)}
               label={t(label)}
@@ -406,7 +407,7 @@ export default function ManageCommunity() {
           );
         })}
       </View>
-      <MetricGlossary testID="insights-engagement" glossary={t(METRIC_GLOSSARY.engagement_rate_7d)}>
+      <MetricGlossary placement="overlay" testID="insights-engagement" glossary={t(METRIC_GLOSSARY.engagement_rate_7d)}>
         <Text style={styles.meta}>{t("{pct}% of members posted this week · {left} left in 30 days · {pending} pending").replace("{pct}", String(Math.round(insights.engagement_rate_7d * 100))).replace("{left}", String(insights.left_30d)).replace("{pending}", String(insights.pending))}</Text>
       </MetricGlossary>
       {sparkDays.length ? <>
