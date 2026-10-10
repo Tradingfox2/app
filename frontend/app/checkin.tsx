@@ -17,6 +17,7 @@ import { api, type GymReward } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { datedSessionTitle } from "@/src/session-title";
+import { leaveOrHome } from "@/src/leave-home";
 
 export default function CheckinScreen() {
   const { t, formatDate, formatNumber } = useI18n();
@@ -114,7 +115,7 @@ export default function CheckinScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="checkin-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")} onPress={leaveOrHome} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t("GYM CHECK-IN")}</Text>
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontWeight: "600", letterSpacing: 0.2, fontSize: 22 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   cameraWrap: { borderRadius: radius.lg, overflow: "hidden" },
   camera: { width: "100%", height: 380 },

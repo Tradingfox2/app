@@ -1,7 +1,7 @@
 import { Linking, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
-import { colors } from "@/src/theme";
+import { staffColors as colors } from "./staff-theme";
 import { webOrigin } from "@/src/share";
 import { MEMBERSHIP_STATUSES, membershipStatusLabel } from "./admin-labels";
 import { ConfirmAction } from "./confirm-action";

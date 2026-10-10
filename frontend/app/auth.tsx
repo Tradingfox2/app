@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ImageBackground,
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/src/auth-context";
@@ -45,19 +45,21 @@ export default function AuthScreen() {
 
   return (
     <View style={styles.wrap} testID="auth-screen">
-      <ImageBackground
-        source={{
-          uri: "https://images.pexels.com/photos/8455978/pexels-photo-8455978.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1100",
-        }}
-        style={styles.bg}
-        resizeMode="cover"
-      >
-        <LinearGradient
-          colors={["rgba(14,17,22,0.15)", "rgba(14,17,22,0.82)", colors.bg]}
-          style={StyleSheet.absoluteFill}
-          locations={[0, 0.55, 1]}
+      <View style={styles.bg}>
+        <Image
+          source={require("../assets/images/icon.png")}
+          style={styles.mark}
+          contentFit="contain"
+          accessibilityElementsHidden
+          importantForAccessibility="no"
         />
-      </ImageBackground>
+        <Text style={styles.placeholder}>Placeholder</Text>
+        <LinearGradient
+          colors={["transparent", colors.bg]}
+          style={StyleSheet.absoluteFill}
+          locations={[0.2, 1]}
+        />
+      </View>
 
       <KeyboardAvoidingView
         style={styles.form}
@@ -169,7 +171,9 @@ export default function AuthScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
-  bg: { position: "absolute", top: 0, left: 0, right: 0, height: "55%" },
+  bg: { position: "absolute", top: 0, left: 0, right: 0, height: "42%", alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  mark: { width: 88, height: 88 },
+  placeholder: { color: colors.textDim, fontSize: 12, marginTop: 8 },
   form: {
     flex: 1,
     justifyContent: "flex-end",
@@ -207,16 +211,18 @@ const styles = StyleSheet.create({
   roleRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
   roleChip: {
     flex: 1,
+    minHeight: 44,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface2,
     alignItems: "center",
+    justifyContent: "center",
   },
-  roleChipActive: { backgroundColor: colors.surface2, borderColor: colors.border },
+  roleChipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   roleTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0 },
-  roleTxtActive: { color: colors.text, fontWeight: "600" },
+  roleTxtActive: { color: colors.brandOn, fontWeight: "600" },
   err: {
     color: colors.error,
     marginBottom: spacing.sm,

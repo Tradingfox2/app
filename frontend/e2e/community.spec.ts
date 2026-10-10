@@ -112,7 +112,8 @@ test("an athlete who already has a club can still become a coach", async ({ page
     return false;
   });
   await page.goto("/community");
-  await expect(page.getByTestId("community-primary-cta")).toHaveAccessibleName("BECOME A COACH");
+  await expect(page.getByTestId("community-primary-cta")).toHaveAccessibleName("YOUR CLUB");
+  await expect(page.getByRole("button", { name: "Become a coach" })).toBeVisible();
   await expect(page.getByTestId("community-start-club")).toHaveCount(0);
 });
 

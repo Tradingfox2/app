@@ -30,19 +30,31 @@ export function LineChart({
   values,
   color = colors.text,
   testID,
+  label,
 }: {
   values: readonly LineValue[];
   color?: string;
   testID?: string;
+  /** Same sentence a screen reader needs if the stroke is invisible. */
+  label?: string;
 }) {
   const chart = chartGeometry(values);
   const dots = chart.points.filter((point): point is { x: number; y: number } => point.y !== null);
   if (dots.length === 0) return null;
+  const finite = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  const spoken = label ?? finite.join(", ");
   return (
-    <Svg width="100%" height={chart.height} viewBox={`0 0 ${chart.width} ${chart.height}`} testID={testID}>
+    <Svg
+      width="100%"
+      height={chart.height}
+      viewBox={`0 0 ${chart.width} ${chart.height}`}
+      testID={testID}
+      accessibilityRole="image"
+      accessibilityLabel={spoken}
+    >
       <Line x1={chart.pad} y1={chart.height - chart.pad} x2={chart.width - chart.pad} y2={chart.height - chart.pad} stroke={colors.border} strokeWidth={1} />
       {chart.runs.filter((run) => run.length > 1).map((run, index) => (
-        <Polyline key={index} points={run.map((point) => `${point.x},${point.y}`).join(" ")} stroke={color} strokeWidth={3} fill="none" />
+        <Polyline key={index} points={run.map((point) => `${point.x},${point.y}`).join(" ")} stroke={color} strokeWidth={2} fill="none" />
       ))}
       {dots.map((point, index) => (
         <Circle key={index} cx={point.x} cy={point.y} r={4} fill={color} stroke={colors.bg} strokeWidth={2} />

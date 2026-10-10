@@ -100,8 +100,10 @@ export default function CommunityScreen() {
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>{t("TRAIN TOGETHER")}</Text>
-            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t("COMMUNITY")}</Text>
+            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t("Community")}</Text>
           </View>
+        </View>
+        <View style={styles.headerTools}>
           <Affordance accessibilityLabel={t("Messages")} testID="open-messages" style={styles.headerAction} onPress={() => router.push("/messages")}>
             <HeaderMark name="messages" />
             {dmUnread ? <View style={styles.headerBadge} testID="dm-unread-badge"><Text style={styles.headerBadgeText}>{dmUnread > 99 ? "99+" : dmUnread}</Text></View> : null}
@@ -112,11 +114,21 @@ export default function CommunityScreen() {
           <Affordance accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}>
             <HeaderMark name="search" />
           </Affordance>
-          <Affordance accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
+          <Affordance accessibilityRole="button" accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
             <HeaderMark name={isCoach ? "dashboard" : "coach"} />
           </Affordance>
         </View>
 
+        {hasClub && !isCoach ? (
+          <View style={[styles.signalActions, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md }]}>
+            <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => {
+              const club = mine.find((row) => row.membership?.status === "active");
+              if (club) openCommunity(club);
+            }}>
+              <Text style={styles.primaryActionText}>{t("YOUR CLUB")}</Text>
+            </Affordance>
+          </View>
+        ) : (
         <View style={styles.signalBand}>
           <View style={styles.signalCopy}>
             <Text style={styles.signalTitle}>{t("Find your people. Build momentum.")}</Text>
@@ -134,12 +146,10 @@ export default function CommunityScreen() {
               <Affordance accessibilityRole="button" style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
                 <Text style={styles.secondaryActionText}>{t("START A CLUB")}</Text>
               </Affordance>
-            </> : !loading ? <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
-              <Ionicons name="arrow-forward" size={17} color={colors.brandOn} aria-hidden accessibilityElementsHidden importantForAccessibility="no" />
-              <Text style={styles.primaryActionText}>{t("BECOME A COACH")}</Text>
-            </Affordance> : null}
+            </> : null}
           </View>
         </View>
+        )}
 
         <LiveNowStrip inset feedback />
 
@@ -153,6 +163,7 @@ export default function CommunityScreen() {
 
         {tab === "feed" ? (
           <View testID="feed">
+            {hasClub ? <Composer onPublished={feed.prepend} /> : null}
             <StoriesTray />
             <View style={styles.scopeRow}>
               {(["all", "friends", "mine"] as const).map(scope => (
@@ -161,7 +172,7 @@ export default function CommunityScreen() {
                 </Affordance>
               ))}
             </View>
-            <Composer onPublished={feed.prepend} />
+            {hasClub ? null : <Composer onPublished={feed.prepend} />}
             {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
               <Ionicons name="trending-up" size={16} color={colors.text} style={{ alignSelf: "center" }} />
               {trending.map(row => <Affordance key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>
@@ -355,23 +366,24 @@ function Empty({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: str
 
 const styles = StyleSheet.create({ loadMore: { minHeight: 48, marginVertical: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" }, loadMoreText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   safe: { flex: 1, backgroundColor: colors.bg }, scroll: { paddingBottom: 120 },
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: "row", alignItems: "center" },
-  headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.text }, title: { ...type.screenTitle, marginTop: 2 },
-  headerAction: { width: 40, height: 40, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", marginLeft: spacing.xs },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs, flexDirection: "row", alignItems: "center" },
+  headerTools: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.sm },
+  headerCopy: { flex: 1 }, eyebrow: { ...type.eyebrow, color: colors.textMuted }, title: { ...type.screenTitle, marginTop: 2 },
+  headerAction: { width: 44, height: 44, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   headerBadge: { position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.text, alignItems: "center", justifyContent: "center" },
   headerBadgeText: { color: colors.bg, fontSize: 10, fontWeight: "700" },
   scopeRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  scopeChip: { minHeight: 34, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" }, scopeChipActive: { borderColor: colors.border, backgroundColor: colors.surface2 },
+  scopeChip: { minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, justifyContent: "center" }, scopeChipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },
   scopeText: { color: colors.textMuted, fontSize: 13, fontWeight: "400" }, scopeTextActive: { color: colors.text, fontWeight: "600" },
   signalBand: { padding: spacing.lg, backgroundColor: colors.surface2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, gap: spacing.lg },
   signalActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" },
   secondaryAction: { minHeight: 44, paddingHorizontal: spacing.md, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong },
   secondaryActionText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.6 },
-  signalCopy: { maxWidth: 640 }, signalTitle: { color: colors.text, fontSize: 21, lineHeight: 25, fontWeight: "900" },
+  signalCopy: { maxWidth: 640 }, signalTitle: { ...type.section, fontSize: 18, lineHeight: 24 },
   signalBody: { color: colors.textMuted, lineHeight: 20, marginTop: spacing.sm, maxWidth: 560 },
   primaryAction: { minHeight: 44, alignSelf: "flex-start", paddingHorizontal: spacing.md, flexDirection: "row", gap: spacing.sm, alignItems: "center", backgroundColor: colors.brand, borderRadius: radius.sm },
   primaryActionText: { ...type.button, fontSize: 12 }, tabs: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
-  tab: { minHeight: 38, justifyContent: "center", paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tab: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabActive: { borderBottomColor: colors.text }, tabText: { color: colors.textDim, fontSize: 11, fontWeight: "800", letterSpacing: 1 }, tabTextActive: { color: colors.text },
   loader: { marginTop: spacing.xxl }, list: { paddingTop: spacing.sm },
   sectionHead: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm, paddingHorizontal: spacing.lg }, sectionTitle: { ...type.section, flex: 1 },

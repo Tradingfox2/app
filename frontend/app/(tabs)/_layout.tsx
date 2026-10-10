@@ -134,7 +134,7 @@ export default function TabsLayout() {
         tabBarItemStyle: { minHeight: 44, minWidth: 44 },
         tabBarBadgeStyle: { backgroundColor: colors.text, color: colors.bg, fontSize: 10, fontWeight: "700" },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: "700",
           letterSpacing: 0.2,
         },
@@ -152,7 +152,7 @@ export default function TabsLayout() {
         name="workouts"
         options={{
           title: t("Workout"),
-          tabBarIcon: ({ color }) => <Ionicons name="add-circle" color={color} size={24} />,
+          tabBarIcon: ({ color }) => <Ionicons name="barbell" color={color} size={22} />,
         }}
       />
       <Tabs.Screen
@@ -160,7 +160,7 @@ export default function TabsLayout() {
         options={{
           title: t("Community"),
           tabBarAccessibilityLabel: dmUnread
-            ? t("Community, {count} unread", { count: badge(dmUnread) ?? dmUnread })
+            ? t("Community, {count} unread messages", { count: badge(dmUnread) ?? dmUnread })
             : t("Community"),
           tabBarBadge: badge(dmUnread),
           tabBarButtonTestID: "tab-community",

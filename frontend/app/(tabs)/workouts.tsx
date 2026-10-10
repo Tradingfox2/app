@@ -16,12 +16,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
 import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
-import { card, colors, radius, spacing } from "@/src/theme";
+import { card, colors, radius, spacing, type } from "@/src/theme";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
 import type { MuscleSlug, RecommendationExercise } from "@/src/components/anatomy/muscle-types";
 import { useI18n } from "@/src/i18n";
 import { datedSessionTitle } from "@/src/session-title";
+import { PosterPlate } from "@/src/components/night/coach-mark";
 
 type Tab = "sessions" | "library";
 type LibraryExercise = RecommendationExercise & { id: string };
@@ -169,7 +170,9 @@ export default function Workouts() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="workouts-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{t("WORKOUTS")}</Text>
+        <Text style={styles.kicker}>{t("TRAINING")}</Text>
+        <Text style={styles.title}>{t(tab === "library" ? "Library" : "Sessions")}</Text>
+        <Text style={styles.lede}>{t("Start a planned day, or open the library and build one.")}</Text>
       </View>
 
       <View style={styles.segment}>
@@ -178,7 +181,9 @@ export default function Workouts() {
             key={tabKey}
             testID={`tab-${tabKey}-btn`}
             onPress={() => setTab(tabKey)}
-            style={press("chip", [styles.segBtn, tab === tabKey && styles.segBtnActive])}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === tabKey }}
+            style={press("chip", [styles.segBtn, tab === tabKey && styles.segBtnActive], { preserveBorder: tab === tabKey })}
           >
             <Text style={[styles.segTxt, tab === tabKey && styles.segTxtActive]}>
               {t(tabKey === "sessions" ? "SESSIONS" : "LIBRARY")}
@@ -249,6 +254,7 @@ export default function Workouts() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.sessionTitle}>{item.title}</Text>
                 <Text style={styles.sessionMeta} testID={`workout-meta-${item.id}`}>{sessionMeta(item)}</Text>
+                {!item.ended_at ? <Text style={styles.progressPill}>{t("In progress")}</Text> : null}
               </View>
               <Ionicons name="chevron-forward" color={colors.textMuted} size={20} />
             </Pressable>
@@ -373,13 +379,7 @@ export default function Workouts() {
                   accessibilityState={{ checked: selectedSlugs.includes(item.slug) }}
                   accessibilityLabel={t("Select {name}", { name: item.name })}
                 >
-                  <View style={styles.exIcon}>
-                    <Ionicons
-                      name={selectedSlugs.includes(item.slug) ? "checkmark" : "fitness"}
-                      color={colors.text}
-                      size={20}
-                    />
-                  </View>
+                  <PosterPlate name={item.name} compact />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.exName}>{item.name}</Text>
                     <Text style={styles.exMeta}>
@@ -390,12 +390,13 @@ export default function Workouts() {
                 </Pressable>
                 <Pressable
                   testID={`exercise-demo-${item.slug}`}
-                  style={press("primary", styles.exDemo)}
+                  style={press("outline", styles.exDemo)}
                   onPress={() => setDemoExercise(item)}
                   accessibilityRole="button"
                   accessibilityLabel={t("Open {name} exercise demo", { name: item.name })}
                 >
-                  <Ionicons name="play" color={colors.brandOn} size={14} />
+                  <Ionicons name="play" color={colors.text} size={14} />
+                  <Text style={styles.exDemoTxt}>{t("Play demo")}</Text>
                 </Pressable>
               </View>
             )}
@@ -405,6 +406,8 @@ export default function Workouts() {
 
       <Pressable
         testID="fab-new-workout"
+        accessibilityRole="button"
+        accessibilityLabel={tab === "library" && selectedSlugs.length > 0 ? t("START WITH {count}", { count: selectedSlugs.length }) : t("NEW SESSION")}
         style={press("primary", [styles.fab, creating && { opacity: 0.6 }], { disabled: creating })}
         onPress={openNewSession}
         disabled={creating}
@@ -479,6 +482,8 @@ function Chip({
   return (
     <Pressable
       testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={press("chip", [styles.chip, active && styles.chipActive], { preserveBorder: active })}
     >
@@ -494,7 +499,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  title: { color: colors.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
+  kicker: { ...type.eyebrow, marginBottom: 2 },
+  title: { ...type.screenTitle },
+  lede: { ...type.caption, marginTop: 4, maxWidth: 520 },
+  progressPill: { color: colors.warningText, fontSize: 12, marginTop: 4, fontWeight: "600" },
   segment: {
     flexDirection: "row",
     marginHorizontal: spacing.lg,
@@ -513,18 +521,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "transparent",
   },
-  segBtnActive: { backgroundColor: colors.surface2 },
+  segBtnActive: { backgroundColor: colors.surface, borderColor: colors.borderStrong },
   segTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0, fontSize: 13 },
   segTxtActive: { color: colors.text, fontWeight: "600" },
-  chipsRow: { maxHeight: 56 },
+  chipsRow: { maxHeight: 64 },
   chipsContent: {
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
     alignItems: "center",
-    height: 56,
+    minHeight: 56,
   },
   chip: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -533,9 +541,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  chipActive: { borderColor: colors.text, backgroundColor: colors.surface2 },
+  chipActive: { borderColor: colors.brand, backgroundColor: colors.brand },
   chipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 11, letterSpacing: 1 },
-  chipTxtActive: { color: colors.text },
+  chipTxtActive: { color: colors.brandOn },
   searchWrap: {
     minHeight: 44,
     marginHorizontal: spacing.lg,
@@ -548,7 +556,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.sm,
   },
-  searchInput: { flex: 1, color: colors.text, fontSize: 14, paddingVertical: spacing.sm },
+  searchInput: { flex: 1, color: colors.text, fontSize: 16, minHeight: 44, paddingVertical: spacing.sm },
   listPad: { padding: spacing.lg, paddingBottom: 140 },
   sessionCard: {
     flexDirection: "row",
@@ -596,14 +604,20 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   exDemo: {
-    width: 44,
-    height: 44,
+    minWidth: 44,
+    minHeight: 44,
     marginRight: spacing.md,
+    paddingHorizontal: spacing.sm,
+    gap: 4,
     borderRadius: radius.pill,
-    backgroundColor: colors.brand,
+    borderWidth: 1,
+    borderColor: colors.edge,
+    backgroundColor: "transparent",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
+  exDemoTxt: { color: colors.text, fontSize: 12, fontWeight: "600" },
   libraryHint: {
     color: colors.textDim,
     fontSize: 10,

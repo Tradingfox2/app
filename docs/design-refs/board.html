@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>IronFlow — three member directions</title>
+  <link rel="stylesheet" href="studio.css" />
+  <style>
+    body { padding: 32px 40px 48px; }
+    header { max-width: 1160px; margin: 0 auto 28px; }
+    header h1 {
+      margin: 8px 0 0;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 48px;
+      line-height: 48px;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+    }
+    header p.lede { max-width: 720px; margin: 12px 0 0; color: var(--muted); }
+    .grid {
+      max-width: 1160px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 360px);
+      gap: 28px;
+      justify-content: space-between;
+    }
+    .dir h2 {
+      margin: 0 0 6px;
+      font-family: var(--font-display);
+      font-size: 28px;
+      line-height: 30px;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+    }
+    .dir .one { min-height: 54px; margin: 0 0 12px; color: var(--muted); font-size: 14px; line-height: 18px; }
+    .phone {
+      width: 360px;
+      height: 640px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .phone .screen { width: 100%; min-height: 0; flex: 1; }
+    .mark {
+      display: inline-block;
+      margin-bottom: 8px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--brand);
+      color: var(--brand-on);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .foot {
+      max-width: 1160px;
+      margin: 22px auto 0;
+      color: var(--dim);
+      font-size: 13px;
+      line-height: 18px;
+    }
+    .ledger-mini { margin: 8px 12px; padding: 12px; }
+    .stage.mini { margin: 8px 12px 0; min-height: 250px; }
+    .stage.mini h2 { font-size: 32px; line-height: 32px; }
+    .coach-line.mini { margin: 8px 12px; min-height: 56px; padding: 8px; }
+    .atlas-body { display: grid; place-items: center; padding-top: 8px; }
+    .atlas-body img { width: 120px; height: 240px; }
+    .rules { margin: 12px 16px 0; }
+    .rules div {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .huge {
+      margin: 8px 16px 0;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 64px;
+      line-height: 58px;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Member app · staff console stays Precision Performance</p>
+    <h1>Three directions</h1>
+    <p class="lede">Same ground, same chartreuse, same licensed type. The difference is what the member sees first: a session stage, a training book, or the body as the chart.</p>
+  </header>
+  <div class="grid">
+    <article class="dir">
+      <span class="mark">Recommended</span>
+      <h2>Night Studio</h2>
+      <p class="one">The session is a photographic stage under a charcoal scrim. Numbers sit in a quiet ledger. The coach speaks from a portrait.</p>
+      <div class="phone">
+        <div class="pad between" style="padding-bottom:0">
+          <div>
+            <p class="eyebrow">Good evening</p>
+            <p class="display" style="font-size:28px;line-height:30px">Amara</p>
+          </div>
+        </div>
+        <div class="stage mini">
+          <img src="poster-coach.svg" alt="" width="360" height="250" style="width:100%;height:250px;object-fit:cover;object-position:center 20%" />
+          <div class="copy">
+            <p class="eyebrow">Today's session</p>
+            <h2>Lower body</h2>
+            <button class="btn block" type="button">Start day</button>
+          </div>
+        </div>
+        <div class="coach-line mini">
+          <img class="portrait" src="portrait-coach.svg" alt="" width="48" height="48" />
+          <p>Sleep before you grind.</p>
+        </div>
+        <div class="ledger ledger-mini">
+          <div class="meter"><span class="name">Recovery</span><span class="track"></span><span class="figure">—</span></div>
+          <div class="note" style="margin:4px 0 0;font-size:12px;color:var(--dim)">Not connected</div>
+        </div>
+      </div>
+    </article>
+
+    <article class="dir">
+      <h2>Field Ledger</h2>
+      <p class="one">An editorial training book. Condensed type and ruled rows carry the energy. Photography stays in the library filmstrip.</p>
+      <div class="phone">
+        <div class="pad" style="padding-bottom:0">
+          <p class="eyebrow">Thursday · week 4 · day 2</p>
+          <p class="huge">Lower<br />body</p>
+        </div>
+        <div class="rules">
+          <div><span>Exercises</span><span class="num">6</span></div>
+          <div><span>Readiness</span><span class="num">72</span></div>
+          <div><span>Sleep</span><span class="num">7.4 h</span></div>
+          <div><span>Recovery</span><span class="num">—</span></div>
+          <div><span class="dim">Recovery note</span><span class="dim">Not connected</span></div>
+        </div>
+        <div class="pad">
+          <button class="btn block" type="button">Start day</button>
+          <p class="caption" style="margin-top:12px">Coach · Sleep before you grind.</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="dir">
+      <h2>Body Atlas</h2>
+      <p class="one">The SVG body is the week’s chart. The coach stands beside the load. One chartreuse action starts the session. No 3D model.</p>
+      <div class="phone">
+        <div class="pad" style="padding-bottom:0">
+          <p class="eyebrow">Muscle load · 7 days</p>
+          <button class="btn" type="button" style="margin-top:8px">Start day</button>
+        </div>
+        <div class="atlas-body">
+          <img src="body-diagram.svg" alt="" width="120" height="240" />
+        </div>
+        <div class="pad" style="padding-top:0">
+          <p class="caption">Quads · productive load. Share of logged volume, not a scan.</p>
+          <div class="coach-line" style="margin:12px 0 0">
+            <img class="portrait" src="portrait-coach.svg" alt="" width="48" height="48" />
+            <p>Six hard sets, then leave.</p>
+          </div>
+        </div>
+      </div>
+    </article>
+  </div>
+  <p class="foot">Illustrations are original stand-ins. Production uses commissioned photographs of the coach and of each exercise. Chartreuse is the start control and the selected tab. Staff screens do not use this board.</p>
+</body>
+</html>

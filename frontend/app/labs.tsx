@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import Svg, { Polyline } from "react-native-svg";
@@ -65,7 +65,7 @@ function MarkerCard({ m }: { m: BiomarkerSeries }) {
       <View style={{ flex: 1 }}>
         <Text style={styles.markerName}>{m.name}</Text>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-          <Text style={[styles.markerVal, out && { color: colors.error }]}>{formatNumber(m.latest)}</Text>
+          <Text style={[styles.markerVal, out && { color: colors.errorText }]}>{formatNumber(m.latest)}</Text>
           <Text style={styles.markerUnit}>{m.unit}</Text>
         </View>
         {m.ref_low != null && m.ref_high != null && (
@@ -207,7 +207,7 @@ function ReportCard({ report }: { report: LabReport }) {
             const sev = SEVERITY[f.severity] ?? SEVERITY.info;
             return (
               <View key={i} style={[styles.flagCard, { borderLeftColor: sev.color }]}>
-                <Text style={[styles.flagSev, { color: sev.color }]}>{t(sev.label)}</Text>
+                <Text style={[styles.flagSev, { color: sev.color === colors.error ? colors.errorText : sev.color === colors.warning ? colors.warningText : colors.infoText }]}>{t(sev.label)}</Text>
                 <Text style={styles.flagTxt}>{f.comment}</Text>
               </View>
             );
@@ -236,6 +236,8 @@ export default function LabsScreen() {
   const [markers, setMarkers] = useState<BiomarkerSeries[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -243,11 +245,15 @@ export default function LabsScreen() {
       const [r, m] = await Promise.all([api.labReports(), api.biomarkersGrouped()]);
       setReports(r);
       setMarkers(m);
+      setLoadError(null);
       return r;
-    } catch {
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : t("Could not load labs."));
       return [];
+    } finally {
+      setLoaded(true);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -325,10 +331,10 @@ export default function LabsScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="labs-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} testID="back-btn" onPress={leaveOrHome} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>{t("BLOOD PANELS")}</Text>
+        <Text style={styles.headerTitle}>{t("Blood panels")}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -346,8 +352,16 @@ export default function LabsScreen() {
           />
         }
       >
+        <View style={styles.education} testID="labs-education">
+          <Ionicons name="information-circle-outline" size={16} color={colors.infoText} />
+          <Text style={styles.educationTxt}>
+            {t("Figures are educational. A value inside or outside a reference range is not a diagnosis.")}
+          </Text>
+        </View>
         <View style={styles.uploadRow}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("UPLOAD PDF / FILE")}
             testID="upload-pdf-btn"
             onPress={pickDocument}
             disabled={uploading}
@@ -357,6 +371,8 @@ export default function LabsScreen() {
             <Text style={styles.uploadTxt}>{t("UPLOAD PDF / FILE")}</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("PHOTO")}
             testID="upload-photo-btn"
             onPress={pickPhoto}
             disabled={uploading}
@@ -374,8 +390,19 @@ export default function LabsScreen() {
         )}
 
         <Text style={styles.sectionTitle}>{t("REPORTS")}</Text>
-        {reports.length === 0 ? (
-          <Text style={styles.emptyTxt}>
+        {loadError ? (
+          <View accessibilityRole="alert" testID="labs-load-error" style={styles.education}>
+            <Ionicons name="alert-circle" size={16} color={colors.errorText} />
+            <View style={{ flex: 1, gap: spacing.sm }}>
+              <Text style={styles.educationTxt}>{loadError}</Text>
+              <Pressable accessibilityRole="button" testID="labs-load-retry" onPress={() => void load()} style={styles.uploadBtnAlt}>
+                <Text style={styles.uploadTxtAlt}>{t("Retry")}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+        {loaded && !loadError && reports.length === 0 ? (
+          <Text style={styles.emptyTxt} testID="labs-empty">
             {t("Upload a blood panel (PDF or photo). IronFlow will standardize its results, plot numeric markers over time and give a sport-focused educational read.")}
           </Text>
         ) : (
@@ -403,7 +430,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: "600", letterSpacing: 0.2 },
+  education: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", marginBottom: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  educationTxt: { color: colors.text, fontSize: 14, lineHeight: 20, flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   uploadRow: { flexDirection: "row", gap: spacing.sm },
   uploadBtn: {
@@ -490,7 +519,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginTop: spacing.sm,
   },
-  flagSev: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  flagSev: { fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   flagTxt: { color: colors.text, fontSize: 12, lineHeight: 17, marginTop: 2 },
   disclaimer: {
     flexDirection: "row",

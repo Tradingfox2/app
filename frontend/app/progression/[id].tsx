@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import { api } from "@/src/api";
 import { LineChart, chartGeometry } from "@/src/components/line-chart";
 import { colors, radius, spacing } from "@/src/theme";
@@ -10,7 +11,6 @@ import { useI18n } from "@/src/i18n";
 
 export default function ProgressionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const { t, formatNumber } = useI18n();
   const [data, setData] = useState<{ series: any[]; pr: any } | null>(null);
   const [exName, setExName] = useState<string>("Exercise");
@@ -43,7 +43,7 @@ export default function ProgressionScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="progression-screen">
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} testID="back-btn">
+        <Pressable onPress={leaveOrHome} hitSlop={12} testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")}>
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
         <Text style={styles.title}>{t("PROGRESSION")}</Text>
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
+  title: { color: colors.text, fontWeight: "600", letterSpacing: 0.2, fontSize: 22 },
   exName: { color: colors.text, fontSize: 22, fontWeight: "900", marginBottom: spacing.lg },
   prCard: {
     backgroundColor: colors.surface,

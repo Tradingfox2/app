@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Night Studio — AI coach chat</title>
+  <link rel="stylesheet" href="studio.css" />
+  <style>
+    .head { height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+    .bubble { max-width: 85%; padding: 12px; border-radius: 12px; }
+    .theirs { background: var(--surface); border: 1px solid var(--border); }
+    .mine { margin-left: auto; background: var(--surface2); }
+    .who { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); }
+    .composer { margin-top: auto; display: flex; gap: 8px; padding: 16px; border-top: 1px solid var(--border); }
+    .composer .field { flex: 1; min-height: 48px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface2); padding: 12px; color: var(--dim); }
+  </style>
+</head>
+<body>
+  <div class="screen" style="display:flex;flex-direction:column">
+    <div class="head">
+      <button class="icon-btn" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 6 9 12l6 6"/></svg>
+      </button>
+      <img class="portrait" src="portrait-coach.svg" alt="" width="40" height="40" style="width:40px;height:40px" />
+      <div>
+        <p class="display" style="font-size:22px;line-height:24px">Coach</p>
+        <p class="caption">Training guidance, not a diagnosis</p>
+      </div>
+    </div>
+    <div class="stack" style="padding:16px">
+      <div class="bubble theirs">
+        <p class="who">Coach</p>
+        <p style="margin:0">Sleep before you grind. Today can be steady: hit the plan, leave one rep in reserve.</p>
+      </div>
+      <div class="bubble mine">
+        <p class="who">Me</p>
+        <p style="margin:0">Quads were heavy yesterday.</p>
+      </div>
+      <div class="bubble theirs">
+        <p class="who">Coach</p>
+        <p style="margin:0">Keep the squats. Drop the last set if the bar speed falls off. That is load management, not a medical call.</p>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="field">Message the coach</div>
+      <button class="btn" type="button">Send</button>
+    </div>
+  </div>
+</body>
+</html>

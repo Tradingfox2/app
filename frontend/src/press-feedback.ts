@@ -33,7 +33,7 @@ export type PressOptions = {
   preserveBorder?: boolean;
 };
 
-type PressState = PressableStateCallbackType & { hovered?: boolean };
+type PressState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 
 type MotionStyle = ViewStyle & {
   transitionProperty?: string;
@@ -113,6 +113,7 @@ export function pressStyle(variant: PressVariant, state: PressState, options: Pr
   const web = Platform.OS === "web";
   const hovered = web && state.hovered === true && !disabled;
   const pressed = state.pressed === true && !disabled;
+  const focused = web && state.focused === true;
   const style: MotionStyle = {};
 
   if (web) {
@@ -159,6 +160,13 @@ export function pressStyle(variant: PressVariant, state: PressState, options: Pr
   if (pressed) {
     style.opacity = 0.92;
     if (!options.reducedMotion) style.transform = [{ scale: 0.98 }];
+  }
+
+  if (focused) {
+    style.outlineWidth = 2;
+    style.outlineStyle = "solid";
+    style.outlineColor = colors.text;
+    style.outlineOffset = 2;
   }
 
   return style;

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Image, Modal, StyleSheet, Text, View } from "react-native";
+import { Modal, StyleSheet, Text, View } from "react-native";
+import { ReliableImage } from "@/src/components/reliable-image";
 import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -26,12 +27,12 @@ export function MediaGrid({ media, testID }: { media: MediaItem[]; testID?: stri
   return <View style={styles.grid} testID={testID}>
     {media.map(item => item.kind === "image"
       ? <Affordance key={item.id} accessibilityRole="imagebutton" accessibilityLabel={t("Open photo")} onPress={() => setOpen(images.indexOf(item))} style={[styles.cell, single && styles.single]}>
-        <Image source={{ uri: mediaUrl(item.url) }} style={styles.fill} accessibilityIgnoresInvertColors />
+        <ReliableImage source={{ uri: mediaUrl(item.url) }} style={styles.fill} contentFit="cover" accessibilityIgnoresInvertColors />
       </Affordance>
       : <View key={item.id} style={[styles.cell, single && styles.single]} testID={`video-${item.id}`}><VideoPlayer url={item.url} style={styles.fill} /></View>)}
     <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
       <View style={styles.viewer} testID="media-viewer">
-        {open !== null && images[open] ? <Image source={{ uri: mediaUrl(images[open].url) }} style={styles.full} resizeMode="contain" accessibilityIgnoresInvertColors /> : null}
+        {open !== null && images[open] ? <ReliableImage source={{ uri: mediaUrl(images[open].url) }} style={styles.full} contentFit="contain" accessibilityIgnoresInvertColors /> : null}
         <Affordance accessibilityRole="button" accessibilityLabel={t("Close")} onPress={() => setOpen(null)} style={[styles.control, styles.close]}><Ionicons name="close" size={24} color={colors.text} /></Affordance>
         {images.length > 1 && open !== null ? <>
           <Affordance accessibilityRole="button" accessibilityLabel={t("Previous photo")} disabled={open === 0} onPress={() => setOpen(open - 1)} style={[styles.control, styles.prev, open === 0 && styles.dim]}><Ionicons name="chevron-back" size={26} color={colors.text} /></Affordance>

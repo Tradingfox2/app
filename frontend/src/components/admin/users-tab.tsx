@@ -2,7 +2,7 @@ import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
 import type { StaffRole } from "@/src/api";
-import { colors } from "@/src/theme";
+import { staffColors as colors } from "./staff-theme";
 import type { AccountStatus } from "./admin-labels";
 import { ConfirmAction } from "./confirm-action";
 import { consoleStyles as styles } from "./console-styles";

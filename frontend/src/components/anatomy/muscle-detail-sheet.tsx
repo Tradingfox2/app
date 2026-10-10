@@ -67,10 +67,10 @@ const RECOVERY_LABELS: Record<MuscleStats["recovery_state"], string> = {
 };
 
 const RECOVERY_COLORS: Record<MuscleStats["recovery_state"], string> = {
-  ready: "#4CAF50",
-  recovering: "#FF9800",
-  high_load: "#F44336",
-  untrained: "#9E9E9E",
+  ready: colors.success,
+  recovering: colors.warning,
+  high_load: colors.error,
+  untrained: colors.textDim,
 };
 
 const LOAD_LABELS: Record<LoadState, string> = {
@@ -443,6 +443,7 @@ export function MuscleDetailSheet({
               <StatRow label={t("Status")} value={t(LOAD_LABELS[state])} />
               <StatRow label={t("Last trained")} value={lastTrained} />
             </View>
+            <Text style={styles.loadNote}>{t("Load is this muscle's share of logged volume. It is not a body scan.")}</Text>
           </>
         ) : (
           <View style={styles.emptyState}>
@@ -655,7 +656,7 @@ export function MuscleDetailSheet({
           </View>
         ) : error ? (
           <View style={styles.errorState}>
-            <Ionicons name="alert-circle-outline" size={48} color="#F44336" />
+            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
             <Text style={styles.errorText}>{error}</Text>
             <Pressable
               style={styles.retryButton}
@@ -796,6 +797,12 @@ const styles = StyleSheet.create({
     color: muted,
     textAlign: "center",
     lineHeight: 22,
+  },
+  loadNote: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
   overviewContent: {
     flex: 1,

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Night Studio — exercise library</title>
+  <link rel="stylesheet" href="studio.css" />
+  <style>
+    .search {
+      margin: 0 16px 12px;
+      min-height: 48px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--surface2);
+      padding: 12px;
+      color: var(--dim);
+    }
+    .filters { display: flex; gap: 8px; padding: 0 16px 12px; }
+    .posters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 24px; }
+    .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .tile img { width: 100%; height: 168px; object-fit: cover; background: #14191e; }
+    .tile .meta { padding: 10px 12px 12px; }
+    .tile h3 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
+    .play {
+      margin-top: 8px;
+      min-height: 36px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid var(--edge);
+      background: transparent;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .matte { height: 168px; background: var(--surface3); display: grid; place-items: end start; padding: 12px; }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <div class="pad between">
+      <div>
+        <p class="eyebrow">Workout</p>
+        <p class="display" style="font-size:32px;line-height:36px">Library</p>
+      </div>
+    </div>
+    <div class="search">Search exercises</div>
+    <div class="filters">
+      <button class="chip on" type="button">Strength</button>
+      <button class="chip" type="button">Quads</button>
+      <button class="chip" type="button">All</button>
+    </div>
+    <div class="posters">
+      <article class="tile">
+        <img src="poster-squat.svg" alt="Squat, athlete in training clothes at the bottom of the lift" />
+        <div class="meta">
+          <h3>Back squat</h3>
+          <p class="caption">Quads · barbell</p>
+          <button class="play" type="button">Play demo</button>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="matte"><span class="standin-note">Poster when licensed</span></div>
+        <div class="meta">
+          <h3>Romanian deadlift</h3>
+          <p class="caption">Hamstrings · barbell</p>
+          <button class="play" type="button">Play demo</button>
+        </div>
+      </article>
+    </div>
+    <p class="caption" style="padding:0 16px 16px">Sessions history stays a flat list above this library. Posters do not enter the set logger.</p>
+  </div>
+</body>
+</html>

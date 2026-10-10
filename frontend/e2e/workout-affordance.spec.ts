@@ -53,7 +53,7 @@ const program = {
 
 const sheet = "rgb(36, 42, 49)";
 const card = "rgb(26, 31, 36)";
-const hairline = "rgb(110, 118, 126)";
+const hairline = "rgb(168, 178, 188)";
 const brand = "rgb(214, 227, 90)";
 const brandHover = "rgb(217, 229, 103)";
 
@@ -151,7 +151,7 @@ test("workout controls show hover, press, and an inert disabled state", async ({
     let node: Element | null = el;
     while (node) {
       const color = getComputedStyle(node).borderTopColor;
-      if (color === "rgb(110, 118, 126)") return color;
+      if (color === "rgb(168, 178, 188)") return color;
       node = node.parentElement;
     }
     return getComputedStyle(el.parentElement ?? el).borderTopColor;

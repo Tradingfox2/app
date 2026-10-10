@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { api } from "@/src/api";
+import { CoachMark } from "@/src/components/night/coach-mark";
+import { leaveOrHome } from "@/src/leave-home";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
@@ -25,7 +26,6 @@ function speaker(role: Role, label: (source: string) => string): string {
 
 export default function CoachChat() {
   const { t } = useI18n();
-  const router = useRouter();
   const scroller = useRef<ScrollView>(null);
   const dirty = useRef(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -69,11 +69,13 @@ export default function CoachChat() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.header}>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} onPress={leaveOrHome} style={styles.icon}>
             <Ionicons name="arrow-back" size={20} color={colors.text} />
           </Pressable>
+          <CoachMark size={36} />
           <Text style={styles.headerTitle}>{t("COACH")}</Text>
         </View>
+        <Text style={styles.caption}>{t("Training guidance, not a diagnosis.")}</Text>
         <ScrollView ref={scroller} contentContainerStyle={styles.thread} keyboardShouldPersistTaps="handled" testID="coach-chat-thread">
           {turns.length === 0 ? <Text style={styles.empty}>{t("Ask about training, recovery, or your labs.")}</Text> : turns.map((turn, index) => (
             <View key={`${index}-${turn.role}`} style={[styles.bubble, turn.role === "user" ? styles.mine : styles.theirs]}>
@@ -107,7 +109,8 @@ const styles = StyleSheet.create({
   theirs: { alignSelf: "flex-start", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   who: { ...type.eyebrow, marginBottom: spacing.xs },
   body: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  error: { color: colors.error, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  caption: { ...type.caption, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  error: { color: colors.errorText, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   input: { flex: 1, minHeight: 48, maxHeight: 120, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, backgroundColor: colors.surface2, color: colors.text, padding: spacing.md },
   send: { minHeight: 48, paddingHorizontal: spacing.md, backgroundColor: colors.brand, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },

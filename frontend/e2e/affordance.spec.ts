@@ -3,7 +3,8 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
 const surface = "rgb(26, 31, 36)";
 const surface2 = "rgb(36, 42, 49)";
 const brand = "rgb(214, 227, 90)";
-const hairline = "rgb(52, 59, 68)";
+const brandHover = "rgb(217, 229, 103)";
+const hairline = "rgb(58, 70, 82)";
 
 const me = {
   id: "me-1", full_name: "Ada Lift", email: "ada@example.com", role: "athlete",
@@ -131,8 +132,9 @@ test("hover and press mark the home, activity, recorder, and tab controls", asyn
 
   const start = page.getByTestId("today-start-day");
   await start.hover();
-  await expect.poll(async () => (await paint(start)).filter).toContain("1.06");
-  expect((await paint(start)).backgroundColor).toBe(brand);
+  // Hover shifts the primary fill to brandHover. It does not add a brightness filter.
+  await expect.poll(async () => (await paint(start)).backgroundColor).toBe(brandHover);
+  expect((await paint(start)).filter).toBe("none");
 
   const program = page.getByTestId("quick-program");
   await program.hover();
@@ -205,8 +207,8 @@ test("hover and press mark the home, activity, recorder, and tab controls", asyn
 
   const recordStart = page.getByTestId("record-start");
   await recordStart.hover();
-  await expect.poll(async () => (await paint(recordStart)).filter).toContain("1.06");
-  expect((await paint(recordStart)).backgroundColor).toBe(brand);
+  await expect.poll(async () => (await paint(recordStart)).backgroundColor).toBe(brandHover);
+  expect((await paint(recordStart)).filter).toBe("none");
 
   await recordStart.click();
   const locked = page.getByTestId("sport-hike");

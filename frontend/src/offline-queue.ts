@@ -65,6 +65,13 @@ export async function pendingFor(workoutId: string): Promise<number> {
   return q.filter((item) => item.workout_id === workoutId).length;
 }
 
+/** Count plus whether a flush has already failed for this workout. Rows stay queued. */
+export async function pendingState(workoutId: string): Promise<{ count: number; failed: boolean }> {
+  const q = await loadQueue();
+  const mine = q.filter((item) => item.workout_id === workoutId);
+  return { count: mine.length, failed: mine.some((item) => item.attempts > 0) };
+}
+
 export async function enqueueSet(workoutId: string, payload: SetPayload): Promise<void> {
   const q = await loadQueue();
   q.push({

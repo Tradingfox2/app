@@ -1,7 +1,7 @@
 import { Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Affordance } from "@/src/press-affordance";
-import { colors } from "@/src/theme";
+import { staffColors as colors } from "./staff-theme";
 import { FilterBar } from "./filter-bar";
 import { FilterChip } from "./filter-chip";
 import { StatusBadge } from "./status-badge";

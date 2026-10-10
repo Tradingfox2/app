@@ -18,10 +18,12 @@ import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo
 import * as Haptics from "expo-haptics";
 import { api, type Community } from "@/src/api";
 import { track } from "@/src/analytics";
-import { enqueueSet, flushQueue, onQueueChange, pendingFor } from "@/src/offline-queue";
+import { leaveOrHome } from "@/src/leave-home";
+import { enqueueSet, flushQueue, onQueueChange, pendingFor, pendingState } from "@/src/offline-queue";
 import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
 import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
-import { colors, radius, spacing } from "@/src/theme";
+import { colors, fonts, radius, spacing } from "@/src/theme";
+import { storage } from "@/src/utils/storage";
 import { useI18n } from "@/src/i18n";
 
 /** Club is `community_id`. `public` and `friends` are the only audience values sent. */
@@ -90,17 +92,46 @@ function rememberedLogger(id: string | string[] | undefined): LoggerMemory | und
   return key ? loggerMemory.get(key) : undefined;
 }
 
+function persistLoggerMap() {
+  const payload = JSON.stringify(Object.fromEntries(loggerMemory));
+  if (Platform.OS === "web" && typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.setItem(LOGGER_MEMORY_KEY, payload);
+    } catch {
+      // Quota or private mode: the in-memory copy still covers this document.
+    }
+  }
+  void storage.setItem(LOGGER_MEMORY_KEY, payload);
+}
+
+async function hydrateLoggerMemory() {
+  if (Platform.OS === "web") return;
+  const raw = await storage.getItem(LOGGER_MEMORY_KEY, "");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, LoggerMemory>;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (loggerMemory.has(key)) continue;
+      if (!value || !Array.isArray(value.sets) || !Array.isArray(value.planned)) continue;
+      loggerMemory.set(key, {
+        sets: value.sets,
+        planned: value.planned,
+        title: typeof value.title === "string" ? value.title : null,
+        sourceExercises: Array.isArray(value.sourceExercises) ? value.sourceExercises : [],
+        selectedEx: value.selectedEx ?? null,
+      });
+    }
+  } catch {
+    // A bad snapshot must not block the logger.
+  }
+}
+
 function rememberLogger(key: string, snapshot: LoggerMemory) {
   const existing = loggerMemory.get(key);
   const blank = snapshot.sets.length === 0 && snapshot.planned.length === 0 && !snapshot.title && !snapshot.selectedEx;
   if (blank && existing && (existing.sets.length > 0 || existing.planned.length > 0)) return;
   loggerMemory.set(key, snapshot);
-  if (Platform.OS !== "web" || typeof sessionStorage === "undefined") return;
-  try {
-    sessionStorage.setItem(LOGGER_MEMORY_KEY, JSON.stringify(Object.fromEntries(loggerMemory)));
-  } catch {
-    // Quota or private mode: the in-memory copy still covers this document.
-  }
+  persistLoggerMap();
 }
 
 function isOptimisticSet(row: { id?: string }): boolean {
@@ -136,6 +167,8 @@ export default function WorkoutLogger() {
   const [weight, setWeight] = useState("60");
   const [rpe, setRpe] = useState("7");
   const [queued, setQueued] = useState(0);
+  const [queueFailed, setQueueFailed] = useState(false);
+  const [addError, setAddError] = useState("");
   const [loggerError, setLoggerError] = useState("");
   const [finishError, setFinishError] = useState("");
   const [finishing, setFinishing] = useState(false);
@@ -146,9 +179,14 @@ export default function WorkoutLogger() {
   const restRef = useRef<any>(null);
 
   useEffect(() => {
-    const unsub = onQueueChange(setQueued);
+    const unsub = onQueueChange((size) => {
+      setQueued(size);
+      const key = Array.isArray(id) ? id[0] : id;
+      if (!key) return;
+      void pendingState(key).then((state) => setQueueFailed(state.failed));
+    });
     return unsub;
-  }, []);
+  }, [id]);
 
   // Exercises queued from the Muscle Explorer / circuits (workout.planned_exercises)
   const [planned, setPlanned] = useState<any[]>(() => remembered?.planned ?? []);
@@ -177,6 +215,21 @@ export default function WorkoutLogger() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    await hydrateLoggerMemory();
+    const key = Array.isArray(id) ? id[0] : id;
+    const snap = key ? loggerMemory.get(key) : undefined;
+    if (snap && setsRef.current.length === 0 && snap.sets.length > 0) {
+      setsRef.current = snap.sets;
+      setSets(snap.sets);
+    }
+    if (snap && plannedRef.current.length === 0 && snap.planned.length > 0) {
+      plannedRef.current = snap.planned;
+      setPlanned(snap.planned);
+    }
+    if (snap && !selectedExRef.current && snap.selectedEx) {
+      selectedExRef.current = snap.selectedEx;
+      setSelectedEx(snap.selectedEx);
+    }
     const notes: string[] = [];
     try {
       await flushQueue();
@@ -316,7 +369,11 @@ export default function WorkoutLogger() {
     const r = parseInt(reps, 10);
     const w = parseFloat(weight);
     const rp = parseFloat(rpe);
-    if (!r || Number.isNaN(w)) return;
+    if (!r || Number.isNaN(w)) {
+      setAddError(t("Enter reps and weight before adding a set."));
+      return;
+    }
+    setAddError("");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const historical = priorSetsRef.current.find((row) => row.set_index === nextSetIndex);
     const restBefore = typeof historical?.rest_sec === "number" ? historical.rest_sec : null;
@@ -454,7 +511,7 @@ export default function WorkoutLogger() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="workout-logger">
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} testID="back-btn" hitSlop={12} style={press("ghost", styles.iconBtn)}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} onPress={leaveOrHome} testID="back-btn" hitSlop={12} style={press("ghost", styles.iconBtn)}>
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
         <View style={{ alignItems: "center" }}>
@@ -465,7 +522,7 @@ export default function WorkoutLogger() {
             </Text>
           ) : null}
         </View>
-        <Pressable onPress={finish} testID="finish-btn" hitSlop={12} disabled={finishing || finished} style={press("ghost", styles.finishBtn, { disabled: finishing || finished })}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("FINISH")} onPress={finish} testID="finish-btn" hitSlop={12} disabled={finishing || finished} style={press("ghost", styles.finishBtn, { disabled: finishing || finished })}>
           <Text style={styles.finishTxt}>{finishing ? t("FINISHING…") : t("FINISH")}</Text>
         </Pressable>
       </View>
@@ -530,8 +587,8 @@ export default function WorkoutLogger() {
         <View style={styles.timer} testID="rest-timer">
           <Text style={styles.timerLabel}>{t("Rest")}</Text>
           <Text style={styles.timerVal}>{restRemaining}s</Text>
-          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Rest")} style={press("ghost", styles.skipBtn)}>
-            <Ionicons name="close" color={colors.textDim} size={18} />
+          <Pressable onPress={stopRest} testID="skip-timer-btn" accessibilityRole="button" accessibilityLabel={t("Skip rest")} style={press("ghost", styles.skipBtn)}>
+            <Text style={styles.skipTxt}>{t("Skip")}</Text>
           </Pressable>
         </View>
       )}
@@ -540,6 +597,9 @@ export default function WorkoutLogger() {
         <View style={styles.warningBanner} testID="offline-banner">
           <Ionicons name="cloud-offline" color={colors.warning} size={16} />
           <Text style={styles.warningTxt}>{t(queued === 1 ? "{count} set pending sync" : "{count} sets pending sync", { count: formatNumber(queued) })}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Retry sync")} testID="logger-retry-sync" onPress={() => void flushQueue()} style={press("ghost", styles.skipBtn)}>
+            <Text style={styles.skipTxt}>{t("Retry sync")}</Text>
+          </Pressable>
         </View>
       )}
 
@@ -547,7 +607,7 @@ export default function WorkoutLogger() {
         behavior="padding"
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: spacing.lg, paddingBottom: finished ? spacing.xxl : 240 }}>
           <Pressable
             testID="pick-exercise-btn"
             style={press("surface", styles.exSelector)}
@@ -578,6 +638,15 @@ export default function WorkoutLogger() {
                   <Text style={styles.setValDim}>
                     {s.rpe ? `RPE ${s.rpe}` : "—"}
                   </Text>
+                  {isOptimisticSet(s) ? (
+                    queueFailed ? (
+                      <Pressable accessibilityRole="button" accessibilityLabel={t("Retry sync")} testID={`set-retry-${s.set_index}`} onPress={() => void flushQueue()}>
+                        <Text style={styles.setSaving}>{t("Retry sync")}</Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.setSaving}>{t("Saving")}</Text>
+                    )
+                  ) : null}
                 </View>
               ))}
               {(setsByEx[selectedEx.id] || []).length === 0 && (
@@ -598,19 +667,27 @@ export default function WorkoutLogger() {
           )}
         </ScrollView>
 
-        {/* Fast-entry bar */}
+        {finished ? null : (
         <View style={styles.entryBar}>
-          <FieldCol label="REPS" value={reps} onChange={setReps} testID="input-reps" />
-          <FieldCol label="KG" value={weight} onChange={setWeight} testID="input-weight" />
-          <FieldCol label="RPE" value={rpe} onChange={setRpe} testID="input-rpe" />
+          {addError ? (
+            <Text accessibilityRole="alert" testID="add-set-error" style={styles.addError}>{addError}</Text>
+          ) : null}
+          <View style={styles.entryFields}>
+          <FieldCol label={t("REPS")} value={reps} onChange={(value) => { setAddError(""); setReps(value); }} testID="input-reps" />
+          <FieldCol label={t("KG")} value={weight} onChange={(value) => { setAddError(""); setWeight(value); }} testID="input-weight" />
+          <FieldCol label={t("RPE")} value={rpe} onChange={setRpe} testID="input-rpe" />
           <Pressable
             style={press("primary", styles.addBtn)}
             onPress={quickAddSet}
             testID="add-set-btn"
+            accessibilityRole="button"
+            accessibilityLabel={t("Add set")}
           >
-            <Ionicons name="add" color={colors.brandOn} size={26} />
+            <Ionicons name="add" color={colors.brandOn} size={28} />
           </Pressable>
+          </View>
         </View>
+        )}
       </KeyboardAvoidingView>
 
       <Modal
@@ -712,7 +789,7 @@ export default function WorkoutLogger() {
         </View> : null}
         {shareError ? <Text accessibilityRole="alert" testID="share-error" style={styles.shareError}>{shareError}</Text> : null}
         <View style={styles.shareRow}>
-          <Pressable accessibilityRole="button" testID="share-done" onPress={() => router.back()} style={press("outline", styles.shareSecondary)}><Text style={styles.shareSecondaryText}>{t("DONE")}</Text></Pressable>
+          <Pressable accessibilityRole="button" testID="share-done" onPress={leaveOrHome} style={press("outline", styles.shareSecondary)}><Text style={styles.shareSecondaryText}>{t("DONE")}</Text></Pressable>
           <Pressable accessibilityRole="button" testID="share-workout" disabled={sharing || !audienceReady} onPress={() => void share()} style={press("primary", [styles.sharePrimary, (sharing || !audienceReady) && { opacity: 0.5 }], { disabled: sharing || !audienceReady })}><Text style={styles.sharePrimaryText}>{t("SHARE TO FEED")}</Text></Pressable>
         </View>
       </View> : null}
@@ -753,6 +830,8 @@ function PickerChip({ label, active, onPress }: { label: string; active: boolean
   const press = usePressFeedback();
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={press("chip", [styles.pchip, active && styles.pchipActive], { preserveBorder: active })}
     >
@@ -765,7 +844,7 @@ const styles = StyleSheet.create({
   sharePanel: { position: "absolute", left: 16, right: 16, bottom: 32, padding: 20, borderRadius: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.text, gap: 8 },
   shareTitle: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   shareCopy: { color: colors.text, fontSize: 15 },
-  shareError: { color: colors.error, fontSize: 12 },
+  shareError: { color: colors.errorText, fontSize: 13, lineHeight: 18 },
   shareRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   shareSecondary: { flex: 1, minHeight: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   shareSecondaryText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
@@ -773,7 +852,7 @@ const styles = StyleSheet.create({
   sharePrimaryText: { color: colors.brandOn, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   shareAudienceLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
   shareChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  shareChip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  shareChip: { minHeight: 44, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   shareChipOn: { borderColor: colors.text, backgroundColor: colors.surface2 },
   shareChipText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
   shareChipTextOn: { color: colors.text },
@@ -787,7 +866,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  title: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 14 },
+  title: { color: colors.text, fontFamily: fonts.display, fontWeight: "600", letterSpacing: 0.4, fontSize: 22 },
   subtitle: { color: colors.textMuted, fontSize: 11, marginTop: 2, maxWidth: 220 },
   planWrap: { marginBottom: spacing.sm },
   planLabel: {
@@ -851,25 +930,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: "transparent",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.brand,
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    minHeight: 44,
+    minHeight: 64,
     borderRadius: radius.md,
     marginBottom: spacing.sm,
   },
-  timerLabel: { color: colors.textDim, fontWeight: "400", fontSize: 13 },
+  timerLabel: { color: colors.textMuted, fontFamily: fonts.textStrong, fontWeight: "600", fontSize: 13 },
   timerVal: {
     color: colors.text,
-    fontWeight: "700",
+    fontFamily: fonts.numeric,
+    fontWeight: "400",
     flex: 1,
-    fontSize: 20,
+    fontSize: 32,
     fontVariant: ["tabular-nums"],
   },
+  skipTxt: { color: colors.text, fontFamily: fonts.textStrong, fontSize: 14 },
   exSelector: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -934,15 +1015,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    gap: spacing.xs,
   },
-  col: { flex: 1 },
+  entryFields: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: spacing.sm,
+  },
+  addError: { color: colors.errorText, fontSize: 13, lineHeight: 18 },
+  col: { flex: 1, maxWidth: 160 },
   colLabel: {
     color: colors.textMuted,
     fontSize: 10,
@@ -953,11 +1038,12 @@ const styles = StyleSheet.create({
   colInput: {
     backgroundColor: colors.surface2,
     color: colors.text,
-    fontSize: 20,
-    fontWeight: "800",
+    fontFamily: fonts.numeric,
+    fontSize: 24,
+    fontWeight: "400",
     textAlign: "center",
     borderRadius: radius.md,
-    minHeight: 48,
+    minHeight: 56,
     borderWidth: 1,
     borderColor: colors.border,
     fontVariant: ["tabular-nums"],
@@ -970,12 +1056,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   skipBtn: {
-    width: 36,
-    height: 36,
+    minWidth: 64,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.pill,
   },
+  setSaving: { color: colors.warningText, fontSize: 12, fontFamily: fonts.textStrong },
   finishBtn: {
     minHeight: 44,
     justifyContent: "center",
@@ -1015,7 +1103,7 @@ const styles = StyleSheet.create({
   },
   pickerChips: { gap: spacing.sm, paddingBottom: spacing.md },
   pchip: {
-    height: 32,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radius.pill,
     borderWidth: 1,

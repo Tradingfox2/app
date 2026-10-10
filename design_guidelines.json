@@ -1,44 +1,41 @@
 {
   "app_name": "IronFlow",
-  "personality": "7 Dark-First Utility",
-  "personality_one_liner": "A high-performance command center built for athletes, favoring dense data, stark contrast, and operational clarity over decorative softness.",
+  "personality": "IRONFLOW MOTION — Athletic Intelligence",
+  "personality_one_liner": "A premium, human, energetic training companion. Dark charcoal and chartreuse stay. Data is honest. Motion is short. The staff console is a separate system.",
   "color": {
-    "surface": "#121212",
-    "onSurface": "#FFFFFF",
-    "surfaceSecondary": "#1C1C1E",
-    "onSurfaceSecondary": "#A0A0A5",
-    "surfaceTertiary": "#2C2C2E",
-    "onSurfaceTertiary": "#C4C4C6",
-    "surfaceInverse": "#FFFFFF",
-    "onSurfaceInverse": "#121212",
-    "brand": "#D4FF00",
-    "brandPrimary": "#D4FF00",
-    "onBrandPrimary": "#000000",
-    "brandSecondary": "#39FF14",
-    "onBrandSecondary": "#000000",
-    "brandTertiary": "#293300",
-    "onBrandTertiary": "#D4FF00",
-    "success": "#34C759",
-    "onSuccess": "#000000",
-    "warning": "#FF9F0A",
-    "onWarning": "#000000",
-    "error": "#FF453A",
-    "onError": "#FFFFFF",
-    "info": "#0A84FF",
-    "onInfo": "#FFFFFF",
-    "border": "#2C2C2E",
-    "borderStrong": "#48484A",
-    "divider": "#2C2C2E"
+    "ground": "#101418",
+    "surface": "#1A1F24",
+    "surfaceSecondary": "#242A31",
+    "surfaceTertiary": "#2E3842",
+    "onSurface": "#F2F3F4",
+    "onSurfaceSecondary": "#C5CCD3",
+    "onSurfaceTertiary": "#A8B2BC",
+    "brand": "#D6E35A",
+    "brandPrimary": "#D6E35A",
+    "onBrandPrimary": "#16180C",
+    "success": "#3D9A6A",
+    "successText": "#8FE0B5",
+    "warning": "#C4A15A",
+    "warningText": "#F0D59A",
+    "error": "#E23B3B",
+    "errorText": "#FFB4AE",
+    "info": "#7AA2C9",
+    "infoText": "#C9E2F8",
+    "border": "#3A4652",
+    "borderStrong": "#52606C",
+    "note": "Canonical member tokens are frontend/src/palette.ts, re-exported by frontend/src/theme.ts. #D4FF00, #121212, and Satoshi are retired. Saturated success/error/info/warning are marks, not small text."
   },
   "typography": {
     "displayFontFamily": "Barlow Condensed",
-    "textFontFamily": "Satoshi",
+    "textFontFamily": "Barlow",
+    "numericFontFamily": "Space Mono",
+    "license": "SIL Open Font License. Files live in frontend/assets/fonts. Do not load Inter or Satoshi from a CDN.",
     "scale": {
       "sm": 12,
-      "base": 14,
-      "lg": 16,
-      "xl": 20,
-      "2xl": 24
+      "base": 16,
+      "lg": 18,
+      "xl": 22,
+      "2xl": 32
     }
   },
   "spacing": {
@@ -52,23 +49,24 @@
     "3xl": 48
   },
   "radius_tokens": {
-    "sm": 6,
+    "sm": 8,
     "md": 12,
-    "lg": 20,
-    "pill": 999
+    "lg": 16,
+    "pill": 999,
+    "note": "These numbers are shared with the staff console through frontend/src/theme.ts spacing and radius. Do not change them without checking staff layout."
   },
-  "shadow_tier": 0,
+  "shadow_tier": "flat data cards; one raised tier for the session hero and sheets",
   "navigation": "bottom_tabs",
   "icon_set": "Ionicons",
   "glassmorphism": {
-    "enabled": true,
+    "enabled": false,
     "do's": [
-      "Use heavy glassmorphism for bottom tab bar and sticky headers over scrolling content.",
-      "Use blur on sticky 'Record Workout' CTA backgrounds.",
-      "Ensure text on glass is fully readable by adding a subtle translucent tinted base layer underneath."
+      "Use a short static chartreuse wash on the session hero only.",
+      "Separate surfaces with borders and one elevation step for the hero and sheets."
     ],
     "dont's": [
-      "Do not use glass for data cards, lists, or form fields."
+      "Do not use glass for data cards, lists, form fields, biomarkers, or the logger.",
+      "Do not run continuous decorative motion."
     ]
   },
   "platform_libraries": {
@@ -92,17 +90,17 @@
         "empty": "N/A",
         "error": "Red banner on top"
       },
-      "layout": "Full-bleed background image with vertical gradient scrim (transparent to surface). Form inputs sit in the bottom half. Use Pill CTA buttons in brandPrimary."
+      "layout": "Ground field with the existing app icon marked Placeholder, then a scrim into the form. Inputs sit in the lower half. Pill primary buttons use brand."
     },
     {
       "name": "Home Dashboard",
       "purpose": "A daily command center summarizing workouts, biomarkers, and wearable recovery metrics at a glance.",
       "states": {
-        "loading": "Skeleton rings and card outlines",
-        "empty": "Illustration of tracking rings at 0% with 'Connect Apple Watch' CTA",
+        "loading": "Skeleton meter rows and card outlines",
+        "empty": "Stable strain, recovery, and sleep slots read Not connected. Missing values stay an em dash.",
         "error": "Unable to fetch data with a retry tap target"
       },
-      "layout": "Whoop-style modular tiles. Top section: Three main rings/dials (e.g., Strain, Recovery, Sleep) rendered as dense data-viz. Below: Horizontal scroll of wearable metrics (HRV, Steps) and a vertical feed of today's streak/summary cards."
+      "layout": "Night Studio ledger. Session stage first. Strain, recovery, and sleep are quiet meter rows. HRV and resting heart rate sit in the same card. Session load lives on the training week, not in a fourth dial."
     },
     {
       "name": "Workouts",
@@ -112,7 +110,7 @@
         "empty": "Iconography indicating no recent workouts, CTA to 'Start First Workout'",
         "error": "Network error with retry button"
       },
-      "layout": "Strava-style layout: segmented control (History / Library) pinned top. A list of recent activities below. A sticky, floating 'Record Session' primary CTA at the bottom center over a glass overlay, spanning above the bottom tab bar."
+      "layout": "Sessions and Library segments. Exercise rows use a placeholder poster plate. The new-session button is a solid brand bar, not a glass overlay."
     },
     {
       "name": "Biomarkers",
@@ -166,12 +164,23 @@
     "imagery_3d": "No remote photos and no WebGL. Sign-in uses an inline SVG mark on a local gradient.",
     "navigation": "Grouped sidebar from 1080px. Below that, one horizontal rail of the same admin-tab test ids. No extra click to reach a section."
   },
+  "member_system": {
+    "name": "IRONFLOW MOTION — Athletic Intelligence",
+    "principles": [
+      "Premium, human, and energetic. Not generic SaaS and not neon gaming.",
+      "Unknown is not zero. A recorded zero is labeled. Sample data is never shown as live.",
+      "Chartreuse is the primary action and the selected tab.",
+      "One raised session hero. Data rows stay flat with borders.",
+      "Motion is a short fade. Reduced motion removes it. No looping decoration.",
+      "Imagery belongs on community, coaches, and onboarding. The logger, labs, and charts stay focused.",
+      "Reference ranges and readiness are educational, not a diagnosis."
+    ]
+  },
   "instructions_to_main_agent": [
-    "Staff console: follow staff_console, not the zero-shadow, Satoshi, or #D4FF00 rules. Those older rules describe the member product direction and must not be reapplied to frontend/staff.",
-    "Design constraint: Use '7 Dark-First Utility' personality. STRICTLY adhere to the electric lime (#D4FF00) and deep charcoal (#121212) palette. NO blues, NO purples.",
-    "Typography: Use Barlow Condensed for all display/metric headers to ensure a technical, performance-oriented aesthetic. Use Satoshi for standard UI readability.",
-    "Layout constraint: Enforce strict modular card layouts with zero-shadow (shadow_tier 0). Use borders (#2C2C2E) to separate data cards.",
-    "Visuals: Implement data-viz (rings, sparklines) for the Whoop-style Home dashboard. Ensure text overlaid on background images (e.g. Onboarding) uses the 3-stop vertical gradient scrim for contrast.",
-    "Interactions: On Workouts screen, the 'Record' CTA must be a sticky floating block at the bottom using glassmorphism above the bottom nav."
+    "Staff console: follow staff_console only. Member screens follow palette.ts and theme.ts. Do not reapply retired #D4FF00, #121212, Satoshi, or zero-shadow rules to either product.",
+    "Do not import member colors into frontend/staff or frontend/src/components/admin. Staff tabs that need color use staffColors.",
+    "Spacing and radius in theme.ts are shared with staff layout. Keep the numeric scale.",
+    "Missing wearable and readiness values render as unknown. Do not coerce them with ?? 0.",
+    "Bundled OFL fonts only: Barlow Condensed for display, Barlow for text, Space Mono for figures."
   ]
 }

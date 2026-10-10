@@ -20,17 +20,17 @@ export function loadState(percent: number): LoadState {
 }
 
 const LOAD_COLORS: Record<LoadState, string> = {
-  untrained: "#2A3140",
-  low: "#0E7490",
-  productive: "#15803D",
-  high: "#C2410C",
-  overreaching: "#BE123C",
+  untrained: colors.anatomyIdle,
+  low: colors.info,
+  productive: colors.success,
+  high: colors.warning,
+  overreaching: colors.error,
 };
 
 const ACTIVATION_COLORS: Record<ActivationLevel, string> = {
   primary: colors.text,
-  secondary: colors.volt,
-  stabilizer: colors.blaze,
+  secondary: colors.textMuted,
+  stabilizer: colors.warning,
 };
 
 const fiberGuides = new Map<string, string>();
@@ -111,11 +111,7 @@ export function MuscleRegion({
 }: MuscleRegionProps) {
   const state = loadState(loadPercent);
   const lit = Boolean(activation) || selected;
-  const fill = activation
-    ? ACTIVATION_COLORS[activation]
-    : selected
-      ? colors.text
-      : LOAD_COLORS[state];
+  const fill = activation ? ACTIVATION_COLORS[activation] : LOAD_COLORS[state];
   const clipId = `clip-${definition.id}`;
   const muscleName = MUSCLE_NAMES[definition.slug];
   const accessibilityLabel = `${muscleName}, ${state} load${selected ? ", selected" : ""}`;
@@ -166,8 +162,8 @@ export function MuscleRegion({
                 ? 0.42 * pulse
                 : 1
         }
-        stroke={lit ? fill : "#3F4654"}
-        strokeWidth={selected ? 1.6 : lit ? 1.1 : 0.5}
+        stroke={selected ? colors.text : lit ? fill : colors.border}
+        strokeWidth={selected ? 2 : lit ? 1.1 : 0.5}
         strokeOpacity={lit ? 0.9 : 1}
         pointerEvents="auto"
         data-muscle-slug={definition.slug}

@@ -13,7 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as WebBrowser from "expo-web-browser";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import { api } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
@@ -58,6 +59,7 @@ export default function SourcesScreen() {
   const params = useLocalSearchParams<{ connected?: string; failed?: string }>();
   const [sources, setSources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string>("");
 
@@ -70,12 +72,13 @@ export default function SourcesScreen() {
   const load = useCallback(async () => {
     try {
       setSources(await api.wearableSources());
-    } catch {
-      // keep previous
+      setLoadError("");
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : t("Could not load sources."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -141,7 +144,13 @@ export default function SourcesScreen() {
               <View
                 style={[
                   styles.dot,
-                  { backgroundColor: connected ? colors.success : colors.textDim },
+                  {
+                    backgroundColor: !connected
+                      ? colors.textDim
+                      : s.mode === "simulated" || s.mode === "pending"
+                        ? colors.warning
+                        : colors.success,
+                  },
                 ]}
               />
               {badge ? (
@@ -164,8 +173,13 @@ export default function SourcesScreen() {
                 ? s.last_sync_at
                   ? t("Last sync {date}", { date: formatDate(s.last_sync_at, { dateStyle: "short", timeStyle: "short" }) })
                   : t("Connected — not synced yet")
-                : t("Not connected")}
+                : pending
+                  ? t("Awaiting authorisation")
+                  : t("Not connected")}
             </Text>
+            {s.mode === "simulated" ? (
+              <Text style={styles.sampleNote}>{t("Sample data. This is not a live reading.")}</Text>
+            ) : null}
             {provides.length ? (
               <View style={styles.chipRow}>
                 {provides.map((p) => (
@@ -269,7 +283,7 @@ export default function SourcesScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="sources-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} testID="back-btn" onPress={leaveOrHome} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t("CONNECTED SOURCES")}</Text>
@@ -283,9 +297,20 @@ export default function SourcesScreen() {
           <View style={styles.infoBanner}>
             <Ionicons name="flash" size={14} color={colors.text} />
             <Text style={styles.infoTxt}>
-              {t("Connect your watch, health app or gym equipment. Data flows into one place: wearables feed the Home recovery rings; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.")}
+              {t("Connect your watch, health app or gym equipment. Data flows into one place: wearables feed Home strain, recovery, and sleep; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.")}
             </Text>
           </View>
+          {loadError ? (
+            <View accessibilityRole="alert" testID="sources-load-error" style={[styles.infoBanner, { borderColor: colors.errorText, borderWidth: 1 }]}>
+              <Ionicons name="alert-circle" size={14} color={colors.errorText} />
+              <View style={{ flex: 1, gap: spacing.sm }}>
+                <Text style={styles.infoTxt}>{loadError}</Text>
+                <Pressable accessibilityRole="button" testID="sources-load-retry" onPress={() => { setLoading(true); void load(); }} style={styles.btnGhost}>
+                  <Text style={styles.btnGhostTxt}>{t("Retry")}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
           {notice ? (
             <View accessibilityRole="alert" style={[styles.infoBanner, { borderColor: colors.text }]}>
               <Ionicons name="information-circle" size={14} color={colors.text} />
@@ -311,7 +336,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: colors.text, fontWeight: "900", letterSpacing: 3, fontSize: 15 },
+  headerTitle: { color: colors.text, fontWeight: "600", letterSpacing: 0.2, fontSize: 22 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   infoBanner: {
     flexDirection: "row",
@@ -337,7 +362,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  modeBadgeTxt: { color: colors.textMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  modeBadgeTxt: { color: colors.textMuted, fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
   chip: {
     backgroundColor: colors.surface3,
@@ -347,6 +372,7 @@ const styles = StyleSheet.create({
   },
   chipTxt: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
   noteTxt: { color: colors.textMuted, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
+  sampleNote: { color: colors.warningText, fontSize: 12, marginTop: 4, lineHeight: 16 },
   agreementNote: { color: colors.warning, fontSize: 11, marginTop: spacing.sm, lineHeight: 15 },
   docsLink: { color: colors.text, fontWeight: "700" },
   card: {
@@ -378,7 +404,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
-    minHeight: 42,
+    minHeight: 48,
     justifyContent: "center",
   },
   btnPrimaryTxt: { color: colors.brandOn, fontWeight: "900", fontSize: 11, letterSpacing: 1 },
@@ -387,7 +413,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
-    minHeight: 42,
+    minHeight: 48,
     justifyContent: "center",
   },
   btnGhostTxt: { color: colors.textMuted, fontWeight: "900", fontSize: 11, letterSpacing: 1 },
