@@ -226,7 +226,8 @@ test("A-01 a synced set clears the sync-closed alert and Saving", async ({ page 
   await page.getByTestId("input-reps").fill("5");
   await page.getByTestId("input-weight").fill("80");
   await page.getByTestId("add-set-btn").click();
-  await expect(page.getByText("Saving", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 reps")).toBeVisible();
+  await expect(page.getByTestId("logger-retry-sync")).toBeVisible();
   await page.getByTestId("finish-btn").click();
   await expect(page.getByTestId("finish-error")).toBeVisible();
   await expect(page.getByTestId("share-panel")).toHaveCount(0);
@@ -716,7 +717,7 @@ test("B-6 a failed session list uses the same readable color", async ({ page }) 
     return false;
   });
   await page.goto("/workouts");
-  const color = await page.getByTestId("workouts-error").evaluate((el) => getComputedStyle(el).color);
+  const color = await page.getByTestId("workouts-error").getByText("sessions down").evaluate((el) => getComputedStyle(el).color);
   expect(color).toBe("rgb(255, 180, 174)");
 });
 
@@ -914,7 +915,7 @@ async function staffSession(page: Page) {
 test("B-6 the staff lock icon stays the mark red", async ({ page }) => {
   await staffSession(page);
   await page.goto(`${staffURL}/`);
-  await staffTab(page, "users");
+  await (await staffTab(page, "users")).click();
   await page.getByTestId("admin-user-u-1").click();
   await expect(page.getByTestId("admin-suspend")).toBeVisible();
   const color = await page.getByTestId("admin-suspend").evaluate((root) => {
