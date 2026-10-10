@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { metricCaption, measuredNumber, readMeasured, readReadiness } from "./metric-state.ts";
+import { metricCaption, measuredNumber, readMeasured, readReadiness, readSimulated } from "./metric-state.ts";
 import { colors, textContrastPairs } from "./palette.ts";
 
 assert.deepEqual(readMeasured(undefined), { state: "missing" });
@@ -15,6 +15,13 @@ assert.equal(metricCaption(null, false), "not_connected");
 assert.equal(metricCaption(null, true), "not_measured");
 assert.equal(metricCaption(0, true), "recorded_zero");
 assert.equal(metricCaption(55, false), "measured");
+assert.equal(metricCaption(80, true, true), "sample_data");
+assert.equal(metricCaption(0, true, true), "sample_data");
+assert.equal(metricCaption(null, false, true), "not_connected");
+assert.equal(metricCaption(80, true, false), "measured");
+assert.equal(readSimulated({ value: 80, simulated: true }), true);
+assert.equal(readSimulated({ value: 80 }), false);
+assert.equal(readSimulated(null), false);
 
 assert.deepEqual(readReadiness(null), { kind: "unavailable" });
 assert.deepEqual(readReadiness({}), { kind: "unavailable" });

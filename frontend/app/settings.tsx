@@ -4,6 +4,7 @@ import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import { useAuth } from "@/src/auth-context";
 import { api, type AccountingBucket, type ProPlanPrice, type ReferralSummary, type SupportedLocale } from "@/src/api";
 import { buildJoinUrl, shareLink } from "@/src/share";
@@ -244,7 +245,7 @@ export default function Settings() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="settings-screen">
       <View style={styles.header}>
-        <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.headerIcon}>
+        <Affordance accessibilityLabel={t("Back")} onPress={leaveOrHome} style={styles.headerIcon}>
           <Ionicons name="arrow-back" size={20} color={colors.text} />
         </Affordance>
         <Text style={styles.headerTitle}>{t("SETTINGS")}</Text>
@@ -268,34 +269,29 @@ export default function Settings() {
               <Ionicons name="people-outline" size={16} color={colors.text} /><Text style={[styles.logoutTxt, { color: colors.text }]}>{t("FRIENDS")}</Text>
             </Affordance> : null}
           </View>
-          <Affordance
-            testID="logout-btn"
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            pointerEvents="box-only"
-            disabled={signingOut}
-            onPress={handleSignOut}
-            {...(Platform.OS === "web"
-              ? {
-                  onClick: (event: { preventDefault?: () => void }) => {
-                    event?.preventDefault?.();
-                    handleSignOut();
-                  },
-                  role: "button",
-                  tabIndex: 0,
-                }
-              : {})}
-            style={[styles.logoutBtn, styles.logoutBtnHero, signingOut && { opacity: 0.5 }]}
-          >
-            <Ionicons
-              name="log-out-outline"
-              color={colors.error}
-              size={18}
-              pointerEvents="none"
-            />
-            <Text style={styles.logoutTxt} pointerEvents="none">
-              {signingOut ? t("SIGNING OUT…") : t("SIGN OUT")}
-            </Text>
+        </View>
+
+        <View style={styles.section} testID="training-section">
+          <Text style={styles.sectionTitle}>{t("TRAINING")}</Text>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Training plan")} testID="settings-plan" style={styles.refCard} onPress={() => router.push("/program" as Href)}>
+            <Text style={styles.refLabel}>{t("Training plan")}</Text>
+            <Ionicons name="calendar" size={22} color={colors.text} />
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Trends")} testID="settings-trends" style={styles.refCard} onPress={() => router.push("/analysis" as Href)}>
+            <Text style={styles.refLabel}>{t("Trends")}</Text>
+            <Ionicons name="analytics" size={22} color={colors.text} />
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("LABS")} testID="settings-labs" style={styles.refCard} onPress={() => router.push("/labs" as Href)}>
+            <Text style={styles.refLabel}>{t("LABS")}</Text>
+            <Ionicons name="flask" size={22} color={colors.text} />
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("SOURCES")} testID="settings-sources" style={styles.refCard} onPress={() => router.push("/sources" as Href)}>
+            <Text style={styles.refLabel}>{t("SOURCES")}</Text>
+            <Ionicons name="watch" size={22} color={colors.text} />
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Morning check-in")} testID="settings-morning" style={styles.refCard} onPress={() => router.push("/morning" as Href)}>
+            <Text style={styles.refLabel}>{t("Morning check-in")}</Text>
+            <Ionicons name="moon" size={22} color={colors.text} />
           </Affordance>
         </View>
 

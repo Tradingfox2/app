@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { LogBox, View } from "react-native";
+import { LogBox, useWindowDimensions, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -21,6 +21,8 @@ function RootLayout() {
   const [iconsLoaded, iconError] = useIconFonts();
   const [fontsLoaded, fontError] = useAthleteFonts();
   const reduceMotion = useReducedMotion();
+  const { width } = useWindowDimensions();
+  const wide = width >= 768;
   const loaded = iconsLoaded && (fontsLoaded || Boolean(fontError));
   const error = iconError;
 
@@ -35,8 +37,9 @@ function RootLayout() {
       <SafeAreaProvider>
         <AuthProvider>
           <I18nProvider>
-            <View style={{ flex: 1, backgroundColor: colors.bg }}>
+            <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: wide ? "center" : "stretch" }}>
               <StatusBar style="light" />
+              <View style={{ flex: 1, width: "100%", maxWidth: wide ? 480 : undefined }}>
               {/*
                 Cold start uses the initial URL; warm start uses later url events.
                 Expo Router owns both. app/+native-intent.ts rewrites ironflow://
@@ -50,6 +53,7 @@ function RootLayout() {
                   animationDuration: reduceMotion ? 0 : 180,
                 }}
               />
+              </View>
             </View>
           </I18nProvider>
         </AuthProvider>

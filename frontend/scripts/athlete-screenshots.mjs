@@ -2,7 +2,7 @@ import { chromium } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 
 const base = process.env.SHOT_BASE || "http://localhost:8082";
-const out = process.env.SHOT_DIR || "/opt/cursor/artifacts/athlete-before";
+const out = process.env.SHOT_DIR || "/opt/cursor/artifacts/athlete-night-studio";
 const widths = [
   { name: "1440x900", width: 1440, height: 900 },
   { name: "1280x800", width: 1280, height: 800 },
@@ -100,6 +100,23 @@ async function installRoutes(page, mode) {
       return fulfill(route, [{ id: "ex-1", slug: "bench-press", name: "Bench Press", equipment: "barbell", difficulty: "intermediate", primary_muscle_slug: "chest", category: "strength" }]);
     }
     if (path === "/muscles") return fulfill(route, [{ slug: "chest", name: "Chest" }]);
+    if (path === "/programs" && method === "GET") {
+      return fulfill(route, [{
+        id: "prog-1",
+        status: "active",
+        program: {
+          weeks: [{
+            week_index: 1,
+            phase: "accumulation",
+            days: [{
+              day_index: 1,
+              focus: "push",
+              exercises: [{ exercise_slug: "bench-press", name: "Bench Press", sets: 4, reps_min: 6, reps_max: 8, target_rpe: 8, rest_sec: 90 }],
+            }],
+          }],
+        },
+      }]);
+    }
     if (path === "/communities") return fulfill(route, []);
     if (path === "/coaches") return fulfill(route, []);
     if (path.startsWith("/community/rankings") || path === "/rankings") return fulfill(route, { rows: [], opted_in: false });
@@ -117,7 +134,14 @@ async function installRoutes(page, mode) {
 }
 
 async function shot(page, name) {
-  await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
+  await page.screenshot({ path: `${out}/${name}.png`, fullPage: false });
+}
+
+async function visit(page, path, testId, name) {
+  await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId(testId).waitFor({ timeout: 20000 });
+  await page.waitForTimeout(350);
+  await shot(page, name);
 }
 
 const browser = await chromium.launch();
@@ -132,30 +156,21 @@ for (const viewport of widths) {
   await context.addInitScript(() => localStorage.setItem("ironflow_token", JSON.stringify("synthetic-test-token")));
   const page = await context.newPage();
   await installRoutes(page, "known");
-  await page.goto(`${base}/home`, { waitUntil: "networkidle" });
-  await page.getByTestId("home-screen").waitFor({ timeout: 20000 });
-  await page.waitForTimeout(400);
-  await shot(page, `home-${viewport.name}`);
+  await visit(page, "/home", "home-screen", `home-${viewport.name}`);
+  await visit(page, "/workouts", "workouts-screen", `workouts-${viewport.name}`);
+  await page.getByTestId("tab-library-btn").click();
+  await page.waitForTimeout(200);
+  await shot(page, `library-${viewport.name}`);
+  await visit(page, "/workout/w-1", "workout-logger", `logger-${viewport.name}`);
+  await visit(page, "/community", "community-screen", `community-${viewport.name}`);
   if (viewport.name === "1440x900" || viewport.name === "390x844") {
-    await page.goto(`${base}/workouts`, { waitUntil: "networkidle" });
-    await page.getByTestId("workouts-screen").waitFor({ timeout: 20000 });
-    await page.waitForTimeout(300);
-    await shot(page, `workouts-${viewport.name}`);
-    await page.getByTestId("tab-library-btn").click();
-    await page.waitForTimeout(200);
-    await shot(page, `library-${viewport.name}`);
-    await page.goto(`${base}/workout/w-1`, { waitUntil: "networkidle" });
-    await page.getByTestId("workout-logger").waitFor({ timeout: 20000 });
-    await page.waitForTimeout(300);
-    await shot(page, `logger-${viewport.name}`);
-    await page.goto(`${base}/community`, { waitUntil: "networkidle" });
-    await page.getByTestId("community-screen").waitFor({ timeout: 20000 });
-    await page.waitForTimeout(300);
-    await shot(page, `community-${viewport.name}`);
-    await page.goto(`${base}/labs`, { waitUntil: "networkidle" });
-    await page.getByTestId("labs-screen").waitFor({ timeout: 20000 });
-    await page.waitForTimeout(300);
-    await shot(page, `labs-${viewport.name}`);
+    await visit(page, "/labs", "labs-screen", `labs-${viewport.name}`);
+    await visit(page, "/sources", "sources-screen", `sources-${viewport.name}`);
+    await visit(page, "/program", "program-screen", `program-${viewport.name}`);
+    await visit(page, "/settings", "settings-screen", `settings-${viewport.name}`);
+    await visit(page, "/morning", "morning-screen", `morning-${viewport.name}`);
+    await visit(page, "/analysis", "analysis-screen", `analysis-${viewport.name}`);
+    await visit(page, "/auth", "auth-screen", `auth-${viewport.name}`);
   }
   await context.close();
 }

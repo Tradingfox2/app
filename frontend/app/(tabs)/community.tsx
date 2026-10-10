@@ -114,11 +114,21 @@ export default function CommunityScreen() {
           <Affordance accessibilityRole="button" accessibilityLabel={t("Search")} testID="open-search" style={styles.headerAction} onPress={() => router.push("/search")}>
             <HeaderMark name="search" />
           </Affordance>
-          <Affordance accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
+          <Affordance accessibilityRole="button" accessibilityLabel={t(isCoach ? "Open partner dashboard" : "Become a coach")} style={styles.headerAction} onPress={() => isCoach ? router.push("/partner" as Href) : router.push("/coach/onboarding")}>
             <HeaderMark name={isCoach ? "dashboard" : "coach"} />
           </Affordance>
         </View>
 
+        {hasClub && !isCoach ? (
+          <View style={[styles.signalActions, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md }]}>
+            <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => {
+              const club = mine.find((row) => row.membership?.status === "active");
+              if (club) openCommunity(club);
+            }}>
+              <Text style={styles.primaryActionText}>{t("YOUR CLUB")}</Text>
+            </Affordance>
+          </View>
+        ) : (
         <View style={styles.signalBand}>
           <View style={styles.signalCopy}>
             <Text style={styles.signalTitle}>{t("Find your people. Build momentum.")}</Text>
@@ -136,12 +146,10 @@ export default function CommunityScreen() {
               <Affordance accessibilityRole="button" style={styles.secondaryAction} testID="community-start-club" onPress={() => router.push("/coach/onboarding")}>
                 <Text style={styles.secondaryActionText}>{t("START A CLUB")}</Text>
               </Affordance>
-            </> : !loading ? <Affordance signal="brand" accessibilityRole="button" style={styles.primaryAction} testID="community-primary-cta" onPress={() => router.push("/coach/onboarding")}>
-              <Ionicons name="arrow-forward" size={17} color={colors.brandOn} aria-hidden accessibilityElementsHidden importantForAccessibility="no" />
-              <Text style={styles.primaryActionText}>{t("BECOME A COACH")}</Text>
-            </Affordance> : null}
+            </> : null}
           </View>
         </View>
+        )}
 
         <LiveNowStrip inset feedback />
 
@@ -155,6 +163,7 @@ export default function CommunityScreen() {
 
         {tab === "feed" ? (
           <View testID="feed">
+            {hasClub ? <Composer onPublished={feed.prepend} /> : null}
             <StoriesTray />
             <View style={styles.scopeRow}>
               {(["all", "friends", "mine"] as const).map(scope => (
@@ -163,7 +172,7 @@ export default function CommunityScreen() {
                 </Affordance>
               ))}
             </View>
-            <Composer onPublished={feed.prepend} />
+            {hasClub ? null : <Composer onPublished={feed.prepend} />}
             {trending.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeRow} testID="trending-tags">
               <Ionicons name="trending-up" size={16} color={colors.text} style={{ alignSelf: "center" }} />
               {trending.map(row => <Affordance key={row.tag} accessibilityRole="button" testID={`trending-${row.tag}`} onPress={() => router.push({ pathname: "/tag/[tag]", params: { tag: row.tag } })} style={styles.scopeChip}>

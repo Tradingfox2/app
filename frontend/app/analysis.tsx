@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import { api, type TrendSeriesName, type Trends } from "@/src/api";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
@@ -31,7 +31,6 @@ function muscleTitle(slug: string, t: (source: string) => string): string {
 }
 
 export default function AnalysisScreen() {
-  const router = useRouter();
   const { t, formatDate } = useI18n();
   const [days, setDays] = useState<30 | 90>(30);
   const [data, setData] = useState<Trends | null>(null);
@@ -68,7 +67,7 @@ export default function AnalysisScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="analysis-screen">
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")}>
+        <Pressable onPress={leaveOrHome} hitSlop={12} testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")}>
           <Ionicons name="chevron-back" color={colors.text} size={26} />
         </Pressable>
         <Text style={styles.title}>{t("Trends")}</Text>

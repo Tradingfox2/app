@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, type Href } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import { api } from "@/src/api";
 import {
   FOCUS_LABELS,
@@ -54,6 +55,8 @@ function Chip({
     <Pressable
       testID={testID}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       style={press("chip", [styles.chip, active && styles.chipActive])}
     >
       <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{label}</Text>
@@ -130,9 +133,7 @@ function DayCard({
 }
 
 function goBack() {
-  // Deep links (web refresh, shared URL) have no history: fall back to Home.
-  if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/home");
+  leaveOrHome();
 }
 
 export default function ProgramScreen() {
@@ -141,6 +142,8 @@ export default function ProgramScreen() {
   const params = useLocalSearchParams<{ workoutId?: string | string[] }>();
   const targetWorkoutId = Array.isArray(params.workoutId) ? params.workoutId[0] : params.workoutId;
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [openedWeek, setOpenedWeek] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [programDoc, setProgramDoc] = useState<any>(null);
@@ -153,24 +156,31 @@ export default function ProgramScreen() {
   const [days, setDays] = useState(4);
   const [equipment, setEquipment] = useState<string[]>(["barbell", "dumbbell", "bodyweight"]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const list = await api.programs();
-      const active = list.find((p) => p.status === "active") ?? list[0];
+      setLoadError(null);
+      const active = Array.isArray(list) ? (list.find((p) => p.status === "active") ?? list[0]) : undefined;
       if (active) {
         const parsed = ProgramSchema.safeParse(active.program);
         if (parsed.success) {
           setProgramDoc(active);
           setProgram(parsed.data);
-          setWeekIdx(parsed.data.weeks[0]?.week_index ?? 1);
+          const first = parsed.data.weeks[0]?.week_index ?? 1;
+          setOpenedWeek((current) => current ?? first);
+          setWeekIdx((current) => (parsed.data.weeks.some((week) => week.week_index === current) ? current : first));
         }
+      } else {
+        setProgramDoc(null);
+        setProgram(null);
       }
-    } catch {
-      // no program yet
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : t("Could not load your plan."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -299,11 +309,9 @@ export default function ProgramScreen() {
         {program ? (
           <Pressable
             testID="regenerate-btn"
-            onPress={() => {
-              setProgram(null);
-              setProgramDoc(null);
-              setAdjustResult(null);
-            }}
+            accessibilityRole="button"
+            accessibilityLabel={t("Refresh plan")}
+            onPress={() => void load(true)}
             style={press("ghost", styles.backBtn)}
           >
             <Ionicons name="refresh" size={18} color={colors.textMuted} />
@@ -327,7 +335,14 @@ export default function ProgramScreen() {
         <ActivityIndicator color={colors.text} style={{ marginTop: spacing.xxl }} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
-          {!program ? (
+          {loadError && !program ? (
+            <View accessibilityRole="alert" testID="program-load-error" style={styles.recBanner}>
+              <Text style={styles.recTxt}>{loadError}</Text>
+              <Pressable accessibilityRole="button" testID="program-load-retry" onPress={() => void load()} style={styles.musclesLink}>
+                <Text style={styles.musclesLinkTxt}>{t("Retry")}</Text>
+              </Pressable>
+            </View>
+          ) : !program ? (
             <>
               <Text style={styles.sectionTitle}>{t("GOAL")}</Text>
               <View style={styles.chipRow}>
@@ -408,6 +423,14 @@ export default function ProgramScreen() {
             </>
           ) : (
             <>
+              {loadError ? (
+                <View accessibilityRole="alert" testID="program-load-error" style={styles.recBanner}>
+                  <Text style={styles.recTxt}>{loadError}</Text>
+                  <Pressable accessibilityRole="button" testID="program-load-retry" onPress={() => void load(true)} style={styles.musclesLink}>
+                    <Text style={styles.musclesLinkTxt}>{t("Retry")}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {rec && (
                 <View
                   style={[
@@ -457,7 +480,11 @@ export default function ProgramScreen() {
                   <Ionicons name="pulse" size={16} color={colors.text} />
                 )}
                 <Text style={styles.adjustTxt}>
-                  {adjusting ? t("CHECKING RECOVERY…") : t("ADJUST TODAY'S SESSION")}
+                  {adjusting
+                    ? t("CHECKING RECOVERY…")
+                    : weekIdx === (openedWeek ?? program.weeks[0]?.week_index)
+                      ? t("ADJUST TODAY'S SESSION")
+                      : t("ADJUST WEEK {week}", { week: weekIdx })}
                 </Text>
               </Pressable>
 
@@ -478,23 +505,19 @@ export default function ProgramScreen() {
                 </View>
               )}
 
-              {adjustResult?.adjusted && (
-                <DayCard
-                  day={adjustResult.day}
-                  badge={t("ADJUSTED")}
-                  onStart={() => startDay(adjustResult.day, true)}
-                  starting={startingDay === adjustResult.day.day_index}
-                />
-              )}
-
-              {week?.days.map((d) => (
-                <DayCard
-                  key={d.day_index}
-                  day={d}
-                  onStart={() => startDay(d)}
-                  starting={startingDay === d.day_index}
-                />
-              ))}
+              {(week?.days ?? []).map((d) => {
+                const replaced = Boolean(adjustResult?.adjusted && adjustResult.day?.day_index === d.day_index);
+                const day = replaced ? adjustResult.day : d;
+                return (
+                  <DayCard
+                    key={day.day_index}
+                    day={day}
+                    badge={replaced ? t("ADJUSTED") : undefined}
+                    onStart={() => startDay(day, replaced)}
+                    starting={startingDay === day.day_index}
+                  />
+                );
+              })}
             </>
           )}
         </ScrollView>
@@ -557,12 +580,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface2,
-    minHeight: 40,
+    minHeight: 44,
     justifyContent: "center",
   },
-  chipActive: { backgroundColor: colors.surface2, borderColor: colors.border },
+  chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipTxt: { color: colors.textMuted, fontWeight: "400", fontSize: 13 },
-  chipTxtActive: { color: colors.text, fontWeight: "600" },
+  chipTxtActive: { color: colors.brandOn, fontWeight: "600" },
   cta: {
     marginTop: spacing.xl,
     backgroundColor: colors.brand,

@@ -67,10 +67,10 @@ const RECOVERY_LABELS: Record<MuscleStats["recovery_state"], string> = {
 };
 
 const RECOVERY_COLORS: Record<MuscleStats["recovery_state"], string> = {
-  ready: "#4CAF50",
-  recovering: "#FF9800",
-  high_load: "#F44336",
-  untrained: "#9E9E9E",
+  ready: colors.success,
+  recovering: colors.warning,
+  high_load: colors.error,
+  untrained: colors.textDim,
 };
 
 const LOAD_LABELS: Record<LoadState, string> = {
@@ -656,7 +656,7 @@ export function MuscleDetailSheet({
           </View>
         ) : error ? (
           <View style={styles.errorState}>
-            <Ionicons name="alert-circle-outline" size={48} color="#F44336" />
+            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
             <Text style={styles.errorText}>{error}</Text>
             <Pressable
               style={styles.retryButton}

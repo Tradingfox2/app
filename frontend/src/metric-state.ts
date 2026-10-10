@@ -50,7 +50,16 @@ export function readReadiness(data: unknown): ReadinessView {
   return { kind: "scored", score: block.score, verdict: verdictOf(block.verdict), confidence, missing };
 }
 
-export function metricCaption(value: number | null, connected: boolean): "not_connected" | "not_measured" | "recorded_zero" | "measured" {
+export type MetricCaption = "not_connected" | "not_measured" | "recorded_zero" | "measured" | "sample_data";
+
+/** A simulated point is sample data. A missing flag is not an invitation to invent a reading. */
+export function readSimulated(node: unknown): boolean {
+  if (node == null || typeof node !== "object" || Array.isArray(node)) return false;
+  return (node as { simulated?: unknown }).simulated === true;
+}
+
+export function metricCaption(value: number | null, connected: boolean, simulated = false): MetricCaption {
+  if (simulated && value !== null) return "sample_data";
   if (value === null) return connected ? "not_measured" : "not_connected";
   if (value === 0) return "recorded_zero";
   return "measured";

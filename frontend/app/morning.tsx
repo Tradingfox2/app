@@ -2,7 +2,8 @@ import { createElement, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { CoachMark } from "@/src/components/night/coach-mark";
+import { leaveOrHome } from "@/src/leave-home";
 import { api } from "@/src/api";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { useI18n } from "@/src/i18n";
@@ -136,7 +137,7 @@ export default function MorningCheckin() {
         mood,
         local_day: localDay(),
       });
-      router.back();
+      leaveOrHome();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("Could not save how you slept"));
       setSaving(false);
@@ -149,12 +150,13 @@ export default function MorningCheckin() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("Back")}
-          onPress={() => router.back()}
+          onPress={leaveOrHome}
           style={styles.back}
           testID="morning-back"
         >
           <Ionicons name="arrow-back" size={20} color={colors.text} />
         </Pressable>
+        <CoachMark size={56} />
         <Text style={styles.line} testID="morning-line">{t("Tell your coach how you slept.")}</Text>
         <View style={styles.block}>
           <Text style={styles.label}>{t("Sleep hours")}</Text>
@@ -184,7 +186,7 @@ export default function MorningCheckin() {
           accessibilityRole="button"
           accessibilityLabel={t("Skip for today")}
           testID="morning-skip"
-          onPress={() => router.back()}
+          onPress={leaveOrHome}
           style={(state) => [styles.skip, pressableStyle(state, { variant: "quiet", reduceMotion })]}
         >
           <Text style={styles.skipTxt}>{t("Skip for today")}</Text>
@@ -230,7 +232,7 @@ const styles = StyleSheet.create({
   stepOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   stepTxt: { color: colors.text, fontSize: 16, fontWeight: "700" },
   stepTxtOn: { color: colors.brandOn, fontSize: 16, fontWeight: "700" },
-  error: { color: colors.live, marginBottom: spacing.md },
+  error: { color: colors.errorText, marginBottom: spacing.md },
   save: {
     minHeight: 52,
     borderRadius: radius.md,

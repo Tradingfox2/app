@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { leaveOrHome } from "@/src/leave-home";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import Svg, { Polyline } from "react-native-svg";
@@ -236,6 +236,8 @@ export default function LabsScreen() {
   const [markers, setMarkers] = useState<BiomarkerSeries[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -243,11 +245,15 @@ export default function LabsScreen() {
       const [r, m] = await Promise.all([api.labReports(), api.biomarkersGrouped()]);
       setReports(r);
       setMarkers(m);
+      setLoadError(null);
       return r;
-    } catch {
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : t("Could not load labs."));
       return [];
+    } finally {
+      setLoaded(true);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -325,7 +331,7 @@ export default function LabsScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="labs-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back")} testID="back-btn" onPress={leaveOrHome} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t("Blood panels")}</Text>
@@ -354,6 +360,8 @@ export default function LabsScreen() {
         </View>
         <View style={styles.uploadRow}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("UPLOAD PDF / FILE")}
             testID="upload-pdf-btn"
             onPress={pickDocument}
             disabled={uploading}
@@ -363,6 +371,8 @@ export default function LabsScreen() {
             <Text style={styles.uploadTxt}>{t("UPLOAD PDF / FILE")}</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("PHOTO")}
             testID="upload-photo-btn"
             onPress={pickPhoto}
             disabled={uploading}
@@ -380,8 +390,19 @@ export default function LabsScreen() {
         )}
 
         <Text style={styles.sectionTitle}>{t("REPORTS")}</Text>
-        {reports.length === 0 ? (
-          <Text style={styles.emptyTxt}>
+        {loadError ? (
+          <View accessibilityRole="alert" testID="labs-load-error" style={styles.education}>
+            <Ionicons name="alert-circle" size={16} color={colors.errorText} />
+            <View style={{ flex: 1, gap: spacing.sm }}>
+              <Text style={styles.educationTxt}>{loadError}</Text>
+              <Pressable accessibilityRole="button" testID="labs-load-retry" onPress={() => void load()} style={styles.uploadBtnAlt}>
+                <Text style={styles.uploadTxtAlt}>{t("Retry")}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+        {loaded && !loadError && reports.length === 0 ? (
+          <Text style={styles.emptyTxt} testID="labs-empty">
             {t("Upload a blood panel (PDF or photo). IronFlow will standardize its results, plot numeric markers over time and give a sport-focused educational read.")}
           </Text>
         ) : (

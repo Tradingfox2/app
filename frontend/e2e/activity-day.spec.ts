@@ -105,9 +105,10 @@ test("home week rings open an activity day with logged minutes only", async ({ p
   expect(todayCard!.y + todayCard!.height <= strip!.y + 2).toBeTruthy();
   expect(strip!.y + strip!.height <= rings!.y + 2).toBeTruthy();
   expect(todayCard!.y + todayCard!.height <= fold).toBeTruthy();
-  await expect(page.getByTestId("rings-card").locator("circle").nth(1)).toHaveAttribute("stroke", "#FF8A00");
-  await expect(page.getByTestId("rings-card").locator("circle").nth(3)).toHaveAttribute("stroke", "#3D9A6A");
-  await expect(page.getByTestId("rings-card").locator("circle").nth(5)).toHaveAttribute("stroke", "#7AA2C9");
+  await expect(page.getByTestId("rings-card").locator("circle")).toHaveCount(0);
+  await expect(page.getByTestId("ring-strain")).toBeVisible();
+  await expect(page.getByTestId("ring-recovery")).toBeVisible();
+  await expect(page.getByTestId("ring-sleep")).toBeVisible();
 
   await page.getByTestId(`week-day-${today}`).click();
   await expect(page).toHaveURL(new RegExp(`/activity\\?day=${today}`));

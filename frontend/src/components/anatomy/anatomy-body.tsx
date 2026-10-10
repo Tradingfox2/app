@@ -123,7 +123,7 @@ export function AnatomyBody({
 
   const getLoadPercent = useCallback(
     (slug: MuscleSlug): number => {
-      const volume = volumes[slug] ?? 0;
+      const volume = volumes?.[slug] ?? 0;
       if (max <= 0 || volume <= 0) return 0;
       return Math.round((volume / max) * 100);
     },

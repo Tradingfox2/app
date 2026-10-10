@@ -17,6 +17,7 @@ import { api, type GymReward } from "@/src/api";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { datedSessionTitle } from "@/src/session-title";
+import { leaveOrHome } from "@/src/leave-home";
 
 export default function CheckinScreen() {
   const { t, formatDate, formatNumber } = useI18n();
@@ -114,7 +115,7 @@ export default function CheckinScreen() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="checkin-screen">
       <View style={styles.header}>
-        <Pressable testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable testID="back-btn" accessibilityRole="button" accessibilityLabel={t("Back")} onPress={leaveOrHome} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t("GYM CHECK-IN")}</Text>

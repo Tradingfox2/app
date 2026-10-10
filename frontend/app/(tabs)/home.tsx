@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -8,7 +9,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, type Href } from "expo-router";
@@ -18,9 +18,11 @@ import { MuscleHeatmap } from "@/src/components/muscle-heatmap";
 import { DidYouKnow } from "@/src/components/did-you-know";
 import { LiveNowStrip } from "@/src/components/live-now-strip";
 import { ActivityRing } from "@/src/components/activity-ring";
+import { CoachMark } from "@/src/components/night/coach-mark";
+import { MeterRow } from "@/src/components/night/meter-row";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, radius, spacing, type, card, raised } from "@/src/theme";
-import { measuredNumber, metricCaption, readReadiness } from "@/src/metric-state";
+import { measuredNumber, metricCaption, readReadiness, readSimulated, type MetricCaption } from "@/src/metric-state";
 import type { MuscleSlug } from "@/src/components/anatomy/muscle-types";
 import { combinationActivation } from "@/src/components/anatomy/muscle-relations";
 import { useI18n } from "@/src/i18n";
@@ -32,7 +34,6 @@ import {
   type WeekDayActivity,
 } from "@/src/activity-day";
 import {
-  loadRingMax,
   readTrainingLoad,
   readTrainingTotals,
   readWorkoutCount,
@@ -44,81 +45,6 @@ function unreadLabel(count: number): string | null {
   return count > 99 ? "99+" : String(count);
 }
 
-function Ring({
-  value,
-  figure,
-  max,
-  color,
-  label,
-  unit,
-  caption,
-  testID,
-}: {
-  value: number | null;
-  figure?: string;
-  max: number;
-  color: string;
-  label: string;
-  unit?: string;
-  caption?: string;
-  testID?: string;
-}) {
-  const size = 96;
-  const stroke = 8;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const empty = value === null;
-  const pct = empty || max <= 0 ? 0 : Math.max(0, Math.min(1, value / max));
-  const offset = c * (1 - pct);
-  const shown = figure ?? (empty ? "—" : String(Math.round(value)));
-  return (
-    <View style={{ alignItems: "center" }} testID={testID}>
-      <Svg width={size} height={size}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={colors.border}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        {!empty ? (
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            stroke={color}
-            strokeWidth={stroke}
-            fill="none"
-            strokeDasharray={c}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          />
-        ) : null}
-      </Svg>
-      <View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={shown.length > 3 ? { color: colors.hero, fontSize: 18, fontWeight: "800" } : type.hero}>{shown}</Text>
-        {unit && (
-          <Text style={{ color: colors.textMuted, fontSize: 10 }}>{unit}</Text>
-        )}
-      </View>
-      <Text style={styles.ringLabel}>{label}</Text>
-      {caption ? <Text style={styles.ringCaption}>{caption}</Text> : null}
-    </View>
-  );
-}
-
 function greetingKey(date: Date): "Good morning" | "Good afternoon" | "Good evening" {
   const hour = date.getHours();
   if (hour < 12) return "Good morning";
@@ -126,10 +52,7 @@ function greetingKey(date: Date): "Good morning" | "Good afternoon" | "Good even
   return "Good evening";
 }
 
-function captionLabel(
-  kind: ReturnType<typeof metricCaption>,
-  t: (source: string) => string,
-): string {
+function captionLabel(kind: MetricCaption, t: (source: string) => string): string {
   switch (kind) {
     case "not_connected":
       return t("Not connected");
@@ -139,6 +62,8 @@ function captionLabel(
       return t("Recorded zero");
     case "measured":
       return t("Measured");
+    case "sample_data":
+      return t("Sample data");
     default: {
       const unreachable: never = kind;
       return unreachable;
@@ -165,6 +90,8 @@ export default function Home() {
   const [notifUnread, setNotifUnread] = useState(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [mergePrompt, setMergePrompt] = useState<{ slugs: string[]; openId: string; openTitle: string } | null>(null);
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
   const [coachTip, setCoachTip] = useState<{ tip: string } | null>(null);
@@ -197,10 +124,15 @@ export default function Home() {
       setCalendarError(reason instanceof Error ? reason.message : t("Could not load training days"));
     }
     setCalendarSettled(true);
-    if (heatResult.status === "fulfilled") {
-      setHeatmap(heatResult.value);
+    const heatPayload = heatResult.status === "fulfilled" ? heatResult.value : null;
+    const heatVolumes = heatPayload && typeof heatPayload === "object" && !Array.isArray(heatPayload) ? heatPayload.volumes : null;
+    const heatMax = heatPayload && typeof heatPayload === "object" && !Array.isArray(heatPayload) ? heatPayload.max : null;
+    if (heatVolumes && typeof heatVolumes === "object" && !Array.isArray(heatVolumes) && typeof heatMax === "number") {
+      setHeatmap({ volumes: heatVolumes, max: heatMax });
       setHeatLoaded(true);
       setHeatError(null);
+    } else if (heatResult.status === "fulfilled") {
+      setHeatError(t("Could not load muscle load"));
     } else {
       const reason = heatResult.reason;
       setHeatError(reason instanceof Error ? reason.message : t("Could not load muscle load"));
@@ -243,7 +175,6 @@ export default function Home() {
   const strain = measuredNumber(data?.strain);
   const trainingLoad = readTrainingLoad(data);
   const loadWeek = trainingLoad?.week ?? null;
-  const showSessionLoad = data?.strain == null;
   const recovery = measuredNumber(data?.recovery);
   const sleep = measuredNumber(data?.sleep);
   const hrv = measuredNumber(data?.hrv);
@@ -253,7 +184,8 @@ export default function Home() {
   const training = readTrainingTotals(data);
   const calendar = workoutStamps ? weekActivity(workoutStamps) : null;
   const wearableConnected = Boolean(data?.wearable_connected);
-  const ringNote = (value: number | null) => captionLabel(metricCaption(value, wearableConnected), t);
+  const noteFor = (node: unknown, value: number | null) =>
+    captionLabel(metricCaption(value, wearableConnected, readSimulated(node)), t);
   const readinessConfidence = data?.readiness?.confidence;
   const showMorning = typeof readinessConfidence === "number" && readinessConfidence < 0.5;
   const activeWorkout = data?.active_workout ?? null;
@@ -269,10 +201,26 @@ export default function Home() {
   };
 
   const startDay = async () => {
-    if (!nextSession?.program_id || starting) return;
+    if (!nextSession?.program_id || starting || mergeBusy) return;
     setStarting(true);
     setStartError(null);
     try {
+      const slugs = (Array.isArray(nextSession.exercises) ? nextSession.exercises : [])
+        .map((row: { exercise_slug?: string }) => row.exercise_slug)
+        .filter((slug: string | undefined): slug is string => Boolean(slug));
+      let open: { id: string; title?: string; ended_at?: string | null } | undefined;
+      try {
+        const existing = await api.workouts();
+        if (Array.isArray(existing)) {
+          open = existing.find((workout: { ended_at?: string | null; id: string; title?: string }) => workout && !workout.ended_at);
+        }
+      } catch {
+        open = undefined;
+      }
+      if (open?.id) {
+        setMergePrompt({ slugs, openId: open.id, openTitle: open.title || t("Session") });
+        return;
+      }
       const workout = await api.startProgramDay(nextSession.program_id, {
         week_index: nextSession.week_index,
         day_index: nextSession.day_index,
@@ -286,8 +234,43 @@ export default function Home() {
     }
   };
 
+  const confirmMerge = async () => {
+    if (!mergePrompt || mergeBusy) return;
+    setMergeBusy(true);
+    setStartError(null);
+    try {
+      if (mergePrompt.slugs.length) await api.planExercises(mergePrompt.openId, mergePrompt.slugs);
+      const openId = mergePrompt.openId;
+      setMergePrompt(null);
+      router.push(`/workout/${openId}` as Href);
+    } catch (cause) {
+      failStart(cause);
+    } finally {
+      setMergeBusy(false);
+    }
+  };
+
+  const startFreshDay = async () => {
+    if (!mergePrompt || mergeBusy || !nextSession?.program_id) return;
+    setMergeBusy(true);
+    setStartError(null);
+    try {
+      const workout = await api.startProgramDay(nextSession.program_id, {
+        week_index: nextSession.week_index,
+        day_index: nextSession.day_index,
+      });
+      if (!workout?.id) throw new Error(t("Could not start session"));
+      setMergePrompt(null);
+      router.push(`/workout/${workout.id}` as Href);
+    } catch (cause) {
+      failStart(cause);
+    } finally {
+      setMergeBusy(false);
+    }
+  };
+
   const startEmpty = async () => {
-    if (starting) return;
+    if (starting || activeWorkout) return;
     setStarting(true);
     setStartError(null);
     try {
@@ -367,16 +350,27 @@ export default function Home() {
           </View>
         ) : null}
 
-        <LinearGradient
-          colors={[colors.brandWash, colors.surface]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.todayCard, raised("card")]}
-          testID="today-card"
-        >
+        <View testID="today-card" style={[styles.todayCard, styles.stage, raised("card")]}>
+          <LinearGradient
+            colors={[colors.brandWash, "transparent"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 0.55 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={styles.stageMark}>
+            <CoachMark size={48} />
+          </View>
           <Text style={styles.cardTitle}>{t("TODAY'S SESSION")}</Text>
           {activeWorkout ? (
-            <Text style={styles.todayMeta}>{activeWorkout.title}</Text>
+            <Text style={[styles.stageTitle]} numberOfLines={2}>{activeWorkout.title}</Text>
+          ) : nextSession ? (
+            <Text style={styles.stageTitle} numberOfLines={2}>{t(FOCUS_LABELS[nextSession.focus] ?? nextSession.focus)}</Text>
+          ) : data ? (
+            <Text style={styles.stageTitle}>{t("No training plan yet")}</Text>
+          ) : null}
+          {activeWorkout ? (
+            <Text style={styles.todayMeta}>{t("· in progress")}</Text>
           ) : nextSession ? (
             <Text style={styles.todayMeta} testID="today-plan">
               {t("WEEK {week}", { week: nextSession.week_index })}
@@ -385,10 +379,8 @@ export default function Home() {
               {" · "}
               {t(FOCUS_LABELS[nextSession.focus] ?? nextSession.focus)}
               {" · "}
-              {t("{count} exercises", { count: formatNumber(nextSession.exercises?.length ?? 0) })}
+              {t((nextSession.exercises?.length ?? 0) === 1 ? "{count} exercise" : "{count} exercises", { count: formatNumber(nextSession.exercises?.length ?? 0) })}
             </Text>
-          ) : data ? (
-            <Text style={styles.todayMeta}>{t("No training plan yet")}</Text>
           ) : null}
           {activeWorkout ? (
             <Pressable
@@ -414,49 +406,72 @@ export default function Home() {
               <Text style={type.button}>{starting ? t("STARTING…") : t("START DAY")}</Text>
             </Pressable>
           ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("Open your training plan")}
-              onPress={() => router.push("/program")}
-              style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion })]}
-              testID="today-generate"
-            >
-              <Ionicons name="sparkles" size={18} color={colors.brandOn} />
-              <Text style={type.button}>{t("GENERATE PLAN")}</Text>
-            </Pressable>
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("Generate plan")}
+                onPress={() => router.push("/program")}
+                style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion })]}
+                testID="today-generate"
+              >
+                <Ionicons name="sparkles" size={18} color={colors.brandOn} />
+                <Text style={type.button}>{t("GENERATE PLAN")}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("Start a workout")}
+                onPress={() => void startEmpty()}
+                disabled={starting}
+                style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: starting })]}
+                testID="start-workout-cta"
+              >
+                <Text style={styles.secondaryCtaTxt}>{starting ? t("STARTING…") : t("START EMPTY")}</Text>
+              </Pressable>
+            </>
           )}
-          {!activeWorkout ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("Start a workout")}
-              onPress={() => void startEmpty()}
-              disabled={starting}
-              style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: starting })]}
-              testID={nextSession ? "today-start-empty" : "start-workout-cta"}
-            >
-              <Text style={styles.secondaryCtaTxt}>{starting ? t("STARTING…") : t("START EMPTY")}</Text>
-            </Pressable>
-          ) : nextSession ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("Start a workout")}
-              onPress={() => void startEmpty()}
-              disabled={starting}
-              style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: starting })]}
-              testID="today-start-empty"
-            >
-              <Text style={styles.secondaryCtaTxt}>{t("START EMPTY")}</Text>
-            </Pressable>
-          ) : null}
           {startError ? (
             <View style={styles.errorBanner} accessibilityRole="alert">
               <Ionicons name="alert-circle" color={colors.live} size={16} />
               <Text style={styles.errorTxt} testID="start-error">{startError}</Text>
             </View>
           ) : null}
-        </LinearGradient>
+        </View>
 
-        <LiveNowStrip affordance />
+        <View style={styles.tipCard} testID="coach-tip-card">
+          <Pressable
+            onPress={() => router.push("/coach/chat" as Href)}
+            accessibilityRole="button"
+            accessibilityLabel={t("Open the AI coach")}
+            testID="coach-tip-open"
+            style={(state) => [styles.coachLine, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          >
+            <CoachMark size={48} />
+            <View style={{ flex: 1 }}>
+              <View style={styles.cardHead}>
+                <Text style={styles.tipTitle}>{t("COACH")}</Text>
+                {coach && !coach.connected ? (
+                  <View style={styles.coachBadge}>
+                    <Ionicons name="alert-circle" size={14} color={colors.warning} />
+                    <Text style={styles.coachBadgeTxt}>{t("AI OFFLINE")}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.tipTxt} testID="coach-tip-text">
+                {coachTip?.tip ?? t("Recovery is your compass. Push hard on green days, glide on red ones.")}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/program")}
+            accessibilityRole="button"
+            accessibilityLabel={t("Open your training plan")}
+            testID="coach-tip-plan"
+            style={(state) => [styles.tipPlan, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          >
+            <Text style={styles.tipPlanTxt}>{t("TRAINING PLAN")}</Text>
+          </Pressable>
+        </View>
 
         {data ? (
           <View style={styles.statsCard} testID="readiness-card">
@@ -500,6 +515,8 @@ export default function Home() {
           </Pressable>
         ) : null}
 
+        <LiveNowStrip affordance />
+
         <View style={styles.ringsCard} testID="rings-card">
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t("TODAY")}</Text>
@@ -517,48 +534,48 @@ export default function Home() {
             </View>
           ) : data ? (
             <>
-              <View style={styles.ringPlate}>
-                <View style={styles.rings}>
-                  {showSessionLoad ? (
-                    <Ring
-                      value={loadWeek}
-                      figure={loadWeek == null ? "—" : formatNumber(Math.round(loadWeek))}
-                      max={loadRingMax(trainingLoad)}
-                      color={colors.blaze}
-                      label={t("LOAD")}
-                      caption={loadWeek == null ? t("Not measured") : loadWeek === 0 ? t("Recorded zero") : t("From finished sessions")}
-                      testID="ring-load"
-                    />
-                  ) : (
-                    <Ring
-                      value={strain}
-                      max={21}
-                      color={colors.blaze}
-                      label={t("STRAIN")}
-                      caption={ringNote(strain)}
-                      testID="ring-strain"
-                    />
-                  )}
-                  <Ring
-                    value={recovery}
-                    max={100}
-                    color={colors.success}
-                    label={t("RECOVERY")}
-                    unit="%"
-                    caption={ringNote(recovery)}
-                    testID="ring-recovery"
-                  />
-                  <Ring
-                    value={sleep}
-                    figure={sleep == null ? "—" : formatNumber(sleep)}
-                    max={10}
-                    color={colors.info}
-                    label={t("SLEEP")}
-                    unit="h"
-                    caption={ringNote(sleep)}
-                    testID="ring-sleep"
-                  />
-                </View>
+              <View style={styles.meters}>
+                <MeterRow
+                  value={strain}
+                  max={21}
+                  label={t("STRAIN")}
+                  caption={noteFor(data?.strain, strain)}
+                  testID="ring-strain"
+                />
+                <MeterRow
+                  value={recovery}
+                  figure={recovery == null ? "—" : formatNumber(Math.round(recovery))}
+                  max={100}
+                  label={t("RECOVERY")}
+                  unit="%"
+                  caption={noteFor(data?.recovery, recovery)}
+                  testID="ring-recovery"
+                />
+                <MeterRow
+                  value={sleep}
+                  figure={sleep == null ? "—" : formatNumber(sleep)}
+                  max={10}
+                  label={t("SLEEP")}
+                  unit="h"
+                  caption={noteFor(data?.sleep, sleep)}
+                  testID="ring-sleep"
+                />
+              </View>
+              <View style={styles.metricRow}>
+                <MetricCard
+                  testID="metric-hrv"
+                  label="HRV"
+                  value={hrv == null ? "—" : formatNumber(Math.round(hrv))}
+                  unit="ms"
+                  note={noteFor(data?.hrv, hrv)}
+                />
+                <MetricCard
+                  testID="metric-rhr"
+                  label={t("RESTING HR")}
+                  value={restingHr == null ? "—" : formatNumber(Math.round(restingHr))}
+                  unit="bpm"
+                  note={noteFor(data?.resting_hr, restingHr)}
+                />
               </View>
               {!wearableConnected && (
                 <Pressable
@@ -580,7 +597,13 @@ export default function Home() {
         </View>
 
         {review ? (
-          <View style={styles.statsCard} testID="weekly-review-card">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Open this review")}
+            testID="weekly-review-card"
+            onPress={() => router.push("/analysis" as Href)}
+            style={(state) => [styles.statsCard, pressableStyle(state, { variant: "surface", reduceMotion })]}
+          >
             <Text style={styles.cardTitle}>{t("WEEKLY REVIEW")}</Text>
             <Text style={styles.todayMeta} testID="weekly-review-headline">{review.headline}</Text>
             <Text style={styles.weekEmpty}>{t("WINS")}</Text>
@@ -589,19 +612,30 @@ export default function Home() {
             <Text style={styles.todayMeta}>{review.watch}</Text>
             <Text style={styles.weekEmpty}>{t("NEXT WEEK")}</Text>
             <Text style={styles.todayMeta}>{review.next_week_change}</Text>
-          </View>
+          </Pressable>
         ) : null}
 
         <View style={styles.statsCard} testID="training-week-card">
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t("TRAINING · 7 DAYS")}</Text>
             <View style={styles.streakPill}>
-              <Ionicons name="flame" size={12} color={colors.blaze} />
+              <Ionicons name="flame" size={12} color={colors.warning} />
               <Text style={styles.streakPillTxt}>
                 {training ? t("{count}d streak", { count: formatNumber(training.streakDays) }) : "—"}
               </Text>
             </View>
           </View>
+          {trainingLoad ? (
+            <View style={styles.loadLine} testID="week-load">
+              <Text style={styles.metricLabel}>{t("LOAD")}</Text>
+              <Text style={type.metric}>
+                {loadWeek == null ? "—" : formatNumber(Math.round(loadWeek))}
+              </Text>
+              <Text style={styles.metricNote}>
+                {loadWeek == null ? t("Not measured") : loadWeek === 0 ? t("Recorded zero") : t("From finished sessions")}
+              </Text>
+            </View>
+          ) : null}
           <WeekVolume
             loading={!dashSettled && training === null && workoutCount === null}
             error={dashError}
@@ -657,59 +691,6 @@ export default function Home() {
           <Text style={styles.coachRowTxt}>{t("TRAIN WITH A COACH")}</Text>
         </Pressable>
 
-        <View style={styles.metricRow}>
-          <MetricCard
-            testID="metric-hrv"
-            label="HRV"
-            value={hrv == null ? "—" : formatNumber(Math.round(hrv))}
-            unit="ms"
-            note={ringNote(hrv)}
-          />
-          <MetricCard
-            testID="metric-rhr"
-            label={t("RESTING HR")}
-            value={restingHr == null ? "—" : formatNumber(Math.round(restingHr))}
-            unit="bpm"
-            note={ringNote(restingHr)}
-          />
-        </View>
-
-        <View style={styles.tipCard} testID="coach-tip-card">
-          <Pressable
-            onPress={() => router.push("/coach/chat" as Href)}
-            accessibilityRole="button"
-            accessibilityLabel={t("Open the AI coach")}
-            testID="coach-tip-open"
-            style={(state) => pressableStyle(state, { variant: "surface", reduceMotion })}
-          >
-            <View style={styles.cardHead}>
-              <Text style={styles.tipTitle}>{t("COACH TIP")}</Text>
-              <View style={styles.tipMeta}>
-                {coach && !coach.connected ? (
-                  <View style={styles.coachBadge}>
-                    <Ionicons name="alert-circle" size={14} color={colors.warning} />
-                    <Text style={styles.coachBadgeTxt}>{t("AI OFFLINE")}</Text>
-                  </View>
-                ) : null}
-                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-              </View>
-            </View>
-            <Text style={styles.tipTxt} testID="coach-tip-text">
-              {coachTip?.tip ??
-                t("Recovery is your compass. Push hard on green days, glide on red ones.")}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/program")}
-            accessibilityRole="button"
-            accessibilityLabel={t("Open your training plan")}
-            testID="coach-tip-plan"
-            style={(state) => [styles.tipPlan, pressableStyle(state, { variant: "surface", reduceMotion })]}
-          >
-            <Text style={styles.tipPlanTxt}>{t("TRAINING PLAN")}</Text>
-          </Pressable>
-        </View>
-
         <View style={styles.heatCard} testID="home-heatmap-card">
           <Text style={styles.cardTitle}>{t("MUSCLE LOAD · 7 DAYS")}</Text>
           {heatError ? (
@@ -734,7 +715,7 @@ export default function Home() {
             activation={
               previewMuscle ? combinationActivation(previewMuscle) : undefined
             }
-            spinning
+            spinning={false}
             bodyWidth={previewMuscle ? 158 : 150}
             bodyHeight={previewMuscle ? 316 : 300}
             onPress={() =>
@@ -752,6 +733,36 @@ export default function Home() {
           ) : null}
         </View>
       </ScrollView>
+      <Modal
+        visible={mergePrompt !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { if (!mergeBusy) setMergePrompt(null); }}
+      >
+        <Pressable style={styles.mergeBackdrop} onPress={() => { if (!mergeBusy) setMergePrompt(null); }}>
+          <Pressable style={styles.mergeSheet} testID="merge-session-sheet" onPress={(event) => event.stopPropagation()}>
+            <Text style={type.section}>{t("Add these exercises to {title}?", { title: mergePrompt?.openTitle ?? "" })}</Text>
+            <Pressable
+              accessibilityRole="button"
+              testID="merge-into-open"
+              disabled={mergeBusy}
+              onPress={() => void confirmMerge()}
+              style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion, disabled: mergeBusy })]}
+            >
+              <Text style={type.button}>{t("ADD TO OPEN SESSION")}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              testID="merge-new-session"
+              disabled={mergeBusy}
+              onPress={() => void startFreshDay()}
+              style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: mergeBusy })]}
+            >
+              <Text style={styles.secondaryCtaTxt}>{t("NEW SESSION")}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -889,7 +900,7 @@ function WeekCalendar({
               size={22}
               stroke={2.5}
               progress={day.fill}
-              color={colors.blaze}
+              color={colors.text}
               marker={day.trained && day.fill <= 0}
             />
           </Pressable>
@@ -947,6 +958,8 @@ function QuickAction({
   const reduceMotion = useReducedMotion();
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
       testID={testID}
       onPress={onPress}
       style={(state) => [styles.quickBtn, pressableStyle(state, { variant: "surface", reduceMotion })]}
@@ -1027,6 +1040,20 @@ const styles = StyleSheet.create({
   retryBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
   retryTxt: { color: colors.text, fontWeight: "800" },
   todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md, overflow: "hidden" },
+  stage: { minHeight: 280, justifyContent: "flex-end" },
+  stageMark: { position: "absolute", top: spacing.lg, right: spacing.lg },
+  stageTitle: { ...type.stage, marginBottom: spacing.sm },
+  coachLine: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 72 },
+  meters: { gap: spacing.md, marginBottom: spacing.md },
+  loadLine: { marginBottom: spacing.md },
+  mergeBackdrop: { flex: 1, backgroundColor: "rgba(16,20,24,0.72)", justifyContent: "flex-end", padding: spacing.lg },
+  mergeSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
   todayMeta: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: spacing.md },
   secondaryCta: {
     minHeight: 44,
@@ -1141,7 +1168,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "transparent",
   },
-  weekDayToday: { borderColor: colors.textMuted },
+  weekDayToday: { borderColor: colors.brand },
   weekDayLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
   weekDayLabelToday: { color: colors.text },
   rings: {
@@ -1220,7 +1247,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
-  coachBadgeTxt: { color: colors.text, fontSize: 12, fontWeight: "400" },
+  coachBadgeTxt: { color: colors.warningText, fontSize: 12, fontWeight: "400" },
   heatCard: {
     marginTop: spacing.md,
     ...card,

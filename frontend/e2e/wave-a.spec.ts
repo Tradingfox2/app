@@ -66,7 +66,7 @@ test("home shows a skeleton, then today's plan, header badges, and the training-
   await expect(page.getByTestId("ring-strain")).toContainText("14");
   await expect(page.getByTestId("ring-load")).toHaveCount(0);
   await expect(page.getByTestId("today-plan")).toContainText("PUSH");
-  await expect(page.getByTestId("today-plan")).toContainText("1 exercises");
+  await expect(page.getByTestId("today-plan")).toContainText("1 exercise");
   await expect(page.getByTestId("home-dm-badge")).toHaveText("99+");
   await expect(page.getByTestId("home-notif-badge")).toHaveText("4");
   await expect(page.getByTestId("tab-community")).toContainText("99+");
@@ -224,9 +224,10 @@ test("without a strain metric the ring shows weekly session load", async ({ page
     strain: null,
     training: { ...todayBase.training, load_week: 420, load_28d_avg: 300, acwr: 1.4 },
   });
-  await expect(page.getByTestId("ring-load")).toContainText("LOAD");
-  await expect(page.getByTestId("ring-load")).toContainText("420");
-  await expect(page.getByTestId("ring-strain")).toHaveCount(0);
+  await expect(page.getByTestId("ring-load")).toHaveCount(0);
+  await expect(page.getByTestId("ring-strain")).toContainText("Not measured");
+  await expect(page.getByTestId("week-load")).toContainText("LOAD");
+  await expect(page.getByTestId("week-load")).toContainText("420");
 });
 
 test("session load in French is CHARGE", async ({ page }) => {
@@ -239,8 +240,9 @@ test("session load in French is CHARGE", async ({ page }) => {
     },
     { ...me, preferred_locale: "fr" },
   );
-  await expect(page.getByTestId("ring-load")).toContainText("CHARGE");
-  await expect(page.getByTestId("ring-load")).toContainText("420");
+  await expect(page.getByTestId("ring-load")).toHaveCount(0);
+  await expect(page.getByTestId("week-load")).toContainText("CHARGE");
+  await expect(page.getByTestId("week-load")).toContainText("420");
 });
 
 test("no finished-session load stays blank instead of zero", async ({ page }) => {
@@ -249,9 +251,11 @@ test("no finished-session load stays blank instead of zero", async ({ page }) =>
     strain: null,
     training: { ...todayBase.training, load_week: null, load_28d_avg: null, acwr: null },
   });
-  await expect(page.getByTestId("ring-load")).toContainText("—");
-  await expect(page.getByTestId("ring-load")).toContainText("LOAD");
-  await expect(page.getByTestId("ring-load").getByText("0", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("ring-load")).toHaveCount(0);
+  await expect(page.getByTestId("ring-strain")).toContainText("Not measured");
+  await expect(page.getByTestId("week-load")).toContainText("—");
+  await expect(page.getByTestId("week-load")).toContainText("LOAD");
+  await expect(page.getByTestId("week-load").getByText("0", { exact: true })).toHaveCount(0);
 });
 
 test("missing recovery, sleep, and HRV stay unknown while a real resting heart rate of zero stays zero", async ({ page }) => {

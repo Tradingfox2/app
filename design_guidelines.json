@@ -90,17 +90,17 @@
         "empty": "N/A",
         "error": "Red banner on top"
       },
-      "layout": "Full-bleed background image with vertical gradient scrim (transparent to surface). Form inputs sit in the bottom half. Use Pill CTA buttons in brandPrimary."
+      "layout": "Ground field with the existing app icon marked Placeholder, then a scrim into the form. Inputs sit in the lower half. Pill primary buttons use brand."
     },
     {
       "name": "Home Dashboard",
       "purpose": "A daily command center summarizing workouts, biomarkers, and wearable recovery metrics at a glance.",
       "states": {
-        "loading": "Skeleton rings and card outlines",
-        "empty": "Illustration of tracking rings at 0% with 'Connect Apple Watch' CTA",
+        "loading": "Skeleton meter rows and card outlines",
+        "empty": "Stable strain, recovery, and sleep slots read Not connected. Missing values stay an em dash.",
         "error": "Unable to fetch data with a retry tap target"
       },
-      "layout": "Whoop-style modular tiles. Top section: Three main rings/dials (e.g., Strain, Recovery, Sleep) rendered as dense data-viz. Below: Horizontal scroll of wearable metrics (HRV, Steps) and a vertical feed of today's streak/summary cards."
+      "layout": "Night Studio ledger. Session stage first. Strain, recovery, and sleep are quiet meter rows. HRV and resting heart rate sit in the same card. Session load lives on the training week, not in a fourth dial."
     },
     {
       "name": "Workouts",
@@ -110,7 +110,7 @@
         "empty": "Iconography indicating no recent workouts, CTA to 'Start First Workout'",
         "error": "Network error with retry button"
       },
-      "layout": "Strava-style layout: segmented control (History / Library) pinned top. A list of recent activities below. A sticky, floating 'Record Session' primary CTA at the bottom center over a glass overlay, spanning above the bottom tab bar."
+      "layout": "Sessions and Library segments. Exercise rows use a placeholder poster plate. The new-session button is a solid brand bar, not a glass overlay."
     },
     {
       "name": "Biomarkers",

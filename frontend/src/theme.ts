@@ -71,6 +71,14 @@ export const type = {
     fontWeight: "600",
     letterSpacing: 0.2,
   } satisfies TextStyle,
+  stage: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "600",
+    letterSpacing: 0,
+  } satisfies TextStyle,
   eyebrow: {
     color: colors.textMuted,
     fontFamily: fonts.textStrong,

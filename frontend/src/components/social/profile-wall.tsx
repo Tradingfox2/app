@@ -151,6 +151,22 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
             <Ionicons name="people-outline" size={16} color={colors.text} />
             <Text style={styles.shortcutText}>{t("FRIENDS")}</Text>
           </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Training plan")} testID="you-plan" onPress={() => router.push("/program" as Href)} style={styles.shortcut}>
+            <Ionicons name="calendar-outline" size={16} color={colors.text} />
+            <Text style={styles.shortcutText}>{t("Training plan")}</Text>
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("Trends")} testID="you-trends" onPress={() => router.push("/analysis" as Href)} style={styles.shortcut}>
+            <Ionicons name="analytics-outline" size={16} color={colors.text} />
+            <Text style={styles.shortcutText}>{t("Trends")}</Text>
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("LABS")} testID="you-labs" onPress={() => router.push("/labs" as Href)} style={styles.shortcut}>
+            <Ionicons name="flask-outline" size={16} color={colors.text} />
+            <Text style={styles.shortcutText}>{t("LABS")}</Text>
+          </Affordance>
+          <Affordance accessibilityRole="button" accessibilityLabel={t("SOURCES")} testID="you-sources" onPress={() => router.push("/sources" as Href)} style={styles.shortcut}>
+            <Ionicons name="watch-outline" size={16} color={colors.text} />
+            <Text style={styles.shortcutText}>{t("SOURCES")}</Text>
+          </Affordance>
         </View>
       ) : null}
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -323,7 +339,7 @@ const styles = StyleSheet.create({
   icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerTitle: { ...type.section, color: colors.text, flex: 1 },
   shortcuts: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  shortcut: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 6 },
+  shortcut: { minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 6 },
   shortcutText: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
   scroll: { alignItems: "center", gap: spacing.md, paddingBottom: spacing.xxxl },
   activity: { alignSelf: "stretch", gap: spacing.md, paddingHorizontal: spacing.lg },

@@ -15,6 +15,10 @@ export const colors = {
   surface3: "#2E3842",
   border: "#3A4652",
   borderStrong: "#52606C",
+  /** Non-text boundary. Not a sentence color, and not copied into staff. */
+  edge: "#6E7C8A",
+  /** Untrained anatomy mark. Not text. */
+  anatomyIdle: "#8C5A56",
   text: "#F2F3F4",
   textMuted: "#C5CCD3",
   textDim: "#A8B2BC",
