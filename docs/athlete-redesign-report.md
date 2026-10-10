@@ -1,6 +1,8 @@
 # Athlete app redesign
 
-Branch: `design/ironflow-athlete-experience` from `origin/main` at `7867a5e`. Not merged. Not deployed.
+**Current status (October 2026).** This report was written against `design/ironflow-athlete-experience`, branched from `origin/main` at `7867a5e`. That redesign later landed on `main` inside the Night Studio squash `089ec98`. Expo SDK 57 is `9604bac`. `main` runs locally on the owner's PC and is not deployed anywhere. The Playwright counts below are the historical result of that redesign pass, not the current suite.
+
+Historical subject line, as written: branch `design/ironflow-athlete-experience` from `origin/main` at `7867a5e`. At the time of writing it was not merged and not deployed.
 
 ## Summary
 
@@ -68,4 +70,4 @@ No new packages. Added OFL font files already allowed by `frontend/assets/fonts/
 
 ## Deployment
 
-None.
+None at the time of this report. That is still true: `main` is not deployed anywhere. It runs locally on the owner's PC. Do not infer a host from this document.
