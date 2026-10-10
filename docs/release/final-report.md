@@ -2,7 +2,7 @@
 
 Subject: `release/bot-c-fixes` after Bot C’s fixes (`858bc75`, `63d68d6`, `8203eb3`) and this documentation pass. Independent QA is `docs/release/bot-d-qa.md`. The plan is `docs/release/bot-e-plan.md`.
 
-The documentation commit SHA is filled in section C after that commit is created. Application code is unchanged from `8203eb3`.
+Application code is unchanged from `8203eb3`. Documentation content is `2f79cfa`. The commit after that one only writes this hash into section C.
 
 ## A. Executive verdict
 
@@ -80,7 +80,7 @@ Files in `origin/release/plan...8203eb3`:
 - `frontend/src/open-session.ts`
 - `frontend/staff/index.tsx`
 
-Documentation commit: `DOCS_COMMIT_SHA` (this report, Bot D QA, and the three status corrections). No application code in that commit.
+Documentation commit: `2f79cfa` Record Bot D QA and the Bot E release report. It adds this report and `docs/release/bot-d-qa.md`, and it corrects the three athlete documents below. No application code is in that commit. The following commit only replaces a placeholder in this section with `2f79cfa`.
 
 Documentation changes:
 
