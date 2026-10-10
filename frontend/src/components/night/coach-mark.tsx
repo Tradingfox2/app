@@ -42,7 +42,7 @@ export function PosterPlate({ name, compact = false }: { name: string; compact?:
     return (
       <View style={poster.compact}>
         <Image source={mark} style={poster.compactImage} contentFit="contain" accessibilityElementsHidden importantForAccessibility="no" />
-        <Text style={poster.kicker}>Placeholder</Text>
+        <Text style={poster.compactKicker} numberOfLines={1}>Placeholder</Text>
       </View>
     );
   }
@@ -66,15 +66,17 @@ const poster = StyleSheet.create({
   },
   image: { width: 56, height: 56, opacity: 0.85 },
   compact: {
-    width: 72,
-    minHeight: 64,
+    width: 84,
+    height: 64,
     borderRadius: 8,
     backgroundColor: colors.surface3,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 4,
+    overflow: "hidden",
+    paddingHorizontal: 4,
   },
   compactImage: { width: 28, height: 28, opacity: 0.85 },
+  compactKicker: { color: colors.textDim, fontSize: 9, lineHeight: 12 },
   kicker: { ...type.caption, color: colors.textDim, fontSize: 11 },
   name: { ...type.section, textAlign: "center" },
 });
