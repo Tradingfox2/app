@@ -124,7 +124,7 @@ Not run, and not reported as passed:
 
 ## E. Outstanding risks
 
-- Native behavior can still diverge from the web build. The logger, keyboard, check-in camera, GPS, and offline resume have no device evidence.
+- Native behavior can still diverge from the web build. The lift logger and its decimal pad have no device evidence, and that is the deploy gate in section G. Check-in camera, GPS, and on-device offline resume are still untested, and they are pre-existing gaps this diff did not change.
 - Live API behavior is unproven in this pass. Local Mongo covered the pytest suite that does not need `EXPO_PUBLIC_BACKEND_URL`. The two live HTTP modules were skipped.
 - A-14 still says “1 sets” on a one-set receipt.
 - Settings language chips are about 40px tall. The auth submit focus ring is the browser default.
@@ -138,4 +138,10 @@ Not deployed. `main` (`9604bac`, SDK 57) and this branch run locally on the owne
 
 ## G. Recommended next step
 
-Merge `release/bot-c-fixes` on the owner's PC and leave the app undeployed until an iOS and Android device pass covers the logger, the keyboard, check-in camera, and GPS.
+Merge `release/bot-c-fixes` on the owner's PC and leave the app undeployed until one iPhone and one Android phone pass the lift logger: the decimal pad open over empty reps, weight, and RPE; a late previous-sets hint that does not replace a typed number; and the entry bar fully above the keyboard and clear of the bottom inset.
+
+The previous wording of this section also required a check-in camera pass and a GPS pass. Bot A, Bot B, Bot C, and an independent native-risk reviewer each amended that. All four still want the local merge now, and all four still want the app left undeployed. Camera, GPS, an in-place NetInfo reconnect, and the two skipped live HTTP modules are not the gate for this branch.
+
+The gate that remains is `frontend/app/workout/[id].tsx`. The fields use `keyboardType="decimal-pad"`. Focus alone does not set the dirty refs, so a late `previousSets` hint can still fill a field the athlete has not typed in. Playwright proved that hint with `fill()`, which commits a value. A focused pad with no character committed was not part of that run. `KeyboardAvoidingView` uses `behavior="padding"` and sets no `keyboardVerticalOffset`. `SafeAreaView` insets only the top edge. The entry bar is `position: "absolute"` at `bottom: 0`, as a sibling of the scroll view. This file does not guarantee that the bar clears the keyboard or the bottom inset. `quickAddSet` parses reps with `parseInt` and weight and RPE with `parseFloat`, with no digits filter. A device still has to show which token the pad inserts.
+
+Bot B and Bot C preferred a shorter sentence, with the hint and the bar as notes under the same logger pass. Bot A and the native-risk reviewer wanted both outcomes named, because a covered bar or a hint that replaces a typed number means the P1 fixes are not usable on a phone. This section follows that naming. The reconnect check stays off the gate: `frontend/src/offline-queue.ts` is outside this diff, and the logger calls `adoptServerSets` from Retry sync and Finish only. `CameraView`, `goTrain`, and the recorder were not changed. They stay untested on local `main`, and they do not hold this merge.
