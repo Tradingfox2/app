@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { usePreventRemove } from "@react-navigation/native";
+import { usePreventRemove } from "expo-router/react-navigation";
 import { api, COMMUNITY_CATEGORIES, mediaUrl, type ChallengeMetric, type ChannelKind, type ChannelOverwrite, type Community, type CommunityAuditEntry, type CommunityCategory, type CommunityChannel, type CommunityInsights, type CommunityInvite, type CommunityReport, type CommunityRole, type Membership } from "@/src/api";
 import { colors, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";

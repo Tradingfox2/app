@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 // Synthetic fixtures only; every /api call is intercepted.

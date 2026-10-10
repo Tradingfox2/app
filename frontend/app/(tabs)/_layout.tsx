@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType } from "react";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import { Redirect, Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
