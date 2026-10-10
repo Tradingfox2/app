@@ -89,6 +89,7 @@ Documentation changes:
 - `docs/athlete-redesign-report.md`: the opening no longer says the redesign is unmerged. It records Night Studio on `main` at `089ec98`, SDK 57 at `9604bac`, and local-only, not deployed. The deployment section says the same. Historical Playwright counts stay labeled as historical.
 - `docs/athlete-ux-audit-bot-a.md`: a current-status banner. The audit subject remains `b4764b8`. Findings were not rewritten as if re-tested.
 - `docs/athlete-review-bot-d.md`: a current-status banner. The closing “do not merge” instruction is marked historical. The staff Menu note in “unfinished” is past tense and points at the later helper fix.
+- Section G of this report, amended after Bot A, Bot B, Bot C, and a native-risk reviewer discussed the original next step. The deploy gate is the lift logger on one iPhone and one Android phone. Camera and GPS are not that gate.
 
 ## D. Verification results
 
