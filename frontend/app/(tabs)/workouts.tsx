@@ -396,6 +396,7 @@ export default function Workouts() {
                   accessibilityLabel={t("Open {name} exercise demo", { name: item.name })}
                 >
                   <Ionicons name="play" color={colors.text} size={14} />
+                  <Text style={styles.exDemoTxt}>{t("Play demo")}</Text>
                 </Pressable>
               </View>
             )}
@@ -603,16 +604,20 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   exDemo: {
-    width: 44,
-    height: 44,
+    minWidth: 44,
+    minHeight: 44,
     marginRight: spacing.md,
+    paddingHorizontal: spacing.sm,
+    gap: 4,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.edge,
     backgroundColor: "transparent",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
+  exDemoTxt: { color: colors.text, fontSize: 12, fontWeight: "600" },
   libraryHint: {
     color: colors.textDim,
     fontSize: 10,

@@ -30,6 +30,10 @@ export const nightStudioMessages: Record<SupportedLocale, Messages> = {
     "Play demo": "Lire la démo",
     "From finished sessions": "Depuis les séances terminées",
     "Open this review": "Ouvrir ce bilan",
+    "Ask about today's session. Training guidance, not a diagnosis.": "Posez une question sur la séance du jour. Conseil d'entraînement, pas un diagnostic.",
+    "Connect Garmin, Whoop, Oura, Fitbit or Apple Health to show strain, recovery, and sleep": "Connectez Garmin, Whoop, Oura, Fitbit ou Apple Health pour afficher l'effort, la récupération et le sommeil",
+    "Connect your watch, health app or gym equipment. Data flows into one place: wearables feed Home strain, recovery, and sleep; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.": "Connectez votre montre, votre app santé ou les machines de la salle. Tout arrive au même endroit : les montres alimentent l'effort, la récupération et le sommeil ; les machines (Technogym, EGYM) importent vos séries dans le journal. Les données d'exemple ne sont générées que pour le compte de test.",
+    "A gap is a missing day, not a zero.": "Un trou est un jour manquant, pas un zéro.",
   },
   de: {
     "{count} exercise": "{count} Übung",
@@ -56,6 +60,10 @@ export const nightStudioMessages: Record<SupportedLocale, Messages> = {
     "Play demo": "Demo abspielen",
     "From finished sessions": "Aus abgeschlossenen Einheiten",
     "Open this review": "Diese Rückschau öffnen",
+    "Ask about today's session. Training guidance, not a diagnosis.": "Frag nach der heutigen Einheit. Trainingsempfehlung, keine Diagnose.",
+    "Connect Garmin, Whoop, Oura, Fitbit or Apple Health to show strain, recovery, and sleep": "Verbinde Garmin, Whoop, Oura, Fitbit oder Apple Health, um Belastung, Erholung und Schlaf zu zeigen",
+    "Connect your watch, health app or gym equipment. Data flows into one place: wearables feed Home strain, recovery, and sleep; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.": "Verbinde Uhr, Gesundheits-App oder Geräte im Studio. Alles landet an einem Ort: Wearables füllen Belastung, Erholung und Schlaf; Studiogeräte (Technogym, EGYM) übernehmen Sätze ins Trainingstagebuch. Beispieldaten gibt es nur für das Testkonto.",
+    "A gap is a missing day, not a zero.": "Eine Lücke ist ein fehlender Tag, keine Null.",
   },
   es: {
     "{count} exercise": "{count} ejercicio",
@@ -82,6 +90,10 @@ export const nightStudioMessages: Record<SupportedLocale, Messages> = {
     "Play demo": "Reproducir demo",
     "From finished sessions": "De sesiones terminadas",
     "Open this review": "Abrir esta revisión",
+    "Ask about today's session. Training guidance, not a diagnosis.": "Pregunta por la sesión de hoy. Orientación de entrenamiento, no un diagnóstico.",
+    "Connect Garmin, Whoop, Oura, Fitbit or Apple Health to show strain, recovery, and sleep": "Conecta Garmin, Whoop, Oura, Fitbit o Apple Health para mostrar esfuerzo, recuperación y sueño",
+    "Connect your watch, health app or gym equipment. Data flows into one place: wearables feed Home strain, recovery, and sleep; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.": "Conecta tu reloj, tu app de salud o las máquinas del gimnasio. Todo llega a un sitio: los wearables alimentan esfuerzo, recuperación y sueño; las máquinas (Technogym, EGYM) importan tus series al diario. Los datos de ejemplo solo se generan para la cuenta de prueba.",
+    "A gap is a missing day, not a zero.": "Un hueco es un día que falta, no un cero.",
   },
   it: {
     "{count} exercise": "{count} esercizio",
@@ -108,5 +120,9 @@ export const nightStudioMessages: Record<SupportedLocale, Messages> = {
     "Play demo": "Guarda la demo",
     "From finished sessions": "Dalle sessioni concluse",
     "Open this review": "Apri questa revisione",
+    "Ask about today's session. Training guidance, not a diagnosis.": "Chiedi della sessione di oggi. Indicazione di allenamento, non una diagnosi.",
+    "Connect Garmin, Whoop, Oura, Fitbit or Apple Health to show strain, recovery, and sleep": "Collega Garmin, Whoop, Oura, Fitbit o Apple Health per mostrare sforzo, recupero e sonno",
+    "Connect your watch, health app or gym equipment. Data flows into one place: wearables feed Home strain, recovery, and sleep; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.": "Collega l'orologio, l'app salute o le macchine in palestra. Tutto arriva in un posto: i wearable alimentano sforzo, recupero e sonno; le macchine (Technogym, EGYM) importano le serie nel diario. I dati di esempio esistono solo per l'account di prova.",
+    "A gap is a missing day, not a zero.": "Un buco è un giorno mancante, non uno zero.",
   },
 };

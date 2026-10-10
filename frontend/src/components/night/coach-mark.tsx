@@ -16,24 +16,16 @@ type CoachMarkProps = {
  */
 export function CoachMark({ size = 48, labeled = true }: CoachMarkProps) {
   return (
-    <View style={styles.wrap}>
-      <Image
-        source={mark}
-        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface3 }}
-        contentFit="cover"
-        accessibilityLabel={labeled ? undefined : "Coach, ready for today's session."}
-        accessibilityElementsHidden={labeled}
-        importantForAccessibility={labeled ? "no" : "yes"}
-      />
-      <Text style={styles.caption}>Placeholder</Text>
-    </View>
+    <Image
+      source={mark}
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface3 }}
+      contentFit="cover"
+      accessibilityLabel={labeled ? undefined : "Coach, ready for today's session."}
+      accessibilityElementsHidden={labeled}
+      importantForAccessibility={labeled ? "no" : "yes"}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { alignItems: "center", gap: spacing.xs },
-  caption: { ...type.caption, color: colors.textDim, fontSize: 11 },
-});
 
 export const posterPlaceholder = mark;
 
@@ -67,16 +59,17 @@ const poster = StyleSheet.create({
   image: { width: 56, height: 56, opacity: 0.85 },
   compact: {
     width: 84,
-    height: 64,
+    height: 72,
     borderRadius: 8,
     backgroundColor: colors.surface3,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     paddingHorizontal: 4,
+    gap: 2,
   },
-  compactImage: { width: 28, height: 28, opacity: 0.85 },
-  compactKicker: { color: colors.textDim, fontSize: 9, lineHeight: 12 },
+  compactImage: { width: 22, height: 22, opacity: 0.85 },
+  compactKicker: { color: colors.textDim, fontSize: 12, lineHeight: 14 },
   kicker: { ...type.caption, color: colors.textDim, fontSize: 11 },
   name: { ...type.section, textAlign: "center" },
 });

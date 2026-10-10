@@ -73,11 +73,12 @@ export const type = {
   } satisfies TextStyle,
   stage: {
     color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: "600",
-    letterSpacing: 0,
+    fontFamily: fonts.displayStrong,
+    fontSize: 40,
+    lineHeight: 40,
+    // The Bold file is the 700 cut. A second weight would synthesize a stroke.
+    fontWeight: "400",
+    letterSpacing: 0.2,
   } satisfies TextStyle,
   eyebrow: {
     color: colors.textMuted,

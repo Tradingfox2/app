@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginTop: spacing.sm,
   },
-  flagSev: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  flagSev: { fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   flagTxt: { color: colors.text, fontSize: 12, lineHeight: 17, marginTop: 2 },
   disclaimer: {
     flexDirection: "row",

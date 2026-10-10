@@ -297,7 +297,7 @@ export default function SourcesScreen() {
           <View style={styles.infoBanner}>
             <Ionicons name="flash" size={14} color={colors.text} />
             <Text style={styles.infoTxt}>
-              {t("Connect your watch, health app or gym equipment. Data flows into one place: wearables feed the Home recovery rings; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.")}
+              {t("Connect your watch, health app or gym equipment. Data flows into one place: wearables feed Home strain, recovery, and sleep; gym machines (Technogym, EGYM) import your sets and weights straight into your training log. Sample data is only ever generated for the test account.")}
             </Text>
           </View>
           {loadError ? (
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  modeBadgeTxt: { color: colors.textMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  modeBadgeTxt: { color: colors.textMuted, fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
   chip: {
     backgroundColor: colors.surface3,

@@ -23,6 +23,7 @@ function RootLayout() {
   const reduceMotion = useReducedMotion();
   const { width } = useWindowDimensions();
   const wide = width >= 768;
+  const board = width >= 1100;
   const loaded = iconsLoaded && (fontsLoaded || Boolean(fontError));
   const error = iconError;
 
@@ -39,7 +40,7 @@ function RootLayout() {
           <I18nProvider>
             <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: wide ? "center" : "stretch" }}>
               <StatusBar style="light" />
-              <View style={{ flex: 1, width: "100%", maxWidth: wide ? 480 : undefined }}>
+              <View style={{ flex: 1, width: "100%", maxWidth: board ? 1120 : wide ? 480 : undefined }}>
               {/*
                 Cold start uses the initial URL; warm start uses later url events.
                 Expo Router owns both. app/+native-intent.ts rewrites ironflow://

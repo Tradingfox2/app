@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   sharePanel: { position: "absolute", left: 16, right: 16, bottom: 32, padding: 20, borderRadius: 12, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.text, gap: 8 },
   shareTitle: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   shareCopy: { color: colors.text, fontSize: 15 },
-  shareError: { color: colors.error, fontSize: 12 },
+  shareError: { color: colors.errorText, fontSize: 13, lineHeight: 18 },
   shareRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   shareSecondary: { flex: 1, minHeight: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   shareSecondaryText: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 1 },

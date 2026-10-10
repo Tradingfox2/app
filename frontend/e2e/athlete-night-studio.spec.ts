@@ -323,10 +323,16 @@ test("wide windows keep a phone column, stable meters, and training links one pr
   await page.goto("/home");
   const viewport = page.viewportSize();
   const wide = (viewport?.width ?? 0) >= 768;
+  const board = (viewport?.width ?? 0) >= 1100;
   const screen = await page.getByTestId("home-screen").boundingBox();
   const card = await page.getByTestId("today-card").boundingBox();
   expect(screen && card && viewport).toBeTruthy();
-  if (wide) {
+  if (board) {
+    expect(screen!.width).toBeGreaterThan(800);
+    expect(screen!.width).toBeLessThanOrEqual(1120);
+    expect(card!.width).toBeGreaterThan(360);
+    expect(card!.width).toBeLessThanOrEqual(760);
+  } else if (wide) {
     expect(screen!.width).toBeLessThanOrEqual(480);
     expect(card!.width).toBeLessThanOrEqual(560);
     expect(Math.abs(card!.x + card!.width / 2 - viewport!.width / 2)).toBeLessThan(40);
@@ -334,6 +340,23 @@ test("wide windows keep a phone column, stable meters, and training links one pr
     expect(card!.width).toBeGreaterThan(viewport!.width - 80);
     expect(card!.width).toBeLessThanOrEqual(viewport!.width);
   }
+  const track = await page.getByTestId("ring-recovery").evaluate((el) =>
+    Array.from(el.querySelectorAll("div")).map((node) => {
+      const box = node.getBoundingClientRect();
+      return { w: box.width, h: box.height };
+    }),
+  );
+  expect(track.some((bar) => bar.h <= 4 && bar.w > 40)).toBe(true);
+  await page.getByTestId("today-start-day").focus();
+  const outline = await page.getByTestId("today-start-day").evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { width: style.outlineWidth, color: style.outlineColor, offset: style.outlineOffset };
+  });
+  expect(outline.width).toBe("2px");
+  expect(outline.offset).toBe("2px");
+  const channels = outline.color.match(/\d+/g)?.map((part) => Number(part)) ?? [];
+  expect(channels.length).toBeGreaterThanOrEqual(3);
+  expect(Math.min(channels[0] ?? 0, channels[1] ?? 0, channels[2] ?? 0)).toBeGreaterThan(200);
   await expect(page.getByTestId("ring-strain")).toContainText("Not connected");
   await expect(page.getByTestId("ring-load")).toHaveCount(0);
   const recovery = await page.getByTestId("ring-recovery").boundingBox();
@@ -342,6 +365,7 @@ test("wide windows keep a phone column, stable meters, and training links one pr
   expect(recovery && hrv && readiness).toBeTruthy();
   expect(Math.abs(hrv!.y - recovery!.y)).toBeLessThan(400);
   expect(readiness!.y).toBeLessThan(hrv!.y);
+  if (board) expect(readiness!.x).toBeGreaterThan(card!.x + card!.width * 0.4);
 
   await page.goto("/settings");
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(1);

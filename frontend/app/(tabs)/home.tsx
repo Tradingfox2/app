@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -75,6 +76,8 @@ export default function Home() {
   const { user } = useAuth();
   const { t, formatDate, formatNumber } = useI18n();
   const reduceMotion = useReducedMotion();
+  const { width: windowWidth } = useWindowDimensions();
+  const board = windowWidth >= 1100;
   const [data, setData] = useState<any>(null);
   const [dashError, setDashError] = useState<string | null>(null);
   const [dashSettled, setDashSettled] = useState(false);
@@ -324,15 +327,6 @@ export default function Home() {
               onPress={() => router.push("/notifications")}
             />
           </View>
-          <View style={styles.streak} testID="streak-badge">
-            <Text style={styles.streakLabel}>{t("THIS WEEK")}</Text>
-            {!dashSettled && workoutCount === null ? (
-              <View style={styles.skeletonNum} />
-            ) : (
-              <Text style={styles.streakNum}>{workoutCount === null ? "—" : formatNumber(workoutCount)}</Text>
-            )}
-            <Text style={styles.streakLabel}>{t("workouts")}</Text>
-          </View>
         </View>
 
         {dashError ? (
@@ -350,17 +344,16 @@ export default function Home() {
           </View>
         ) : null}
 
-        <View testID="today-card" style={[styles.todayCard, styles.stage, raised("card")]}>
+        <View style={board ? styles.board : undefined}>
+        <View style={board ? styles.boardStage : undefined}>
+        <View testID="today-card" style={[styles.todayCard, styles.stage, board ? styles.stageBoard : null, raised("card"), { backgroundColor: colors.bg }]}>
           <LinearGradient
-            colors={[colors.brandWash, "transparent"]}
+            colors={[colors.brandWash, colors.bg]}
             start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 0.55 }}
+            end={{ x: 0.5, y: 1 }}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          <View style={styles.stageMark}>
-            <CoachMark size={48} />
-          </View>
           <Text style={styles.cardTitle}>{t("TODAY'S SESSION")}</Text>
           {activeWorkout ? (
             <Text style={[styles.stageTitle]} numberOfLines={2}>{activeWorkout.title}</Text>
@@ -436,6 +429,8 @@ export default function Home() {
             </View>
           ) : null}
         </View>
+        </View>
+        <View style={board ? styles.boardSide : undefined}>
 
         <View style={styles.tipCard} testID="coach-tip-card">
           <Pressable
@@ -457,7 +452,7 @@ export default function Home() {
                 ) : null}
               </View>
               <Text style={styles.tipTxt} testID="coach-tip-text">
-                {coachTip?.tip ?? t("Recovery is your compass. Push hard on green days, glide on red ones.")}
+                {coachTip?.tip ?? t("Ask about today's session. Training guidance, not a diagnosis.")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -525,12 +520,10 @@ export default function Home() {
             ) : null}
           </View>
           {showSkeleton ? (
-            <View style={styles.ringPlate}>
-              <View style={styles.rings} testID="home-skeleton" accessibilityLabel={t("Loading home")}>
-                <View style={styles.skeletonRing} />
-                <View style={styles.skeletonRing} />
-                <View style={styles.skeletonRing} />
-              </View>
+            <View testID="home-skeleton" accessibilityLabel={t("Loading home")} style={styles.meters}>
+              <View style={styles.skeletonBar} />
+              <View style={styles.skeletonBar} />
+              <View style={styles.skeletonBar} />
             </View>
           ) : data ? (
             <>
@@ -587,13 +580,15 @@ export default function Home() {
                 >
                   <Ionicons name="watch-outline" size={16} color={colors.text} />
                   <Text style={styles.connectTxt}>
-                    {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to fill these rings")}
+                    {t("Connect Garmin, Whoop, Oura, Fitbit or Apple Health to show strain, recovery, and sleep")}
                   </Text>
                   <Ionicons name="chevron-forward" size={16} color={colors.text} />
                 </Pressable>
               )}
             </>
           ) : null}
+        </View>
+        </View>
         </View>
 
         {review ? (
@@ -618,6 +613,15 @@ export default function Home() {
         <View style={styles.statsCard} testID="training-week-card">
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t("TRAINING · 7 DAYS")}</Text>
+            <View style={styles.streak} testID="streak-badge">
+              <Text style={styles.streakLabel}>{t("THIS WEEK")}</Text>
+              {!dashSettled && workoutCount === null ? (
+                <View style={styles.skeletonNum} />
+              ) : (
+                <Text style={styles.streakNum}>{workoutCount === null ? "—" : formatNumber(workoutCount)}</Text>
+              )}
+              <Text style={styles.streakLabel}>{t("workouts")}</Text>
+            </View>
             <View style={styles.streakPill}>
               <Ionicons name="flame" size={12} color={colors.warning} />
               <Text style={styles.streakPillTxt}>
@@ -1024,7 +1028,6 @@ const styles = StyleSheet.create({
   headerBadgeText: { color: colors.bg, fontSize: 10, fontWeight: "700" },
   name: { ...type.screenTitle, marginTop: 4 },
   skeletonNum: { width: 28, height: 26, borderRadius: 6, backgroundColor: colors.surface3, marginVertical: 2 },
-  skeletonRing: { width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surface2 },
   skeletonBar: { height: 28, borderRadius: radius.sm, backgroundColor: colors.surface3 },
   errorBanner: {
     flexDirection: "row",
@@ -1040,8 +1043,11 @@ const styles = StyleSheet.create({
   retryBtn: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
   retryTxt: { color: colors.text, fontWeight: "800" },
   todayCard: { ...card, padding: spacing.lg, marginBottom: spacing.md, overflow: "hidden" },
+  board: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  boardStage: { flex: 1.35, minWidth: 0 },
+  boardSide: { flex: 0.85, minWidth: 0 },
   stage: { minHeight: 280, justifyContent: "flex-end" },
-  stageMark: { position: "absolute", top: spacing.lg, right: spacing.lg },
+  stageBoard: { flex: 1, minHeight: 420 },
   stageTitle: { ...type.stage, marginBottom: spacing.sm },
   coachLine: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 72 },
   meters: { gap: spacing.md, marginBottom: spacing.md },
@@ -1094,14 +1100,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     alignItems: "center",
   },
-  streakLabel: { color: colors.textMuted, fontSize: 9, letterSpacing: 1.5, fontWeight: "700" },
-  streakNum: {
-    color: colors.text,
-    fontSize: 26,
-    fontWeight: "800",
-    lineHeight: 30,
-    fontVariant: ["tabular-nums"],
-  },
+  streakLabel: { ...type.eyebrow, fontSize: 12 },
+  streakNum: { ...type.metric, fontSize: 22 },
   ringsCard: {
     ...card,
     padding: spacing.lg,
@@ -1119,10 +1119,12 @@ const styles = StyleSheet.create({
   },
   cardHead: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  cardHint: { ...type.eyebrow, color: colors.textDim, fontSize: 10 },
+  cardHint: { ...type.eyebrow, color: colors.textDim },
   connectRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1169,7 +1171,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   weekDayToday: { borderColor: colors.brand },
-  weekDayLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "700" },
+  weekDayLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
   weekDayLabelToday: { color: colors.text },
   rings: {
     flexDirection: "row",
@@ -1206,7 +1208,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
   },
-  quickLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "700", letterSpacing: 0.4 },
+  quickLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   metricCard: {
     flex: 1,
     ...card,

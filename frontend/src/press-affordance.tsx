@@ -141,7 +141,7 @@ export function Affordance({ style, signal = "raise", disabled, onFocus, onBlur,
   const [focused, setFocused] = useState(false);
   // A text-colored ring, not chartreuse. Chartreuse stays on primary and selected controls.
   const focusRing: ViewStyle | null = Platform.OS === "web" && focused && !blocked
-    ? { outlineWidth: 2, outlineStyle: "solid", outlineColor: colors.text }
+    ? { outlineWidth: 2, outlineStyle: "solid", outlineColor: colors.text, outlineOffset: 2 }
     : null;
   const handleFocus: NonNullable<PressableProps["onFocus"]> = (event) => {
     setFocused(true);

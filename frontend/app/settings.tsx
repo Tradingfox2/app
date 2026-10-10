@@ -389,12 +389,12 @@ export default function Settings() {
             </View>
             <Switch testID="private-account-toggle" accessibilityLabel={t("Private account")} value={isPrivate} disabled={savingPrivacy} onValueChange={value => void savePrivacy(value)} trackColor={{ true: colors.text }} />
           </View>
-          {rankingError ? <Text accessibilityRole="alert" style={{ color: colors.error }}>{rankingError}</Text> : null}
+          {rankingError ? <Text accessibilityRole="alert" style={{ color: colors.errorText }}>{rankingError}</Text> : null}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("SUBSCRIPTION")}</Text>
-          {planError ? <Text accessibilityRole="alert" style={{ color: colors.error }}>{planError}</Text> : null}
+          {planError ? <Text accessibilityRole="alert" style={{ color: colors.errorText }}>{planError}</Text> : null}
           {PLANS.map((p) => {
             const active = p.key === "pro" ? isPro(sub?.plan) : (sub?.plan ?? "free") === p.key;
             return (
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   languageText: { color: colors.textMuted, fontSize: 13, fontWeight: "400" },
   languageTextActive: { color: colors.text, fontWeight: "600" },
   languageHint: { color: colors.textDim, fontSize: 11, marginTop: spacing.sm },
-  languageError: { color: colors.error, fontSize: 12, marginTop: spacing.sm },
+  languageError: { color: colors.errorText, fontSize: 12, marginTop: spacing.sm },
   planCard: {
     ...card,
     borderRadius: radius.md,
@@ -609,5 +609,5 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     minWidth: 180,
   },
-  logoutTxt: { color: colors.error, fontWeight: "900", letterSpacing: 2 },
+  logoutTxt: { color: colors.errorText, fontWeight: "700", letterSpacing: 0.2 },
 });

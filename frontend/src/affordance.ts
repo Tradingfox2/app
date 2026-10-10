@@ -6,6 +6,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { colors } from "@/src/theme";
+import { brandHover } from "@/src/press-feedback";
 
 /**
  * Hover and press signals for controls that do not already have one.
@@ -15,6 +16,7 @@ export type AffordanceVariant = "surface" | "quiet" | "hairline" | "primary" | "
 
 type AffordanceState = PressableStateCallbackType & {
   hovered?: boolean;
+  focused?: boolean;
 };
 
 type WebMotionStyle = ViewStyle & {
@@ -24,10 +26,28 @@ type WebMotionStyle = ViewStyle & {
   outlineColor?: string;
   outlineStyle?: "solid";
   outlineWidth?: number;
+  outlineOffset?: number;
 };
 
+function focusRing(focused: boolean): WebMotionStyle {
+  if (Platform.OS !== "web" || !focused) return {};
+  return {
+    outlineWidth: 2,
+    outlineStyle: "solid",
+    outlineColor: colors.text,
+    outlineOffset: 2,
+  };
+}
+
+function readReducedMotion(): boolean {
+  if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+  return false;
+}
+
 export function useReducedMotion(): boolean {
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(readReducedMotion);
 
   useEffect(() => {
     let mounted = true;
@@ -59,11 +79,13 @@ export function pressableStyle(
     disabled?: boolean;
   },
 ): ViewStyle | null {
-  if (options.disabled) return null;
+  const webState = state as AffordanceState;
+  const ring = focusRing(Boolean(webState.focused));
+  if (options.disabled) return ring.outlineWidth ? ring : null;
 
-  const hovered = Platform.OS === "web" && Boolean((state as AffordanceState).hovered);
+  const hovered = Platform.OS === "web" && Boolean(webState.hovered);
   const pressed = state.pressed;
-  const style: WebMotionStyle = {};
+  const style: WebMotionStyle = { ...ring };
 
   if (Platform.OS === "web") {
     style.transitionProperty = "background-color, opacity, transform, filter, outline-color";
@@ -77,12 +99,14 @@ export function pressableStyle(
         style.backgroundColor = colors.surface2;
         break;
       case "hairline":
-        style.outlineColor = colors.border;
-        style.outlineStyle = "solid";
-        style.outlineWidth = 1;
+        if (!webState.focused) {
+          style.outlineColor = colors.border;
+          style.outlineStyle = "solid";
+          style.outlineWidth = 1;
+        }
         break;
       case "primary":
-        style.filter = "brightness(1.06)";
+        style.backgroundColor = brandHover;
         break;
       case "mark":
         style.opacity = 0.72;

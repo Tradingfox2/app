@@ -20,31 +20,34 @@ export function MeterRow({ value, figure, max, label, unit, caption, testID }: M
   return (
     <View
       testID={testID}
+      accessible
       accessibilityRole="text"
       accessibilityLabel={accessible}
       style={styles.row}
     >
-      <Text style={styles.name}>{label}</Text>
-      <View style={styles.track} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <View style={[styles.fill, { width: `${Math.round(pct * 100)}%` }]} />
-      </View>
-      <View style={styles.figure}>
-        <Text style={styles.value}>
-          {shown}
-          {unit ? <Text style={styles.unit}> {unit}</Text> : null}
-        </Text>
-        {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.inner}>
+        <Text style={styles.name}>{label}</Text>
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${Math.round(pct * 100)}%` }]} />
+        </View>
+        <View style={styles.figure}>
+          <Text style={styles.value}>
+            {shown}
+            {unit ? <Text style={styles.unit}> {unit}</Text> : null}
+          </Text>
+          {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  row: { minHeight: 52, justifyContent: "center" },
+  inner: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    minHeight: 52,
   },
   name: {
     width: 92,
@@ -55,15 +58,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   track: {
-    width: 2,
-    alignSelf: "stretch",
+    flex: 1,
+    height: 2,
     backgroundColor: colors.borderStrong,
     borderRadius: 1,
     overflow: "hidden",
   },
   fill: {
     backgroundColor: colors.text,
-    height: "100%",
+    height: 2,
   },
   figure: { flex: 1 },
   value: { ...type.metric, fontSize: 22 },

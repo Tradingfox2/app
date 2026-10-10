@@ -26,6 +26,12 @@ function valuesOf(points: { value: number | null }[]): LineValue[] {
   return points.map((point) => (typeof point.value === "number" ? point.value : null));
 }
 
+function chartLabel(title: string, values: readonly LineValue[], gap: string): string {
+  const finite = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  const broken = values.some((value) => value === null);
+  return broken ? `${title}: ${finite.join(", ")}. ${gap}` : `${title}: ${finite.join(", ")}`;
+}
+
 function muscleTitle(slug: string, t: (source: string) => string): string {
   return MUSCLE_SLUGS.has(slug) ? t(MUSCLE_NAMES[slug as MuscleSlug]) : slug;
 }
@@ -104,7 +110,14 @@ export default function AnalysisScreen() {
                 <Text style={styles.cardTitle}>{t(series.title)}</Text>
                 <Text style={styles.unit}>{data.units[series.key]}</Text>
               </View>
-              {measured ? <LineChart values={values} color={colors.text} testID={`trend-${series.key}-chart`} /> : <Text style={styles.muted} testID={`trend-${series.key}-not-measured`}>{t("Not measured")}</Text>}
+              {measured ? (
+                <LineChart
+                  values={values}
+                  color={colors.text}
+                  testID={`trend-${series.key}-chart`}
+                  label={chartLabel(t(series.title), values, t("A gap is a missing day, not a zero."))}
+                />
+              ) : <Text style={styles.muted} testID={`trend-${series.key}-not-measured`}>{t("Not measured")}</Text>}
             </View>
           );
         }) : null}
@@ -117,7 +130,12 @@ export default function AnalysisScreen() {
                 <Text style={styles.cardTitle}>{muscleTitle(slug, t)}</Text>
                 <Text style={styles.unit}>{data.units.tonnage}</Text>
               </View>
-              <LineChart values={values} color={colors.text} testID={`trend-muscle-${slug}-chart`} />
+              <LineChart
+                values={values}
+                color={colors.text}
+                testID={`trend-muscle-${slug}-chart`}
+                label={chartLabel(muscleTitle(slug, t), values, t("A gap is a missing day, not a zero."))}
+              />
             </View>
           );
         }) : null}
@@ -140,7 +158,7 @@ const styles = StyleSheet.create({
   body: { padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xxxl, gap: spacing.md },
   card: { ...card, padding: spacing.lg },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginBottom: spacing.sm },
-  cardTitle: { color: colors.textMuted, fontSize: 11, letterSpacing: 2, fontWeight: "800" },
+  cardTitle: { color: colors.textMuted, fontSize: 12, letterSpacing: 0.6, fontWeight: "600" },
   unit: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
   muted: { color: colors.textMuted, paddingVertical: spacing.md },
   range: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
