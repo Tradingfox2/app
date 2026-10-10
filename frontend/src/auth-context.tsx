@@ -35,11 +35,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const r = await api.login(email, password);
+    if (!r || typeof r.access_token !== "string") {
+      throw new Error("Sign-in did not return a session.");
+    }
     await auth.setToken(r.access_token);
     setUser(r.user);
   };
   const register = async (email: string, password: string, name: string, role: string, referralCode?: string) => {
     const r = await api.register(email, password, name, role, referralCode);
+    if (!r || typeof r.access_token !== "string") {
+      throw new Error("Sign-in did not return a session.");
+    }
     await auth.setToken(r.access_token);
     setUser(r.user);
   };

@@ -210,6 +210,8 @@ test("workout controls show hover, press, and an inert disabled state", async ({
   const reps = page.getByTestId("input-reps");
   await reps.hover();
   await expect.poll(() => css(reps, "border-top-color")).toBe(hairline);
+  await page.getByTestId("input-reps").fill("8");
+  await page.getByTestId("input-weight").fill("60");
   await page.getByTestId("add-set-btn").click();
   const skip = page.getByTestId("skip-timer-btn");
   await expect(skip).toBeVisible();

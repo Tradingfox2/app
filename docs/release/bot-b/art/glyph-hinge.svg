@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Hinge</title>
+  <circle cx="22" cy="20" r="3" stroke="#F2F3F4" stroke-width="2.25"/>
+  <path d="M24 22l16 10 12-2" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M40 32l-2 18M40 32l10 16" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round"/>
+  <rect x="46" y="26" width="4" height="10" rx="1" stroke="#F2F3F4" stroke-width="2.25"/>
+  <path d="M40 31h6" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round"/>
+</svg>

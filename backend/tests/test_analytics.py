@@ -151,3 +151,22 @@ def test_finishing_a_workout_records_one_completion(monkeypatch):
         assert "title" not in rows[0]["props"]
 
     run_isolated(scenario)
+
+
+def test_finish_without_started_at_stores_null_duration(monkeypatch):
+    async def scenario(db):
+        monkeypatch.setattr(server, "db", db)
+        await db.workouts.insert_one({
+            "id": "w-open", "user_id": "athlete-1", "title": "No start",
+            "ended_at": None,
+        })
+        athlete = account("athlete-1")
+        finished = await server.finish_workout("w-open", athlete)
+        assert finished["duration_sec"] is None
+        assert finished.get("load_au") is None
+        stored = await db.workouts.find_one({"id": "w-open"}, {"_id": 0})
+        assert stored["duration_sec"] is None
+        assert stored.get("load_au") is None
+        assert stored["ended_at"] is not None
+
+    run_isolated(scenario)

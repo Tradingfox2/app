@@ -1,6 +1,8 @@
 # Athlete UX audit — Bot A
 
-Independent product and UX audit of the IronFlow athlete app as it stands on `design/ironflow-athlete-experience` at `b4764b8` (“Redesign the athlete app around honest metrics and IronFlow Motion.”).
+**Current status (October 2026).** This audit judged `design/ironflow-athlete-experience` at `b4764b8`. Night Studio, which followed, is on `main` at `089ec98`. Expo SDK 57 is `9604bac`. `main` runs locally on the owner's PC and is not deployed anywhere. The findings below were not re-tested for this status note. Later release QA is `docs/release/bot-d-qa.md`.
+
+Independent product and UX audit of the IronFlow athlete app as it stood on `design/ironflow-athlete-experience` at `b4764b8` (“Redesign the athlete app around honest metrics and IronFlow Motion.”).
 
 This pass does not treat `docs/athlete-app-audit.md`, `docs/athlete-redesign-report.md`, or `docs/athlete-design-system.md` as the verdict. Those documents describe the first redesign. This one judges the app that redesign produced.
 

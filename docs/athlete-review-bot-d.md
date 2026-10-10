@@ -1,6 +1,8 @@
 # Athlete review — Bot D
 
-Independent visual, accessibility, and regression review of `design/athlete-night-studio` (`7e93ee1`) against `design/ironflow-athlete-experience` (local commit `b4764b8`; that branch name is not on this remote) and against `main` (`7867a5e`).
+**Current status (October 2026).** Night Studio, including the review fixes described below, is merged into `main` at `089ec98`. Expo SDK 57 is `9604bac`. `main` runs locally on the owner's PC and is not deployed anywhere. The “do not merge” close of this file was the instruction at review time. It is not the current instruction. The staff Menu flake recorded here was later handled on `release/bot-c-fixes` (`frontend/e2e/staff-nav.ts` and `aria-expanded` on `admin-nav-menu`); that later check is `docs/release/bot-d-qa.md`. Device and live-backend gaps from this review were not closed by the merge. The evidence below is unchanged.
+
+Independent visual, accessibility, and regression review of `design/athlete-night-studio` (`7e93ee1`) against `design/ironflow-athlete-experience` (local commit `b4764b8`; that branch name is not on this remote) and against `main` as it was then (`7867a5e`).
 
 The spec is `docs/athlete-design-spec-bot-b.md` (Night Studio). The prior audit is `docs/athlete-ux-audit-bot-a.md`. This pass did not treat a green typecheck as approval.
 
@@ -297,11 +299,13 @@ The full run after that wait: **390 passed, 2 skipped, 0 failed** (13.9 minutes)
 - On a wide window the week ledger is full width under the split, not only in the right column.
 - Native safe area, keyboard, camera, and GPS are untested.
 - Live backend was not booted.
-- Staff appearance was confirmed from the diff and from the staff Playwright project. It was not given a separate visual screenshot pass at 768 and 390. On the mobile web project, one Menu tap is sometimes cancelled and the drawer stays shut. The test retries that tap. A person on a phone may have to tap Menu again.
+- Staff appearance was confirmed from the diff and from the staff Playwright project. It was not given a separate visual screenshot pass at 768 and 390. During this review, on the mobile web project, one Menu tap was sometimes cancelled and the drawer stayed shut. The test retried that tap. A person on the phone site at that commit might have had to tap Menu again. That helper behavior was later changed on `release/bot-c-fixes`; it is not a current claim about `main` or that branch.
 - 9–11 px labels remain on screens this review did not restyle.
 
 ## Verdict
 
-**Not ready to merge to `main`.**
+At the time of this review the branch was **not ready to merge to `main`.**
 
-The Night Studio defects above are fixed on the review branch. The honesty rules (unknown, zero, sample, no invented green/red day) hold on the web fixtures. The last full Playwright run was green. That is not a main merge. This stack is still a large member-app visual change on top of `b4764b8`, it has no device pass, and it has no live API pass in this review. The stage the spec draws is a photograph this repo does not have a license to ship. A mobile web tap on the staff Menu can still be cancelled; the test retries it, a person may have to tap again. Merge the review fixes into `design/athlete-night-studio` first. Do not merge that branch to `main` until a device pass and a live backend pass exist.
+The Night Studio defects above were fixed on the review branch. The honesty rules (unknown, zero, sample, no invented green/red day) held on the web fixtures. The last full Playwright run of that review was green. That green run was not, by itself, a main merge. The stack was still a large member-app visual change on top of `b4764b8`. It had no device pass and no live API pass in this review. The stage the spec draws is a photograph this repo does not have a license to ship. A mobile web tap on the staff Menu could still be cancelled; the test retried it, and a person might have had to tap again. The instruction then was to merge the review fixes into `design/athlete-night-studio` first, and not to merge that branch to `main` until a device pass and a live backend pass existed.
+
+That merge instruction is historical. Night Studio, including those review fixes, is on `main` at `089ec98`. SDK 57 is `9604bac`. `main` runs locally on the owner's PC and is not deployed. See the current-status note at the top of this file.

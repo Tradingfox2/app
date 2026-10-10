@@ -79,7 +79,7 @@ const LANGUAGES: { code: SupportedLocale; label: string }[] = [
 
 export default function Settings() {
   const { user, logout, refresh } = useAuth();
-  const { t, localeTag } = useI18n();
+  const { t, locale, localeTag } = useI18n();
   const router = useRouter();
   const [sub, setSub] = useState<any>(null);
   const [ref, setRef] = useState<ReferralSummary | null>(null);
@@ -228,12 +228,13 @@ export default function Settings() {
     finally { billingBusy.current = false; }
   };
 
-  const selectLanguage = async (locale: SupportedLocale) => {
-    if (savingLanguage || locale === user?.preferred_locale) return;
+  const runningLocale = user?.preferred_locale ?? locale;
+  const selectLanguage = async (next: SupportedLocale) => {
+    if (savingLanguage || next === runningLocale) return;
     setSavingLanguage(true);
     setLanguageError("");
     try {
-      await api.updateProfile(locale);
+      await api.updateProfile(next);
       await refresh();
     } catch (cause) {
       setLanguageError(cause instanceof Error ? cause.message : t("Could not change the language."));
@@ -350,13 +351,14 @@ export default function Settings() {
           <Text style={styles.sectionTitle}>{t("App language").toUpperCase()}</Text>
           <View style={styles.languageGrid}>
             {LANGUAGES.map((language) => {
-              const active = (user?.preferred_locale ?? "fr") === language.code;
+              const active = runningLocale === language.code;
               return (
                 <Affordance
                   key={language.code}
                   testID={`language-${language.code}`}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: active, disabled: savingLanguage }}
+                  aria-checked={active}
                   disabled={savingLanguage}
                   onPress={() => selectLanguage(language.code)}
                   style={[styles.languageOption, active && styles.languageOptionActive]}

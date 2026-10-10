@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>IronFlow monogram</title>
+  <rect x="8" y="18" width="8" height="28" rx="2" stroke="#F2F3F4" stroke-width="2.25"/>
+  <path d="M16 32h32" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round"/>
+  <rect x="48" y="18" width="8" height="28" rx="2" stroke="#F2F3F4" stroke-width="2.25"/>
+</svg>

@@ -279,7 +279,11 @@ test("a stuck set can be retried without leaving the logger", async ({ page }) =
     }
     return false;
   });
+  const previous = page.waitForResponse((res) => res.url().includes("/previous-sets"));
   await page.goto("/workout/w-1");
+  await previous;
+  await page.getByTestId("input-reps").fill("8");
+  await page.getByTestId("input-weight").fill("60");
   await page.getByTestId("add-set-btn").click();
   await expect(page.getByTestId("offline-banner")).toBeVisible();
   await expect(page.getByTestId("logger-retry-sync")).toBeEnabled();

@@ -23,6 +23,7 @@ import type { MuscleSlug, RecommendationExercise } from "@/src/components/anatom
 import { useI18n } from "@/src/i18n";
 import { datedSessionTitle } from "@/src/session-title";
 import { PosterPlate } from "@/src/components/night/coach-mark";
+import { listOpenSessions, openSessionHref, type OpenSession } from "@/src/open-session";
 
 type Tab = "sessions" | "library";
 type LibraryExercise = RecommendationExercise & { id: string };
@@ -49,6 +50,8 @@ export default function Workouts() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [openChoices, setOpenChoices] = useState<OpenSession[] | null>(null);
+  const [confirmAnother, setConfirmAnother] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -135,15 +138,19 @@ export default function Workouts() {
     }
   };
 
+  const postDatedSession = async () => {
+    const w = await api.createWorkout(datedSessionTitle(t, formatDate));
+    if (!w?.id) throw new Error(t("Could not create session"));
+    await load();
+    router.push(`/workout/${w.id}`);
+  };
+
   const createDated = async () => {
     if (creating) return;
     setCreating(true);
     setCreateError(null);
     try {
-      const w = await api.createWorkout(datedSessionTitle(t, formatDate));
-      if (!w?.id) throw new Error(t("Could not create session"));
-      await load();
-      router.push(`/workout/${w.id}`);
+      await postDatedSession();
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : t("Could not create session"));
     } finally {
@@ -151,21 +158,49 @@ export default function Workouts() {
     }
   };
 
-  const openNewSession = () => {
+  const openNewSession = async () => {
     if (tab === "library" && selectedSlugs.length > 0) {
       setCreateError(null);
       if (!newTitle.trim()) setNewTitle(t("Library Session"));
       setModal(true);
       return;
     }
-    void createDated();
+    if (creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const open = await listOpenSessions();
+      if (open.length === 0) {
+        await postDatedSession();
+        return;
+      }
+      if (open.length === 1) {
+        router.push(openSessionHref(open[0]) as Href);
+        return;
+      }
+      setOpenChoices(open);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : t("Could not create session"));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const resumeChoice = (row: OpenSession) => {
+    setOpenChoices(null);
+    router.push(openSessionHref(row) as Href);
   };
 
   const sessionMeta = (item: { started_at: string; ended_at?: string | null; duration_sec?: number | null }) => {
     const when = formatDate(item.started_at);
     if (!item.ended_at) return `${when} ${t("· in progress")}`;
-    return `${when} · ${Math.round((item.duration_sec ?? 0) / 60)} min`;
+    if (typeof item.duration_sec === "number" && Number.isFinite(item.duration_sec)) {
+      return `${when} · ${Math.round(item.duration_sec / 60)} min`;
+    }
+    return when;
   };
+
+  const hasOpenSession = workouts.some((row) => row && !row.ended_at);
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="workouts-screen">
@@ -192,6 +227,18 @@ export default function Workouts() {
         ))}
       </View>
 
+      {tab === "sessions" && hasOpenSession ? (
+        <Pressable
+          testID="start-another-session"
+          accessibilityRole="button"
+          accessibilityLabel={t("Start another session")}
+          onPress={() => setConfirmAnother(true)}
+          disabled={creating}
+          style={press("ghost", styles.anotherBtn, { disabled: creating })}
+        >
+          <Text style={styles.retryTxt}>{t("START ANOTHER")}</Text>
+        </Pressable>
+      ) : null}
       {loadError ? (
         <View accessibilityRole="alert" style={styles.errorBanner} testID="workouts-error">
           <Text style={styles.createError}>{loadError}</Text>
@@ -242,6 +289,8 @@ export default function Workouts() {
           renderItem={({ item }) => (
             <Pressable
               testID={`workout-${item.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.title}. ${sessionMeta(item)}`}
               style={press("surface", styles.sessionCard)}
               onPress={() => {
                 if (item.activity && typeof item.activity === "object") {
@@ -379,7 +428,7 @@ export default function Workouts() {
                   accessibilityState={{ checked: selectedSlugs.includes(item.slug) }}
                   accessibilityLabel={t("Select {name}", { name: item.name })}
                 >
-                  <PosterPlate name={item.name} compact />
+                  <PosterPlate name={item.name} equipment={item.equipment} compact />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.exName}>{item.name}</Text>
                     <Text style={styles.exMeta}>
@@ -420,6 +469,54 @@ export default function Workouts() {
         </Text>
       </Pressable>
 
+      <Modal visible={openChoices !== null} transparent animationType="fade" onRequestClose={() => setOpenChoices(null)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpenChoices(null)}>
+          <Pressable style={styles.sheet} testID="open-session-sheet" onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.sheetTitle}>{t("Choose an open session")}</Text>
+            {(openChoices ?? []).map((row) => (
+              <Pressable
+                key={row.id}
+                accessibilityRole="button"
+                accessibilityLabel={row.title || t("Session")}
+                testID={`merge-open-${row.id}`}
+                onPress={() => resumeChoice(row)}
+                style={press("surface", styles.sessionCard)}
+              >
+                <Text style={styles.sessionTitle}>{row.title || t("Session")}</Text>
+              </Pressable>
+            ))}
+            <Pressable
+              accessibilityRole="button"
+              testID="open-session-another"
+              onPress={() => {
+                setOpenChoices(null);
+                setConfirmAnother(true);
+              }}
+              style={press("ghost", styles.anotherBtn)}
+            >
+              <Text style={styles.retryTxt}>{t("START ANOTHER")}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal visible={confirmAnother} transparent animationType="fade" onRequestClose={() => setConfirmAnother(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setConfirmAnother(false)}>
+          <Pressable style={styles.sheet} testID="confirm-another-sheet" onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.sheetTitle}>{t("Start another session?")}</Text>
+            <Pressable
+              accessibilityRole="button"
+              testID="confirm-another-session"
+              onPress={() => {
+                setConfirmAnother(false);
+                void createDated();
+              }}
+              style={press("primary", styles.sheetCta)}
+            >
+              <Text style={styles.sheetCtaTxt}>{t("NEW SESSION")}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <Modal visible={modal} transparent animationType="fade" onRequestClose={() => setModal(false)}>
         <Pressable style={styles.backdrop} onPress={() => setModal(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
@@ -708,10 +805,11 @@ const styles = StyleSheet.create({
   },
   sheetCtaDisabled: { opacity: 0.45 },
   sheetCtaTxt: { color: colors.brandOn, fontWeight: "900", letterSpacing: 2 },
-  createError: { color: colors.error, fontSize: 12, marginBottom: spacing.md },
+  createError: { color: colors.errorText, fontSize: 12, marginBottom: spacing.md },
   errorBanner: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   errorPad: { paddingHorizontal: spacing.lg },
   retryBtn: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start", paddingHorizontal: spacing.sm, borderRadius: radius.sm },
+  anotherBtn: { minHeight: 44, marginHorizontal: spacing.lg, marginBottom: spacing.sm, justifyContent: "center", alignItems: "center" },
   clearSearch: {
     width: 32,
     height: 32,

@@ -90,7 +90,7 @@
         "empty": "N/A",
         "error": "Red banner on top"
       },
-      "layout": "Ground field with the existing app icon marked Placeholder, then a scrim into the form. Inputs sit in the lower half. Pill primary buttons use brand."
+      "layout": "Inputs sit in the lower half. Pill primary buttons use brand."
     },
     {
       "name": "Home Dashboard",
@@ -135,15 +135,12 @@
   ],
   "images": {
     "onboarding_hero": {
-      "url": "https://images.pexels.com/photos/8455978/pexels-photo-8455978.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
       "alt": "Runner in crouched starting position on track, ready to sprint"
     },
     "premium_backdrop": {
-      "url": "https://images.unsplash.com/photo-1711025372958-db48a4fe0ba1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMG5lb24lMjBncmVlbiUyMGRhcmslMjB0ZXh0dXJlfGVufDB8fHx8MTc4NzY2NTcyOHww&ixlib=rb-4.1.0&q=85",
       "alt": "Abstract neon green wavy texture on black"
     },
     "coach_placeholder": {
-      "url": "https://images.pexels.com/photos/17201699/pexels-photo-17201699.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
       "alt": "Focused male athlete in dark gym setting"
     }
   },
