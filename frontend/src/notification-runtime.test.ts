@@ -14,7 +14,7 @@
  */
 import { Platform } from "expo-modules-core";
 import { parseTrigger } from "expo-notifications/build/scheduleNotificationAsync.js";
-import setAndroidChannel from "expo-notifications/build/setNotificationChannelAsync.android.js";
+import { setNotificationChannelAsync as setAndroidChannel } from "expo-notifications/build/setNotificationChannelAsync.android.js";
 import { notificationApi } from "./notification-api";
 import { enableDevicePush, pushSupported, registerForPush } from "./push";
 import {
