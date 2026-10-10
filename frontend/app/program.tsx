@@ -24,6 +24,7 @@ import {
 import { usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
+import { isActivitySession, listOpenSessions, openSessionHref, type OpenSession } from "@/src/open-session";
 
 const GOALS = [
   { key: "strength", label: "STRENGTH" },
@@ -170,6 +171,10 @@ export default function ProgramScreen() {
           const first = parsed.data.weeks[0]?.week_index ?? 1;
           setOpenedWeek((current) => current ?? first);
           setWeekIdx((current) => (parsed.data.weeks.some((week) => week.week_index === current) ? current : first));
+        } else {
+          setProgramDoc(null);
+          setProgram(null);
+          setLoadError(t("Could not load your plan."));
         }
       } else {
         setProgramDoc(null);
@@ -225,12 +230,23 @@ export default function ProgramScreen() {
   // An explicit workout id receives the plan. Another open session is a choice,
   // never a silent merge.
   const [startingDay, setStartingDay] = useState<number | null>(null);
-  const [mergePrompt, setMergePrompt] = useState<{ day: ProgramDay; slugs: string[]; openId: string; openTitle: string } | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [mergePrompt, setMergePrompt] = useState<
+    | { kind: "lift"; day: ProgramDay; slugs: string[]; openId: string; openTitle: string }
+    | { kind: "choose"; day: ProgramDay; slugs: string[]; rows: OpenSession[] }
+    | null
+  >(null);
   const [mergeBusy, setMergeBusy] = useState(false);
   const openLogger = (workoutId: string) => router.push(`/workout/${workoutId}` as Href);
+  const reportStartError = (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : t("Could not start session");
+    setStartError(message);
+    Alert.alert(t("Could not start session"), message);
+  };
   const startDay = async (day: ProgramDay, _adjusted = false) => {
     if (startingDay !== null || !programDoc?.id) return;
     setStartingDay(day.day_index);
+    setStartError(null);
     try {
       const slugs = day.exercises.map((ex) => ex.exercise_slug).filter(Boolean);
       if (targetWorkoutId) {
@@ -238,36 +254,56 @@ export default function ProgramScreen() {
         openLogger(targetWorkoutId);
         return;
       }
-      let open: { id: string; title?: string; ended_at?: string | null } | undefined;
-      try {
-        const existing = await api.workouts();
-        open = existing.find((workout: { ended_at?: string | null; id: string; title?: string }) => !workout.ended_at);
-      } catch {
-        open = undefined;
+      const openRows = await listOpenSessions();
+      const lifts = openRows.filter((row) => !isActivitySession(row));
+      if (openRows.length === 1 && lifts.length === 1) {
+        const open = lifts[0];
+        setMergePrompt({ kind: "lift", day, slugs, openId: open.id, openTitle: open.title || t("Session") });
+        return;
       }
-      if (open) {
-        setMergePrompt({ day, slugs, openId: open.id, openTitle: open.title || t("Session") });
+      if (openRows.length > 0) {
+        setMergePrompt({ kind: "choose", day, slugs, rows: openRows });
         return;
       }
       const created = await api.startProgramDay(programDoc.id, { week_index: weekIdx, day_index: day.day_index });
       if (!created?.id) throw new Error(t("Could not start session"));
       openLogger(created.id);
-    } catch (e: any) {
-      Alert.alert(t("Could not start session"), e?.message ?? t("Try again"));
+    } catch (e: unknown) {
+      reportStartError(e);
     } finally {
       setStartingDay(null);
     }
   };
   const confirmMerge = async () => {
-    if (!mergePrompt || mergeBusy) return;
+    if (!mergePrompt || mergePrompt.kind !== "lift" || mergeBusy) return;
     setMergeBusy(true);
+    setStartError(null);
     try {
       if (mergePrompt.slugs.length) await api.planExercises(mergePrompt.openId, mergePrompt.slugs);
       const openId = mergePrompt.openId;
       setMergePrompt(null);
       openLogger(openId);
-    } catch (e: any) {
-      Alert.alert(t("Could not start session"), e?.message ?? t("Try again"));
+    } catch (e: unknown) {
+      reportStartError(e);
+    } finally {
+      setMergeBusy(false);
+    }
+  };
+  const chooseOpen = async (row: OpenSession) => {
+    if (!mergePrompt || mergePrompt.kind !== "choose" || mergeBusy) return;
+    if (isActivitySession(row)) {
+      setMergePrompt(null);
+      router.push(openSessionHref(row) as Href);
+      return;
+    }
+    setMergeBusy(true);
+    setStartError(null);
+    try {
+      if (mergePrompt.slugs.length) await api.planExercises(row.id, mergePrompt.slugs);
+      setMergePrompt(null);
+      router.push(openSessionHref(row) as Href);
+    } catch (e: unknown) {
+      reportStartError(e);
     } finally {
       setMergeBusy(false);
     }
@@ -275,6 +311,7 @@ export default function ProgramScreen() {
   const startFreshDay = async () => {
     if (!mergePrompt || mergeBusy || !programDoc?.id) return;
     setMergeBusy(true);
+    setStartError(null);
     try {
       const created = await api.startProgramDay(programDoc.id, {
         week_index: weekIdx,
@@ -283,8 +320,8 @@ export default function ProgramScreen() {
       if (!created?.id) throw new Error(t("Could not start session"));
       setMergePrompt(null);
       openLogger(created.id);
-    } catch (e: any) {
-      Alert.alert(t("Could not start session"), e?.message ?? t("Try again"));
+    } catch (e: unknown) {
+      reportStartError(e);
     } finally {
       setMergeBusy(false);
     }
@@ -505,6 +542,11 @@ export default function ProgramScreen() {
                 </View>
               )}
 
+              {startError ? (
+                <View accessibilityRole="alert" testID="program-start-error" style={styles.recBanner}>
+                  <Text style={styles.recTxt}>{startError}</Text>
+                </View>
+              ) : null}
               {(week?.days ?? []).map((d) => {
                 const replaced = Boolean(adjustResult?.adjusted && adjustResult.day?.day_index === d.day_index);
                 const day = replaced ? adjustResult.day : d;
@@ -525,10 +567,23 @@ export default function ProgramScreen() {
       <Modal visible={!!mergePrompt} transparent animationType="fade" onRequestClose={() => setMergePrompt(null)}>
         <Pressable style={styles.mergeBackdrop} onPress={() => { if (!mergeBusy) setMergePrompt(null); }}>
           <Pressable style={styles.mergeSheet} testID="merge-session-sheet" onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.headerTitle}>{t("Add these exercises to {title}?", { title: mergePrompt?.openTitle ?? "" })}</Text>
-            <Pressable accessibilityRole="button" testID="merge-into-open" disabled={mergeBusy} onPress={() => void confirmMerge()} style={press("primary", [styles.cta, mergeBusy && { opacity: 0.6 }], { disabled: mergeBusy })}>
-              <Text style={styles.ctaTxt}>{t("ADD TO OPEN SESSION")}</Text>
-            </Pressable>
+            {mergePrompt?.kind === "choose" ? (
+              <>
+                <Text style={styles.headerTitle}>{t("Choose an open session")}</Text>
+                {mergePrompt.rows.map((row) => (
+                  <Pressable key={row.id} accessibilityRole="button" accessibilityLabel={row.title || t("Session")} testID={`merge-open-${row.id}`} disabled={mergeBusy} onPress={() => void chooseOpen(row)} style={press("ghost", [styles.musclesLink, mergeBusy && { opacity: 0.6 }], { disabled: mergeBusy })}>
+                    <Text style={styles.musclesLinkTxt}>{row.title || t("Session")}</Text>
+                  </Pressable>
+                ))}
+              </>
+            ) : (
+              <>
+                <Text style={styles.headerTitle}>{t("Add these exercises to {title}?", { title: mergePrompt?.kind === "lift" ? mergePrompt.openTitle : "" })}</Text>
+                <Pressable accessibilityRole="button" testID="merge-into-open" disabled={mergeBusy} onPress={() => void confirmMerge()} style={press("primary", [styles.cta, mergeBusy && { opacity: 0.6 }], { disabled: mergeBusy })}>
+                  <Text style={styles.ctaTxt}>{t("ADD TO OPEN SESSION")}</Text>
+                </Pressable>
+              </>
+            )}
             <Pressable accessibilityRole="button" testID="merge-new-session" disabled={mergeBusy} onPress={() => void startFreshDay()} style={press("ghost", [styles.musclesLink, mergeBusy && { opacity: 0.6 }], { disabled: mergeBusy })}>
               <Text style={styles.musclesLinkTxt}>{t("NEW SESSION")}</Text>
             </Pressable>

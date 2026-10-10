@@ -29,6 +29,7 @@ import { combinationActivation } from "@/src/components/anatomy/muscle-relations
 import { useI18n } from "@/src/i18n";
 import { FOCUS_LABELS } from "@/src/program-schema";
 import { datedSessionTitle } from "@/src/session-title";
+import { isActivitySession, listOpenSessions, openSessionHref, type OpenSession } from "@/src/open-session";
 import {
   weekActivity,
   type ActivityWorkout,
@@ -93,7 +94,11 @@ export default function Home() {
   const [notifUnread, setNotifUnread] = useState(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [mergePrompt, setMergePrompt] = useState<{ slugs: string[]; openId: string; openTitle: string } | null>(null);
+  const [mergePrompt, setMergePrompt] = useState<
+    | { kind: "lift"; slugs: string[]; openId: string; openTitle: string }
+    | { kind: "choose"; slugs: string[]; rows: OpenSession[] }
+    | null
+  >(null);
   const [mergeBusy, setMergeBusy] = useState(false);
 
   const [coach, setCoach] = useState<{ connected: boolean } | null>(null);
@@ -211,17 +216,15 @@ export default function Home() {
       const slugs = (Array.isArray(nextSession.exercises) ? nextSession.exercises : [])
         .map((row: { exercise_slug?: string }) => row.exercise_slug)
         .filter((slug: string | undefined): slug is string => Boolean(slug));
-      let open: { id: string; title?: string; ended_at?: string | null } | undefined;
-      try {
-        const existing = await api.workouts();
-        if (Array.isArray(existing)) {
-          open = existing.find((workout: { ended_at?: string | null; id: string; title?: string }) => workout && !workout.ended_at);
-        }
-      } catch {
-        open = undefined;
+      const openRows = await listOpenSessions();
+      const lifts = openRows.filter((row) => !isActivitySession(row));
+      if (openRows.length === 1 && lifts.length === 1) {
+        const open = lifts[0];
+        setMergePrompt({ kind: "lift", slugs, openId: open.id, openTitle: open.title || t("Session") });
+        return;
       }
-      if (open?.id) {
-        setMergePrompt({ slugs, openId: open.id, openTitle: open.title || t("Session") });
+      if (openRows.length > 0) {
+        setMergePrompt({ kind: "choose", slugs, rows: openRows });
         return;
       }
       const workout = await api.startProgramDay(nextSession.program_id, {
@@ -238,14 +241,34 @@ export default function Home() {
   };
 
   const confirmMerge = async () => {
-    if (!mergePrompt || mergeBusy) return;
+    if (!mergePrompt || mergePrompt.kind !== "lift" || mergeBusy) return;
     setMergeBusy(true);
     setStartError(null);
     try {
       if (mergePrompt.slugs.length) await api.planExercises(mergePrompt.openId, mergePrompt.slugs);
       const openId = mergePrompt.openId;
       setMergePrompt(null);
-      router.push(`/workout/${openId}` as Href);
+      router.push(openSessionHref({ id: openId }) as Href);
+    } catch (cause) {
+      failStart(cause);
+    } finally {
+      setMergeBusy(false);
+    }
+  };
+
+  const chooseOpen = async (row: OpenSession) => {
+    if (!mergePrompt || mergePrompt.kind !== "choose" || mergeBusy) return;
+    if (isActivitySession(row)) {
+      setMergePrompt(null);
+      router.push(openSessionHref(row) as Href);
+      return;
+    }
+    setMergeBusy(true);
+    setStartError(null);
+    try {
+      if (mergePrompt.slugs.length) await api.planExercises(row.id, mergePrompt.slugs);
+      setMergePrompt(null);
+      router.push(openSessionHref(row) as Href);
     } catch (cause) {
       failStart(cause);
     } finally {
@@ -745,16 +768,37 @@ export default function Home() {
       >
         <Pressable style={styles.mergeBackdrop} onPress={() => { if (!mergeBusy) setMergePrompt(null); }}>
           <Pressable style={styles.mergeSheet} testID="merge-session-sheet" onPress={(event) => event.stopPropagation()}>
-            <Text style={type.section}>{t("Add these exercises to {title}?", { title: mergePrompt?.openTitle ?? "" })}</Text>
-            <Pressable
-              accessibilityRole="button"
-              testID="merge-into-open"
-              disabled={mergeBusy}
-              onPress={() => void confirmMerge()}
-              style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion, disabled: mergeBusy })]}
-            >
-              <Text style={type.button}>{t("ADD TO OPEN SESSION")}</Text>
-            </Pressable>
+            {mergePrompt?.kind === "choose" ? (
+              <>
+                <Text style={type.section}>{t("Choose an open session")}</Text>
+                {mergePrompt.rows.map((row) => (
+                  <Pressable
+                    key={row.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={row.title || t("Session")}
+                    testID={`merge-open-${row.id}`}
+                    disabled={mergeBusy}
+                    onPress={() => void chooseOpen(row)}
+                    style={(state) => [styles.secondaryCta, pressableStyle(state, { variant: "quiet", reduceMotion, disabled: mergeBusy })]}
+                  >
+                    <Text style={styles.secondaryCtaTxt}>{row.title || t("Session")}</Text>
+                  </Pressable>
+                ))}
+              </>
+            ) : (
+              <>
+                <Text style={type.section}>{t("Add these exercises to {title}?", { title: mergePrompt?.kind === "lift" ? mergePrompt.openTitle : "" })}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  testID="merge-into-open"
+                  disabled={mergeBusy}
+                  onPress={() => void confirmMerge()}
+                  style={(state) => [styles.startCta, pressableStyle(state, { variant: "primary", reduceMotion, disabled: mergeBusy })]}
+                >
+                  <Text style={type.button}>{t("ADD TO OPEN SESSION")}</Text>
+                </Pressable>
+              </>
+            )}
             <Pressable
               accessibilityRole="button"
               testID="merge-new-session"

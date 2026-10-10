@@ -112,6 +112,9 @@ export default function CheckinScreen() {
     setScanning(true);
   };
 
+  const rewardDistance = result?.visits_until_reward;
+  const rewardVisits = typeof rewardDistance === "number" && Number.isFinite(rewardDistance) ? rewardDistance : null;
+
   return (
     <SafeAreaView edges={["top"]} style={styles.safe} testID="checkin-screen">
       <View style={styles.header}>
@@ -210,11 +213,15 @@ export default function CheckinScreen() {
                   {t("Visit #{count}", { count: formatNumber(result.total_visits) })}
                   {result.reward_unlocked
                     ? t(" — claim your partner reward at the desk")
-                    : t(" · {count} more for a reward", { count: formatNumber(result.visits_until_reward) })}
+                    : rewardVisits === null
+                      ? ""
+                      : t(" · {count} more for a reward", { count: formatNumber(rewardVisits) })}
                 </Text>
-                <Text style={styles.resultMeta} testID="visits-until-reward">
-                  {t("{count} visits until reward", { count: formatNumber(result.visits_until_reward ?? 0) })}
-                </Text>
+                {rewardVisits !== null && result.reward_unlocked ? (
+                  <Text style={styles.resultMeta} testID="visits-until-reward">
+                    {t("{count} visits until reward", { count: formatNumber(rewardVisits) })}
+                  </Text>
+                ) : null}
                 {result.reward?.code ? (
                   <Text style={styles.resultMeta} testID="checkin-reward-code">{result.reward.code}</Text>
                 ) : null}

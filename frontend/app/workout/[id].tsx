@@ -134,8 +134,17 @@ function rememberLogger(key: string, snapshot: LoggerMemory) {
   persistLoggerMap();
 }
 
+const SYNC_FINISH = "Could not sync sets. Finish stays closed until they land.";
+const SYNC_LOGGER = "Could not sync your sets. They are still here.";
+
 function isOptimisticSet(row: { id?: string }): boolean {
   return typeof row.id === "string" && row.id.startsWith("local-");
+}
+
+/** A stored 0 stays 0. Null and anything non-finite are unknown, not zero. */
+function receiptMinutes(durationSec: unknown): number | null {
+  if (typeof durationSec !== "number" || !Number.isFinite(durationSec)) return null;
+  return Math.max(0, Math.round(durationSec / 60));
 }
 
 /** Keep rows the server has not confirmed yet. A failed list must not wipe them. */
@@ -162,17 +171,24 @@ export default function WorkoutLogger() {
   const [pickerMuscle, setPickerMuscle] = useState<string | null>(null);
   const [muscles, setMuscles] = useState<any[]>([]);
   const [selectedEx, setSelectedEx] = useState<any | null>(() => remembered?.selectedEx ?? null);
-  const [reps, setReps] = useState("8");
+  const [reps, setReps] = useState("");
   const [lastTime, setLastTime] = useState<{ weight_kg: number; reps: number } | null>(null);
-  const [weight, setWeight] = useState("60");
-  const [rpe, setRpe] = useState("7");
+  const [weight, setWeight] = useState("");
+  const [rpe, setRpe] = useState("");
+  const repsDirty = useRef(false);
+  const weightDirty = useRef(false);
+  const rpeDirty = useRef(false);
   const [queued, setQueued] = useState(0);
   const [queueFailed, setQueueFailed] = useState(false);
   const [addError, setAddError] = useState("");
   const [loggerError, setLoggerError] = useState("");
   const [finishError, setFinishError] = useState("");
   const [finishing, setFinishing] = useState(false);
-  const [summary, setSummary] = useState<{ sets: number; minutes: number; tonnage: number } | null>(null);
+  const [summary, setSummary] = useState<{ sets: number; minutes: number | null; tonnage: number } | null>(null);
+  const finishErrorRef = useRef("");
+  const loggerErrorRef = useRef("");
+  finishErrorRef.current = finishError;
+  loggerErrorRef.current = loggerError;
 
   // Rest timer
   const [restRemaining, setRestRemaining] = useState<number>(0);
@@ -326,7 +342,13 @@ export default function WorkoutLogger() {
 
   // Prefill from the last finished session. rest_sec on that log is the length
   // the timer uses; when it is absent the program day, then 90s, is the fallback.
+  // A hint fills a field only until the athlete types in it. Changing exercise
+  // or set index clears those flags so the next hint is not blocked by the
+  // previous set. Empty fields are not edits.
   useEffect(() => {
+    repsDirty.current = false;
+    weightDirty.current = false;
+    rpeDirty.current = false;
     const exerciseId = selectedEx?.id;
     if (!exerciseId) {
       setLastTime(null);
@@ -334,19 +356,22 @@ export default function WorkoutLogger() {
     }
     let cancelled = false;
     setLastTime(null);
+    setReps("");
+    setWeight("");
+    setRpe("");
     api.previousSets(exerciseId, 1).then((payload) => {
       if (cancelled) return;
       const prior = (payload.sessions?.[0]?.sets ?? []) as any[];
       priorSetsRef.current = prior;
-      const summary = prior.find((row) => row.set_index === 1) ?? prior[0];
-      if (summary?.reps != null && summary?.weight_kg != null) {
-        setLastTime({ weight_kg: Number(summary.weight_kg), reps: Number(summary.reps) });
+      const summaryRow = prior.find((row) => row.set_index === 1) ?? prior[0];
+      if (summaryRow?.reps != null && summaryRow?.weight_kg != null) {
+        setLastTime({ weight_kg: Number(summaryRow.weight_kg), reps: Number(summaryRow.reps) });
       }
       const match = prior.find((row) => row.set_index === nextSetIndex) ?? prior[0];
       if (!match) return;
-      if (match.reps != null) setReps(String(match.reps));
-      if (match.weight_kg != null) setWeight(String(match.weight_kg));
-      if (match.rpe != null) setRpe(String(match.rpe));
+      if (match.reps != null && !repsDirty.current) setReps(String(match.reps));
+      if (match.weight_kg != null && !weightDirty.current) setWeight(String(match.weight_kg));
+      if (match.rpe != null && !rpeDirty.current) setRpe(String(match.rpe));
     }).catch(() => undefined);
     return () => {
       cancelled = true;
@@ -421,20 +446,51 @@ export default function WorkoutLogger() {
   const [audienceReady, setAudienceReady] = useState(false);
   const audienceChosen = useRef(false);
   const clubsRequested = useRef(false);
+  const clearSyncedAlerts = () => {
+    if (finishErrorRef.current === t(SYNC_FINISH)) setFinishError("");
+    if (loggerErrorRef.current === t(SYNC_LOGGER)) setLoggerError("");
+  };
+
+  // Replace local-* rows only after the server list returns. A failed read
+  // leaves those rows on screen. An empty flush clears only the sync-closed
+  // sentences, so "Session did not finish. Try again." stays.
+  const adoptServerSets = async () => {
+    clearSyncedAlerts();
+    if (!id) return;
+    try {
+      const server = await api.listSets(id);
+      const merged = mergeServerSets(Array.isArray(server) ? server : [], setsRef.current);
+      setsRef.current = merged;
+      setSets(merged);
+    } catch {
+      // Keep the local rows. Do not filter them out before this read returns.
+    }
+  };
+
+  const retrySync = async () => {
+    if (!id) return;
+    try {
+      await flushQueue();
+    } catch {
+      // The queue stays. Local rows stay with it.
+    }
+    if ((await pendingFor(id)) === 0) await adoptServerSets();
+  };
+
   const finish = async () => {
     if (!id || finishing || finished) return;
     stopRest();
     setFinishing(true);
-    setFinishError("");
     try {
       // The share card snapshots the sets the server holds. A queued set that
       // did not land keeps the athlete in the logger — the complete panel stays shut.
       await flushQueue();
       if ((await pendingFor(id)) > 0) {
-        setFinishError(t("Could not sync sets. Finish stays closed until they land."));
-        setLoggerError(t("Could not sync your sets. They are still here."));
+        setFinishError(t(SYNC_FINISH));
+        setLoggerError(t(SYNC_LOGGER));
         return;
       }
+      await adoptServerSets();
       const result = await api.finishWorkout(id);
       if (!result?.ended_at) {
         setFinishError(t("Session did not finish. Try again."));
@@ -445,9 +501,10 @@ export default function WorkoutLogger() {
         (sum, row) => sum + (Number(row.weight_kg) || 0) * (Number(row.reps) || 0),
         0,
       );
+      setFinishError("");
       setSummary({
         sets: logged.length,
-        minutes: Math.max(0, Math.round(Number(result.duration_sec) || 0) / 60),
+        minutes: receiptMinutes(result.duration_sec),
         tonnage,
       });
       setFinished(true);
@@ -597,7 +654,7 @@ export default function WorkoutLogger() {
         <View style={styles.warningBanner} testID="offline-banner">
           <Ionicons name="cloud-offline" color={colors.warning} size={16} />
           <Text style={styles.warningTxt}>{t(queued === 1 ? "{count} set pending sync" : "{count} sets pending sync", { count: formatNumber(queued) })}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={t("Retry sync")} testID="logger-retry-sync" onPress={() => void flushQueue()} style={press("ghost", styles.skipBtn)}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Retry sync")} testID="logger-retry-sync" onPress={() => void retrySync()} style={press("ghost", styles.skipBtn)}>
             <Text style={styles.skipTxt}>{t("Retry sync")}</Text>
           </Pressable>
         </View>
@@ -640,7 +697,7 @@ export default function WorkoutLogger() {
                   </Text>
                   {isOptimisticSet(s) ? (
                     queueFailed ? (
-                      <Pressable accessibilityRole="button" accessibilityLabel={t("Retry sync")} testID={`set-retry-${s.set_index}`} onPress={() => void flushQueue()}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={t("Retry sync")} testID={`set-retry-${s.set_index}`} onPress={() => void retrySync()}>
                         <Text style={styles.setSaving}>{t("Retry sync")}</Text>
                       </Pressable>
                     ) : (
@@ -673,9 +730,9 @@ export default function WorkoutLogger() {
             <Text accessibilityRole="alert" testID="add-set-error" style={styles.addError}>{addError}</Text>
           ) : null}
           <View style={styles.entryFields}>
-          <FieldCol label={t("REPS")} value={reps} onChange={(value) => { setAddError(""); setReps(value); }} testID="input-reps" />
-          <FieldCol label={t("KG")} value={weight} onChange={(value) => { setAddError(""); setWeight(value); }} testID="input-weight" />
-          <FieldCol label={t("RPE")} value={rpe} onChange={setRpe} testID="input-rpe" />
+          <FieldCol label={t("REPS")} value={reps} onChange={(value) => { setAddError(""); repsDirty.current = true; setReps(value); }} testID="input-reps" />
+          <FieldCol label={t("KG")} value={weight} onChange={(value) => { setAddError(""); weightDirty.current = true; setWeight(value); }} testID="input-weight" />
+          <FieldCol label={t("RPE")} value={rpe} onChange={(value) => { rpeDirty.current = true; setRpe(value); }} testID="input-rpe" />
           <Pressable
             style={press("primary", styles.addBtn)}
             onPress={quickAddSet}
@@ -763,7 +820,7 @@ export default function WorkoutLogger() {
         <Text style={styles.shareCopy} testID="session-summary">
           {t("{count} sets", { count: formatNumber(summary.sets) })}
           {" · "}
-          {t("{count} min", { count: formatNumber(summary.minutes) })}
+          {summary.minutes === null ? "—" : t("{count} min", { count: formatNumber(summary.minutes) })}
           {" · "}
           {formatNumber(Math.round(summary.tonnage))} kg
         </Text>

@@ -11,11 +11,9 @@ export async function staffTab(page: Page, id: string) {
   try {
     await tab.waitFor({ state: "visible", timeout: 8_000 });
   } catch {
-    // A missed tap leaves the drawer shut. A second tap on an open drawer would close it.
-    if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
-    if ((await menu.getAttribute("aria-expanded")) === "true") {
-      await tab.scrollIntoViewIfNeeded().catch(() => undefined);
-    }
+    // A missed tap leaves the name on Menu. Close menu means the drawer is already open.
+    const name = (await menu.getAttribute("aria-label")) ?? "";
+    if (name === "Menu") await menu.click();
   }
   await tab.waitFor({ state: "visible" });
   return tab;

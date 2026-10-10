@@ -837,7 +837,8 @@ async def finish_workout(workout_id: str, user: dict = Depends(current_user)):
     if w.get("ended_at"):
         return clean(w)
     ended = now()
-    duration = int((ended - w["started_at"]).total_seconds()) if w.get("started_at") else 0
+    started = w.get("started_at")
+    duration = int((ended - started).total_seconds()) if started else None
     finished_fields: dict = {"ended_at": ended, "duration_sec": duration}
     load = training_load.session_load(w.get("perceived_effort"), duration)
     if load is not None:

@@ -124,7 +124,7 @@ function AdminConsole() {
           </View>
         ) : (
           <View style={styles.header}>
-            <Affordance accessibilityRole="button" accessibilityLabel={t(navOpen ? "Close menu" : "Menu")} accessibilityState={{ expanded: navOpen }} testID="admin-nav-menu" hitSlop={8} onPress={() => setNavOpen(open => !open)} style={styles.icon}>
+            <Affordance accessibilityRole="button" accessibilityLabel={t(navOpen ? "Close menu" : "Menu")} accessibilityState={{ expanded: navOpen }} aria-expanded={navOpen} testID="admin-nav-menu" hitSlop={8} onPress={() => setNavOpen(open => !open)} style={styles.icon}>
               <Ionicons name={navOpen ? "close" : "menu"} size={22} color={staffColors.text} />
             </Affordance>
             <View style={{ flex: 1, minWidth: 0 }}>

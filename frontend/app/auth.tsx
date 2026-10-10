@@ -6,19 +6,21 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/src/auth-context";
-import { colors, radius, spacing, type } from "@/src/theme";
+import { IronflowMark } from "@/src/components/night/plate-glyphs";
+import { colors, fonts, radius, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const wideForm = width > 480;
   const params = useLocalSearchParams<{ ref?: string | string[] }>();
   const referralCode = (Array.isArray(params.ref) ? params.ref[0] : params.ref)?.trim() ?? "";
   const [mode, setMode] = useState<"login" | "register">(referralCode ? "register" : "login");
@@ -28,6 +30,7 @@ export default function AuthScreen() {
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submitLabel = mode === "login" ? t("Sign in") : t("Create account");
 
   const submit = async () => {
     setErr(null);
@@ -45,24 +48,12 @@ export default function AuthScreen() {
 
   return (
     <View style={styles.wrap} testID="auth-screen">
-      <View style={styles.bg}>
-        <Image
-          source={require("../assets/images/icon.png")}
-          style={styles.mark}
-          contentFit="contain"
-          accessibilityElementsHidden
-          importantForAccessibility="no"
-        />
-        <Text style={styles.placeholder}>Placeholder</Text>
-        <LinearGradient
-          colors={["transparent", colors.bg]}
-          style={StyleSheet.absoluteFill}
-          locations={[0.2, 1]}
-        />
+      <View style={styles.hero}>
+        <IronflowMark size={88} />
       </View>
 
       <KeyboardAvoidingView
-        style={styles.form}
+        style={[styles.form, wideForm && styles.formWide]}
         behavior="padding"
       >
         <ScrollView
@@ -95,6 +86,9 @@ export default function AuthScreen() {
                   <Pressable
                     key={r}
                     testID={`role-${r}-btn`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: role === r }}
+                    aria-checked={role === r}
                     onPress={() => setRole(r)}
                     style={[styles.roleChip, role === r && styles.roleChipActive]}
                   >
@@ -135,13 +129,15 @@ export default function AuthScreen() {
           />
 
           {err && (
-            <Text style={styles.err} testID="auth-error">
+            <Text style={styles.err} testID="auth-error" accessibilityRole="alert">
               {err}
             </Text>
           )}
 
           <Pressable
             testID="auth-submit-btn"
+            accessibilityRole="button"
+            accessibilityLabel={submitLabel}
             style={[styles.cta, busy && { opacity: 0.5 }]}
             disabled={busy}
             onPress={submit}
@@ -171,21 +167,31 @@ export default function AuthScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
-  bg: { position: "absolute", top: 0, left: 0, right: 0, height: "42%", alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
-  mark: { width: 88, height: 88 },
-  placeholder: { color: colors.textDim, fontSize: 12, marginTop: 8 },
+  hero: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.lg,
+    minHeight: 160,
+  },
   form: {
     flex: 1,
-    justifyContent: "flex-end",
+    width: "100%",
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxxl * 2,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
+  },
+  formWide: {
+    maxWidth: 420,
+    alignSelf: "center",
   },
   brand: {
     color: colors.text,
-    fontSize: 42,
-    fontWeight: "900",
-    letterSpacing: 4,
+    fontFamily: fonts.displayStrong,
+    fontWeight: "400",
+    fontSize: 40,
+    letterSpacing: 0.2,
     marginBottom: spacing.xs,
   },
   tagline: {
@@ -224,7 +230,7 @@ const styles = StyleSheet.create({
   roleTxt: { color: colors.textMuted, fontWeight: "400", letterSpacing: 0 },
   roleTxtActive: { color: colors.brandOn, fontWeight: "600" },
   err: {
-    color: colors.error,
+    color: colors.errorText,
     marginBottom: spacing.sm,
     marginTop: -spacing.xs,
   },

@@ -933,6 +933,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     try {
       body = JSON.parse(text) as { detail?: unknown };
     } catch {
+      if (res.ok) throw new Error("The server response was not valid JSON.");
       body = null;
     }
   }
