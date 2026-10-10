@@ -26,6 +26,7 @@
     "src/recorder-math.test.ts",
     "src/weekly-review.test.ts",
     "src/sentry-gate.test.ts",
-    "src/metric-state.test.ts"
+    "src/metric-state.test.ts",
+    "src/components/anatomy/callout-geometry.test.ts"
   ]
 }

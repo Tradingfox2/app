@@ -30,115 +30,44 @@ import {
   isVisibleOnSide,
   MUSCLE_HOME_SIDE,
 } from "./muscle-relations";
-import { MUSCLE_NAMES, FRONT_MUSCLES, BACK_MUSCLES } from "./anatomy-artwork";
+import { BACK_VIEWBOX, FRONT_VIEWBOX, MUSCLE_NAMES, FRONT_MUSCLES, BACK_MUSCLES } from "./anatomy-artwork";
 import { MUSCLE_KNOWLEDGE } from "./muscle-knowledge";
 import { localizeMuscleKnowledge } from "./muscle-knowledge-locales";
+import { muscleCalloutPlans, readCalloutFacts } from "./callout-geometry";
+import { MuscleCalloutLabel, useCalloutSequence } from "./muscle-callout";
 import { api } from "../../api";
 import { colors, spacing } from "../../theme";
 import { useI18n } from "../../i18n";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SWIPE_THRESHOLD = 45;
-// Side label columns (name + weekly frequency) appear when the stage is wide
-// enough for [labels][front][back][labels]; narrow screens keep the chip row.
-const LABEL_COL_W = 148;
-const LABELS_MIN_STAGE_W = 640;
+const CALLOUT_BREAKPOINT = 760;
 
-const FRONT_LABEL_SLUGS = [
-  ...new Set(FRONT_MUSCLES.map((m) => m.slug)),
-].filter((slug) => MUSCLE_HOME_SIDE[slug] === "front");
-const BACK_LABEL_SLUGS = [
-  ...new Set(BACK_MUSCLES.map((m) => m.slug)),
-].filter((slug) => MUSCLE_HOME_SIDE[slug] === "back");
-
-function MuscleLabelColumn({
-  slugs,
-  align,
-  selected,
-  activation,
-  onPress,
-  compact = false,
-}: {
-  slugs: MuscleSlug[];
-  align: "left" | "right";
-  selected: MuscleSlug | null;
-  activation: ActivationMap;
-  onPress: (slug: MuscleSlug) => void;
-  /** Short stage (detail sheet open): drop the role line so all 7 labels fit. */
-  compact?: boolean;
-}) {
-  const { locale, t, formatNumber } = useI18n();
-  return (
-    <View
-      style={[styles.labelCol, align === "right" && styles.labelColRight]}
-      testID={`muscle-labels-${align}`}
-    >
-      {slugs.map((slug) => {
-        const k = localizeMuscleKnowledge(slug, locale, MUSCLE_KNOWLEDGE[slug]);
-        const isSelected = selected === slug;
-        const level = activation[slug];
-        const accent = isSelected
-          ? colors.text
-          : level === "secondary"
-            ? colors.volt
-            : level === "stabilizer"
-              ? colors.blaze
-              : null;
-        return (
-          <Pressable
-            key={slug}
-            onPress={() => onPress(slug)}
-            accessibilityRole="button"
-            accessibilityLabel={t("{name}, recommended {frequency}", {
-              name: t(MUSCLE_NAMES[slug]),
-              frequency: t("{min}–{max}×/week", {
-                min: formatNumber(k.sessions[0]),
-                max: formatNumber(k.sessions[1]),
-              }),
-            })}
-            accessibilityState={{ selected: isSelected }}
-            style={({ pressed }) => [
-              styles.labelBtn,
-              compact && styles.labelBtnCompact,
-              align === "right" && styles.labelBtnRight,
-              accent ? { borderColor: accent } : null,
-              isSelected && styles.labelBtnOn,
-              pressed && { opacity: 0.8 },
-            ]}
-          >
-            <Text
-              style={[
-                styles.labelName,
-                align === "right" && styles.labelTextRight,
-                accent ? { color: accent } : null,
-              ]}
-              numberOfLines={1}
-            >
-              {t(MUSCLE_NAMES[slug])}
-            </Text>
-            {!compact ? (
-              <Text
-                style={[styles.labelRole, align === "right" && styles.labelTextRight]}
-                numberOfLines={2}
-              >
-                {t(k.role)}
-              </Text>
-            ) : null}
-            {!compact ? (
-              <Text
-                style={[styles.labelFreq, align === "right" && styles.labelTextRight]}
-              >
-                {t("{min}–{max}×/week", {
-                  min: formatNumber(k.sessions[0]),
-                  max: formatNumber(k.sessions[1]),
-                })} · {formatNumber(k.sets[0])}–{formatNumber(k.sets[1])} {t("sets")}
-              </Text>
-            ) : null}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+function calloutLines(
+  slug: MuscleSlug,
+  locale: ReturnType<typeof useI18n>["locale"],
+  t: ReturnType<typeof useI18n>["t"],
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
+) {
+  const knowledge = localizeMuscleKnowledge(slug, locale, MUSCLE_KNOWLEDGE[slug]);
+  const facts = readCalloutFacts(knowledge);
+  const unavailable = t("Unavailable");
+  return {
+    name: t(MUSCLE_NAMES[slug]),
+    role: facts.role ? t(facts.role) : unavailable,
+    sessions: facts.sessions
+      ? t("{min}–{max}×/week", {
+          min: formatNumber(facts.sessions[0]),
+          max: formatNumber(facts.sessions[1]),
+        })
+      : unavailable,
+    sets: facts.sets
+      ? t("{min}–{max} hard sets/week", {
+          min: formatNumber(facts.sets[0]),
+          max: formatNumber(facts.sets[1]),
+        })
+      : unavailable,
+  };
 }
 
 export type MuscleExplorerProps = {
@@ -157,7 +86,7 @@ export function MuscleExplorer({
   initialMuscle,
   workoutId,
 }: MuscleExplorerProps) {
-  const { t } = useI18n();
+  const { t, locale, formatNumber } = useI18n();
   // View state
   const [side, setSide] = useState<BodySide>("front");
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleSlug | null>(null);
@@ -208,7 +137,7 @@ export function MuscleExplorer({
     };
   }, []);
 
-  const spinning = !reduceMotion && !spinPaused && !spinHeld;
+  const spinning = !reduceMotion && !spinPaused && !spinHeld && !selectedMuscle;
 
   useEffect(() => {
     sideRef.current = side;
@@ -473,21 +402,50 @@ export function MuscleExplorer({
   }, []);
 
   const stats = selectedMuscle ? data.muscles?.[selectedMuscle] : undefined;
-  const chipSlugs = [
-    ...new Set(
-      [...FRONT_MUSCLES, ...BACK_MUSCLES].map((item) => item.slug),
-    ),
-  ];
-  const showSideLabels = stageSize.w >= LABELS_MIN_STAGE_W;
-  // Short stages use one-line labels so the columns never run behind the sheet.
-  const compactLabels = stageSize.h < 560;
-  const chromeH = showSideLabels ? 40 : selectedMuscle ? 92 : 84;
+  const narrow = stageSize.w < CALLOUT_BREAKPOINT;
+  const calloutPlans = React.useMemo(
+    () => ({
+      front: muscleCalloutPlans(FRONT_MUSCLES, FRONT_VIEWBOX),
+      back: muscleCalloutPlans(BACK_MUSCLES, BACK_VIEWBOX),
+    }),
+    [],
+  );
+  const visibleSide: BodySide | null = selectedMuscle
+    ? isVisibleOnSide(selectedMuscle, side)
+      ? side
+      : MUSCLE_HOME_SIDE[selectedMuscle]
+    : null;
+  const activePlan = visibleSide && selectedMuscle
+    ? calloutPlans[visibleSide].find((plan) => plan.slug === selectedMuscle) ?? null
+    : null;
+  const sequence = useCalloutSequence(
+    activePlan ? `${activePlan.side}:${activePlan.slug}` : null,
+    reduceMotion,
+  );
+  const shownSide = sequence.shownKey?.split(":")[0] as BodySide | undefined;
+  const shownSlug = sequence.shownKey?.split(":")[1] as MuscleSlug | undefined;
+  const shownPlan = shownSide && shownSlug
+    ? calloutPlans[shownSide]?.find((plan) => plan.slug === shownSlug) ?? null
+    : null;
+  const shownCopy = shownSlug ? calloutLines(shownSlug, locale, t, formatNumber) : null;
+  const calloutLabel = shownCopy && shownPlan ? (
+    <MuscleCalloutLabel
+      name={shownCopy.name}
+      role={shownCopy.role}
+      sessions={shownCopy.sessions}
+      sets={shownCopy.sets}
+      sequence={sequence}
+      compact={narrow}
+      align={shownPlan.gutter === "right" ? "right" : "left"}
+    />
+  ) : null;
+  const chromeH = narrow ? (selectedMuscle ? 148 : 84) : selectedMuscle ? 40 : 72;
   const zoom = selectedMuscle && !reduceMotion ? 1.05 : 1;
   const gap = 20;
   const maxH = Math.max(180, stageSize.h - chromeH - 36);
-  const labelsW = showSideLabels ? 2 * (LABEL_COL_W + gap) : 0;
-  const maxCol = Math.max(90, (stageSize.w - 24 - gap - labelsW) / 2);
-  let bodyW = Math.min(maxCol, 200);
+  const gutterW = !narrow && shownPlan ? 176 : 0;
+  const maxCol = Math.max(90, (stageSize.w - 24 - gap - gutterW) / 2);
+  let bodyW = Math.min(maxCol, narrow ? 180 : 250);
   let bodyH = bodyW * 2;
   if (bodyH > maxH) {
     bodyH = maxH;
@@ -569,16 +527,6 @@ export function MuscleExplorer({
           }}
         >
           <View style={styles.stageRow}>
-            {showSideLabels ? (
-              <MuscleLabelColumn
-                slugs={FRONT_LABEL_SLUGS}
-                align="left"
-                selected={selectedMuscle}
-                activation={activation}
-                onPress={handleMusclePress}
-                compact={compactLabels}
-              />
-            ) : null}
             <MuscleHeatmap
               volumes={data.volumes}
               max={data.max}
@@ -592,48 +540,26 @@ export function MuscleExplorer({
               showLegend={false}
               showStatus={false}
               onMusclePress={handleMusclePress}
+              callout={
+                shownPlan && shownCopy
+                  ? {
+                      side: shownPlan.side,
+                      gutter: shownPlan.gutter,
+                      leader: shownPlan.leader,
+                      line: sequence.line,
+                      placement: narrow ? "below" : "beside",
+                      label: narrow ? null : calloutLabel,
+                    }
+                  : null
+              }
             />
-            {showSideLabels ? (
-              <MuscleLabelColumn
-                slugs={BACK_LABEL_SLUGS}
-                align="right"
-                selected={selectedMuscle}
-                activation={activation}
-                onPress={handleMusclePress}
-                compact={compactLabels}
-              />
-            ) : null}
           </View>
           {!selectedMuscle ? (
             <Text style={styles.idleLabel}>
-              {showSideLabels
-                ? t("Tap a muscle on either body, or a label on the side")
-                : t("Front and Back stay on screen — tap a muscle on either body")}
+              {t("Front and Back stay on screen — tap a muscle on either body")}
             </Text>
           ) : null}
-          <View style={[styles.muscleChips, showSideLabels && { display: "none" }]}>
-            {chipSlugs.map((slug) => {
-              const active = selectedMuscle === slug;
-              return (
-                <Pressable
-                  key={slug}
-                  onPress={() => handleMusclePress(slug)}
-                  style={[styles.muscleChip, active && styles.muscleChipOn]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("Select {name}", { name: t(MUSCLE_NAMES[slug]) })}
-                >
-                  <Text
-                    style={[
-                      styles.muscleChipText,
-                      active && styles.muscleChipTextOn,
-                    ]}
-                  >
-                    {t(MUSCLE_NAMES[slug])}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {narrow ? calloutLabel : null}
         </LinearGradient>
       </View>
 
@@ -806,39 +732,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 20,
   },
-  labelCol: {
-    width: LABEL_COL_W,
-    gap: spacing.xs,
-    alignItems: "flex-start",
-  },
-  labelColRight: { alignItems: "flex-end" },
-  labelBtn: {
-    width: LABEL_COL_W,
-    minHeight: 40,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(15,23,42,0.85)",
-    borderLeftWidth: 3,
-  },
-  labelBtnCompact: {
-    minHeight: 30,
-    paddingVertical: 4,
-  },
-  labelBtnRight: { borderLeftWidth: 1, borderRightWidth: 3 },
-  labelBtnOn: { backgroundColor: colors.surface2 },
-  labelName: { color: colors.text, fontSize: 12, fontWeight: "800", letterSpacing: 0.4 },
-  labelRole: { color: colors.textMuted, fontSize: 10, lineHeight: 13, marginTop: 1 },
-  labelFreq: {
-    color: colors.volt,
-    fontSize: 10,
-    fontWeight: "700",
-    marginTop: 3,
-    letterSpacing: 0.3,
-  },
-  labelTextRight: { textAlign: "right" },
   idleLabel: {
     marginTop: spacing.sm,
     marginHorizontal: spacing.md,
@@ -847,35 +740,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.4,
     textAlign: "center",
-  },
-  muscleChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  muscleChip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(28,28,30,0.85)",
-    borderRadius: 999,
-    minHeight: 32,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  muscleChipOn: {
-    borderColor: colors.text,
-    backgroundColor: colors.surface2,
-  },
-  muscleChipText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  muscleChipTextOn: {
-    color: colors.brandOn,
   },
   detailSheet: {
     height: "42%",
