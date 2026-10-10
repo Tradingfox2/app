@@ -215,7 +215,11 @@ export default function CheckinScreen() {
                     ? t(" — claim your partner reward at the desk")
                     : rewardVisits === null
                       ? ""
-                      : t(" · {count} more for a reward", { count: formatNumber(rewardVisits) })}
+                      : (
+                        <Text testID="visits-until-reward">
+                          {t(" · {count} more for a reward", { count: formatNumber(rewardVisits) })}
+                        </Text>
+                      )}
                 </Text>
                 {rewardVisits !== null && result.reward_unlocked ? (
                   <Text style={styles.resultMeta} testID="visits-until-reward">
