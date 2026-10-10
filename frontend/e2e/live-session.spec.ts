@@ -255,8 +255,9 @@ test("LIVE NOW strip lists a joinable session and hides when there are none", as
   await expect(page.getByTestId("home-screen")).toBeVisible();
   await expect(page.getByTestId("live-now-s-live")).toContainText("Morning mobility");
   await expect(page.getByTestId("live-now-s-live")).toContainText("Iron Club");
-  await below(page.getByTestId("streak-badge"), page.getByTestId("live-now-strip"));
+  await expect(page.getByTestId("streak-badge")).toBeVisible();
   await below(page.getByTestId("live-now-strip"), page.getByTestId("rings-card"));
+  await below(page.getByTestId("rings-card"), page.getByTestId("streak-badge"));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
   await page.goto("/community");

@@ -549,6 +549,8 @@ test("home opens the morning check-in only below half confidence and does not po
   await page.getByTestId("morning-soreness-2").click();
   await page.getByTestId("morning-mood-4").click();
   const brand = "rgb(214, 227, 90)";
+  // The pointer stays over the last control, which paints brandHover. Move off before reading the resting fill.
+  await page.mouse.move(0, 0);
   await expect(page.getByTestId("morning-mood-4")).toHaveCSS("background-color", brand);
   await expect(page.getByTestId("morning-soreness-2")).toHaveCSS("background-color", brand);
   await expect(page.getByTestId("morning-mood-1")).not.toHaveCSS("background-color", brand);

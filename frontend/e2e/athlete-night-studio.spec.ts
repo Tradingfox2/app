@@ -350,13 +350,15 @@ test("wide windows keep a phone column, stable meters, and training links one pr
   await page.getByTestId("today-start-day").focus();
   const outline = await page.getByTestId("today-start-day").evaluate((el) => {
     const style = getComputedStyle(el);
-    return { width: style.outlineWidth, color: style.outlineColor, offset: style.outlineOffset };
+    const specified = (el as HTMLElement).style.outline;
+    return { width: style.outlineWidth, offset: style.outlineOffset, specified };
   });
   expect(outline.width).toBe("2px");
   expect(outline.offset).toBe("2px");
-  const channels = outline.color.match(/\d+/g)?.map((part) => Number(part)) ?? [];
-  expect(channels.length).toBeGreaterThanOrEqual(3);
-  expect(Math.min(channels[0] ?? 0, channels[1] ?? 0, channels[2] ?? 0)).toBeGreaterThan(200);
+  expect(outline.specified).toContain("2px");
+  expect(outline.specified).toContain("rgb(242, 243, 244)");
+  // outline-color transitions for 140ms from currentColor. Wait for the painted ring.
+  await expect.poll(async () => page.getByTestId("today-start-day").evaluate((el) => getComputedStyle(el).outlineColor)).toMatch(/rgb\(242,\s*243,\s*244\)|color\(\s*srgb\s+0\.9/);
   await expect(page.getByTestId("ring-strain")).toContainText("Not connected");
   await expect(page.getByTestId("ring-load")).toHaveCount(0);
   const recovery = await page.getByTestId("ring-recovery").boundingBox();

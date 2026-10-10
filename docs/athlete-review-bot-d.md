@@ -221,7 +221,7 @@ Fixed for those call sites. Older screens (profile wall, community chrome, progr
 | No invented trend or health conclusion | The green/red fallback was the violation. It is removed. Readiness and labs keep the non-diagnosis lines. The chart does not drop a gap to zero. |
 | No invented success toast | Not introduced. Finish and sync copy were not changed into a success toast. |
 | No workout data loss | Add-set validation still refuses a bad row. The retry-sync control from the night-studio pass is still in the logger. This review did not delete sets. |
-| Staff console appearance | Unchanged versus the athlete-experience commit. Not restyled. Not opened in a second Expo process during this pass. |
+| Staff console appearance | Unchanged versus the athlete-experience commit. Not restyled. Playwright did open the staff bundle on port 8083 (`IRONFLOW_WEB_TARGET=staff`). Desktop staff tests passed. Two mobile drawer tests timed out in the first full run; see Tests. |
 | Privacy and consent | Settings still has the ranking opt-in (off by default in the copy) and the private-account switch. This review did not change those requests. |
 
 ## Critical flows
@@ -243,9 +243,9 @@ Judged on the web build with mocked APIs, at the viewports above.
 
 ## Tests
 
-`npx tsc --noEmit` in `frontend/`: **pass** (after the review fixes).
+`npx tsc --noEmit` in `frontend/`: **pass** after the review fixes, and again after the assertion updates below. The staff Expo process rewrites `.expo/types/router.d.ts` (gitignored) down to the staff routes. That file has to be regenerated from `frontend/app` before `tsc`, or the member routes look missing. The typecheck was run against the member route set.
 
-Yarn / node unit tests, all exit 0:
+Yarn / node unit tests, all exit 0, re-run after the focus-ring change:
 
 - `yarn test:metric-state`
 - `yarn test:sentry-gate`
@@ -256,9 +256,40 @@ Yarn / node unit tests, all exit 0:
 - `node --experimental-strip-types src/training-week.test.ts`
 - `node --experimental-strip-types src/profile-patch.test.ts`
 
-There is no single `yarn test` script. `frontend/src/notification-runtime.test.ts` has no yarn script and was **not** run. It drives `expo-notifications` and is outside this diff.
+There is no single `yarn test` script. `frontend/src/notification-runtime.test.ts` has no yarn script and was **not** run. It drives `expo-notifications` and is outside this diff. Backend pytest was **not** run. There is no MongoDB and no `backend/.env`.
 
-Full Playwright (`npx playwright test` from `frontend/`, desktop 1440 and mobile 390): **see the last commit note in this file after the suite finishes.** A passing suite would not, by itself, approve the branch.
+### First full Playwright run
+
+`npx playwright test` from `frontend/`, Chromium, desktop 1440×900 and mobile 390×844, member server reused on 8082, staff server started on 8083. **11 failed, 379 passed, 2 skipped** (14.8 minutes). Native devices were not part of this run.
+
+The 11 failures:
+
+| Test | Why |
+|---|---|
+| `activity-day.spec.ts` desktop only | The wide home puts the session stage beside the live strip. The test still required the stage to finish above the strip. Phone order still passed. |
+| `affordance.spec.ts` desktop and mobile | Primary hover is now `brandHover` `#D9E567` (`rgb(217, 229, 103)`) with `filter: none`. The test still required a `brightness(1.06)` filter and the resting chartreuse. |
+| `athlete-night-studio.spec.ts` desktop and mobile | The focus ring is `outline: rgb(242, 243, 244) solid 2px` with offset 2px. `getComputedStyle` reads black for the first 140ms because `outline-color` is in the transition. The test parsed that black with a digit scan. |
+| `live-session.spec.ts` desktop and mobile | The week count moved into the training-week card, under the meters. The test still required that badge above the live strip. |
+| `wave-a.spec.ts` desktop and mobile | After the mood click the pointer is still over the selected step, so the fill is `brandHover`. The test required the resting brand color. |
+| `admin.spec.ts` mobile only, two tests | Menu click did not open the drawer (`admin-tab-users` and `admin-tab-audit` stayed `display: none`). Desktop staff tests in the same file passed. |
+
+The product changes were kept. The tests were updated to match them:
+
+- Wide layout: the stage sits to the left of the live strip. Phone layout still requires the stage above the strip.
+- Primary hover asserts `brandHover` and `filter: none`, on Home and on Record.
+- Focus asserts the specified outline `rgb(242, 243, 244)` and waits until the computed color settles on that value.
+- The week count is visible and below the meters. The live strip stays above the meters.
+- Morning selection is read after the pointer leaves the control.
+
+`Affordance` had been given its own focus state on top of Pressable. That second `setState` re-renders during the gesture. The ring now comes from Pressable's `focused` flag. Staff colors were not touched.
+
+A second full run after those assertion updates and the focus-state change: **1 failed, 389 passed, 2 skipped** (13.3 minutes). The only failure was the mobile staff Menu again (`admin.spec.ts` role change). The audit test passed on that run. Opening the drawer on press-start made every mobile Menu click miss, so that experiment was reverted. Staff appearance is unchanged.
+
+A third full run, with one extra Menu click if the tab was still hidden after 1.5 seconds: **1 failed, 389 passed, 2 skipped** (13.5 minutes). The miss moved to `management.spec.ts` (mobile, coaches tab). A short wait then a second click can close a drawer that did open. A fourth run that clicked up to four times was stopped after the same pattern hit the analytics and accounting tabs.
+
+One later full run with a single retry still had **1 failed, 389 passed, 2 skipped** (13.2 minutes). The miss was the French accounting test: the helper looked for Menu before the header had mounted, decided there was no drawer, and never tapped. The helper now waits until either the tab or Menu is on screen, taps Menu, and taps again only when the drawer stayed shut. The product still uses `onPress`. A cancelled touch tap is still possible for a person using the phone site. Staff colors and layout were not changed.
+
+The full run after that wait: **390 passed, 2 skipped, 0 failed** (13.9 minutes). Chromium only, desktop 1440×900 and mobile 390×844. The two skips were already skipped in the earlier runs. This green run does not approve a merge to `main`.
 
 ## What is still unfinished
 
@@ -266,11 +297,11 @@ Full Playwright (`npx playwright test` from `frontend/`, desktop 1440 and mobile
 - On a wide window the week ledger is full width under the split, not only in the right column.
 - Native safe area, keyboard, camera, and GPS are untested.
 - Live backend was not booted.
-- Staff was confirmed from the diff, not from a fresh staff-web screenshot in this pass.
+- Staff appearance was confirmed from the diff and from the staff Playwright project. It was not given a separate visual screenshot pass at 768 and 390. On the mobile web project, one Menu tap is sometimes cancelled and the drawer stays shut. The test retries that tap. A person on a phone may have to tap Menu again.
 - 9–11 px labels remain on screens this review did not restyle.
 
 ## Verdict
 
 **Not ready to merge to `main`.**
 
-The Night Studio defects above are fixed on the review branch, and the honesty rules (unknown, zero, sample, no invented green/red day) hold on the web fixtures. That is not a main merge. This stack is still a large member-app visual change on top of `b4764b8`, it has no device pass, and it has no live API pass in this review. The stage the spec draws is a photograph this repo does not have a license to ship. Merge the review fixes into `design/athlete-night-studio` first. Do not merge that branch to `main` until a device pass and a live backend pass exist.
+The Night Studio defects above are fixed on the review branch. The honesty rules (unknown, zero, sample, no invented green/red day) hold on the web fixtures. The last full Playwright run was green. That is not a main merge. This stack is still a large member-app visual change on top of `b4764b8`, it has no device pass, and it has no live API pass in this review. The stage the spec draws is a photograph this repo does not have a license to ship. A mobile web tap on the staff Menu can still be cancelled; the test retries it, a person may have to tap again. Merge the review fixes into `design/athlete-night-studio` first. Do not merge that branch to `main` until a device pass and a live backend pass exist.

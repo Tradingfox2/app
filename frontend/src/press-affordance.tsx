@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import {
   AccessibilityInfo,
   Platform,
@@ -24,13 +24,14 @@ export type AffordanceSignal = "raise" | "hairline" | "brand" | "none";
 const BRAND_HOVER = "#DDE874";
 const MOTION_MS = "140ms";
 
-type PressState = PressableStateCallbackType & { hovered?: boolean };
+type PressState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 
 type AffordanceStyle = ViewStyle & {
   cursor?: "pointer";
   outlineWidth?: number;
   outlineStyle?: "solid";
   outlineColor?: string;
+  outlineOffset?: number;
   transitionProperty?: string;
   transitionDuration?: string;
   transitionTimingFunction?: string;
@@ -134,44 +135,32 @@ export function affordanceStyle(
   }
 }
 
+function focusRing(state: PressState, blocked: boolean): AffordanceStyle | null {
+  // Pressable already tracks focus and passes it into the style callback.
+  // A second setState here re-renders during the gesture and can drop the tap.
+  if (Platform.OS !== "web" || blocked || !state.focused) return null;
+  return {
+    outlineWidth: 2,
+    outlineStyle: "solid",
+    outlineColor: colors.text,
+    outlineOffset: 2,
+  };
+}
+
 /** Drop-in Pressable that shows it can be used. `signal="none"` keeps the current look. */
-export function Affordance({ style, signal = "raise", disabled, onFocus, onBlur, ...rest }: AffordanceProps) {
+export function Affordance({ style, signal = "raise", disabled, ...rest }: AffordanceProps) {
   const reduce = useReduceMotion();
   const blocked = Boolean(disabled);
-  const [focused, setFocused] = useState(false);
-  // A text-colored ring, not chartreuse. Chartreuse stays on primary and selected controls.
-  const focusRing: ViewStyle | null = Platform.OS === "web" && focused && !blocked
-    ? { outlineWidth: 2, outlineStyle: "solid", outlineColor: colors.text, outlineOffset: 2 }
-    : null;
-  const handleFocus: NonNullable<PressableProps["onFocus"]> = (event) => {
-    setFocused(true);
-    onFocus?.(event);
-  };
-  const handleBlur: NonNullable<PressableProps["onBlur"]> = (event) => {
-    setFocused(false);
-    onBlur?.(event);
-  };
-  if (signal === "none") {
-    return (
-      <Pressable
-        {...(rest as PressableProps)}
-        disabled={disabled}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        style={[style, focusRing]}
-      />
-    );
-  }
   return (
     <Pressable
       {...(rest as PressableProps)}
       disabled={disabled}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
       style={(state) => [
         style,
-        affordanceStyle(state as PressState, { signal, disabled: blocked, reduceMotion: reduce }),
-        focusRing,
+        signal === "none"
+          ? null
+          : affordanceStyle(state as PressState, { signal, disabled: blocked, reduceMotion: reduce }),
+        focusRing(state as PressState, blocked),
       ]}
     />
   );
