@@ -24,9 +24,11 @@ export type AnatomyBodyProps = {
   interactive?: boolean;
   animateFibers?: boolean;
   reduceMotion?: boolean;
-  onMusclePress?: (muscle: MuscleSlug) => void;
+  onMusclePress?: (muscle: MuscleSlug, side: BodySide) => void;
   width?: number;
   height?: number;
+  /** Overrides the side's viewBox so a callout gutter can share the same scale. */
+  viewBox?: string;
 };
 
 function resolveSvgNode(ref: unknown): SVGSVGElement | null {
@@ -89,6 +91,7 @@ export function AnatomyBody({
   onMusclePress,
   width = 280,
   height = 560,
+  viewBox,
 }: AnatomyBodyProps) {
   const muscles = useMemo<MusclePathDefinition[]>(
     () => (side === "front" ? FRONT_MUSCLES : BACK_MUSCLES),
@@ -140,9 +143,9 @@ export function AnatomyBody({
 
   const handleMusclePress = useCallback(
     (slug: MuscleSlug) => {
-      if (interactive && onMusclePress) onMusclePress(slug);
+      if (interactive && onMusclePress) onMusclePress(slug, side);
     },
-    [interactive, onMusclePress],
+    [interactive, onMusclePress, side],
   );
 
   // On web the listener lives on the wrapping <div>, not on the <svg>: the
@@ -154,6 +157,13 @@ export function AnatomyBody({
     if (Platform.OS !== "web" || !interactive) return;
     const container = containerRef.current as unknown as HTMLElement | null;
     if (!container || typeof container.addEventListener !== "function") return;
+
+    // role is applied on the DOM node. Passing it as accessibilityRole makes
+    // react-native-web swap the path for an HTML button.
+    for (const node of container.querySelectorAll("path[id]")) {
+      if (!idToSlug.has(node.id)) continue;
+      node.setAttribute("role", "button");
+    }
 
     const onClick = (event: Event) => {
       const svg =
@@ -168,8 +178,45 @@ export function AnatomyBody({
       }
     };
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      const svg =
+        svgNode ??
+        (container.querySelector("svg") as SVGSVGElement | null);
+      if (!svg) return;
+      const target = event.target as Element | null;
+      if (!target || !container.contains(target)) return;
+      if (event.key === "Enter" || event.key === " ") {
+        const slug = slugFromDomEvent(event, svg, idToSlug);
+        if (!slug) return;
+        event.preventDefault();
+        handleMusclePress(slug);
+        return;
+      }
+      if (
+        event.key !== "ArrowDown" &&
+        event.key !== "ArrowUp" &&
+        event.key !== "ArrowLeft" &&
+        event.key !== "ArrowRight"
+      ) {
+        return;
+      }
+      const paths = [...svg.querySelectorAll("path[id]")].filter((path) => idToSlug.has(path.id));
+      const index = paths.findIndex(
+        (path) => path === document.activeElement || path.contains(document.activeElement),
+      );
+      if (index < 0) return;
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+      const next = paths[(index + delta + paths.length) % paths.length] as HTMLElement | undefined;
+      next?.focus();
+    };
+
     container.addEventListener("click", onClick);
-    return () => container.removeEventListener("click", onClick);
+    container.addEventListener("keydown", onKeyDown);
+    return () => {
+      container.removeEventListener("click", onClick);
+      container.removeEventListener("keydown", onKeyDown);
+    };
   }, [handleMusclePress, idToSlug, interactive, svgNode]);
 
   return (
@@ -188,7 +235,7 @@ export function AnatomyBody({
         ref={setSvgRef as never}
         width={width}
         height={height}
-        viewBox={side === "front" ? FRONT_VIEWBOX : BACK_VIEWBOX}
+        viewBox={viewBox ?? (side === "front" ? FRONT_VIEWBOX : BACK_VIEWBOX)}
         preserveAspectRatio="xMidYMid meet"
       >
         <G pointerEvents="none">
@@ -211,6 +258,7 @@ export function AnatomyBody({
               selected={selectedMuscle === definition.slug}
               activation={activation?.[definition.slug]}
               interactive={interactive && Platform.OS !== "web"}
+              focusable={interactive && Platform.OS === "web"}
               animateFibers={animateFibers && !activation?.[definition.slug]}
               reduceMotion={reduceMotion}
               glow={glow}

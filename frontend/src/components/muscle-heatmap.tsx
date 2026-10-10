@@ -12,6 +12,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { pressableStyle, useReducedMotion } from "@/src/affordance";
 import { colors, spacing } from "@/src/theme";
 import { AnatomyBody } from "@/src/components/anatomy/anatomy-body";
+import { CalloutLeader, calloutSvgBox, type CalloutSequence } from "@/src/components/anatomy/muscle-callout";
+import { parseViewBox, type Point } from "@/src/components/anatomy/callout-geometry";
 import type {
   ActivationMap,
   BodySide,
@@ -43,6 +45,18 @@ type Props = {
   onMusclePress?: (muscle: MuscleSlug) => void;
   /** Home-only hover and press. Other callers keep today's static prompt. */
   affordance?: boolean;
+  /**
+   * Explorer-only anatomical callout. Home leaves this unset, so the preview
+   * stays a plain pair of figures.
+   */
+  callout?: {
+    side: BodySide;
+    gutter: "left" | "right";
+    leader: readonly Point[];
+    line: CalloutSequence["line"];
+    placement: "beside" | "below";
+    label: React.ReactNode;
+  } | null;
 };
 
 export function MuscleHeatmap({
@@ -60,12 +74,14 @@ export function MuscleHeatmap({
   onPress,
   onMusclePress,
   affordance = false,
+  callout = null,
 }: Props) {
   const { t } = useI18n();
   const softenMotion = useReducedMotion();
   const mapped = volumes as Partial<Record<MuscleSlug, number>>;
   const yaw = useRef(new Animated.Value(0.5)).current;
   const shouldSpin = spinning && !reduceMotion;
+  const holdYaw = callout != null;
   const useNative = Platform.OS !== "web";
 
   useEffect(() => {
@@ -73,7 +89,7 @@ export function MuscleHeatmap({
       yaw.stopAnimation();
       Animated.timing(yaw, {
         toValue: 0.5,
-        duration: 350,
+        duration: holdYaw ? 200 : 350,
         easing: Easing.out(Easing.quad),
         useNativeDriver: useNative,
       }).start();
@@ -97,7 +113,7 @@ export function MuscleHeatmap({
     );
     loop.start();
     return () => loop.stop();
-  }, [shouldSpin, yaw, useNative]);
+  }, [holdYaw, shouldSpin, yaw, useNative]);
 
   const rotateY = yaw.interpolate({
     inputRange: [0, 1],
@@ -131,6 +147,7 @@ export function MuscleHeatmap({
           emphasized={emphasize === "front"}
           rotateY={rotateY}
           bodyProps={bodyProps}
+          callout={callout?.side === "front" ? callout : null}
         />
         <BodyColumn
           label={t("BACK")}
@@ -138,6 +155,7 @@ export function MuscleHeatmap({
           emphasized={emphasize === "back"}
           rotateY={rotateYBack}
           bodyProps={bodyProps}
+          callout={callout?.side === "back" ? callout : null}
         />
       </View>
       {showStatus && selectedMuscle ? (
@@ -180,13 +198,29 @@ function BodyColumn({
   emphasized,
   rotateY,
   bodyProps,
+  callout,
 }: {
   label: string;
   side: BodySide;
   emphasized: boolean;
   rotateY: Animated.AnimatedInterpolation<string | number>;
   bodyProps: Omit<React.ComponentProps<typeof AnatomyBody>, "side">;
+  callout: Props["callout"];
 }) {
+  const width = bodyProps.width ?? 280;
+  const height = bodyProps.height ?? 560;
+  const framed = callout ? calloutSvgBox(side, callout.gutter) : null;
+  const svgWidth = framed ? width * framed.scale : width;
+  const showBeside = Boolean(callout && callout.placement === "beside" && callout.label);
+  const end = callout?.leader[callout.leader.length - 1];
+  const frame = framed ? parseViewBox(framed.viewBox) : null;
+  // The tick sits on the leader end. Clamp so a packed slot still stays on the figure.
+  const labelTop = end && frame
+    ? Math.min(
+        Math.max(((end.y - frame.minY) / frame.height) * height - 8, 0),
+        Math.max(0, height - 88),
+      )
+    : 0;
   return (
     <View style={styles.bodyBlock} testID={`body-${side}`}>
       <Animated.View
@@ -196,7 +230,36 @@ function BodyColumn({
           { transform: [{ perspective: 600 }, { rotateY }] },
         ]}
       >
-        <AnatomyBody {...bodyProps} side={side} />
+        <View style={styles.calloutRow}>
+          {showBeside && callout?.gutter === "left" ? (
+            <View key="gutter" style={[styles.calloutGutter, { height }]}>
+              <View style={[styles.calloutAnchor, { top: labelTop }]}>{callout.label}</View>
+            </View>
+          ) : null}
+          <View key="figure" style={{ width: svgWidth, height }}>
+            <AnatomyBody
+              {...bodyProps}
+              side={side}
+              width={svgWidth}
+              height={height}
+              viewBox={framed?.viewBox}
+            />
+            {callout && framed ? (
+              <CalloutLeader
+                points={callout.leader}
+                progress={callout.line}
+                width={svgWidth}
+                height={height}
+                viewBox={framed.viewBox}
+              />
+            ) : null}
+          </View>
+          {showBeside && callout?.gutter === "right" ? (
+            <View key="gutter" style={[styles.calloutGutter, { height }]}>
+              <View style={[styles.calloutAnchor, { top: labelTop }]}>{callout.label}</View>
+            </View>
+          ) : null}
+        </View>
       </Animated.View>
       <Text style={[styles.bodyLbl, emphasized && styles.bodyLblOn]}>
         {label}
@@ -212,6 +275,19 @@ const styles = StyleSheet.create({
   bodyFrame: {
     borderRadius: 12,
     overflow: "visible",
+  },
+  calloutRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  calloutGutter: {
+    width: 176,
+    position: "relative",
+  },
+  calloutAnchor: {
+    position: "absolute",
+    left: 0,
+    right: 0,
   },
   bodyFrameOn: {
     borderWidth: 1,

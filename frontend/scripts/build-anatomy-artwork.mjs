@@ -55,6 +55,8 @@ function fibers(paths) {
     .join(" ");
 }
 
+// Path-start averages only. Callout anchors are computed later in
+// src/components/anatomy/callout-geometry.ts from the filled outlines.
 function label(paths) {
   const pts = paths.map(firstXY);
   if (!pts.length) return { labelX: 0, labelY: 0 };

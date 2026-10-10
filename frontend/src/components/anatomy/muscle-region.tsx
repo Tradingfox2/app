@@ -88,6 +88,8 @@ type MuscleRegionProps = {
   selected: boolean;
   activation?: ActivationLevel;
   interactive: boolean;
+  /** Web keyboard target. Native presses stay on `interactive`. */
+  focusable?: boolean;
   animateFibers: boolean;
   reduceMotion: boolean;
   glow?: number;
@@ -103,6 +105,7 @@ export function MuscleRegion({
   selected,
   activation,
   interactive,
+  focusable = false,
   animateFibers,
   reduceMotion,
   glow = 1,
@@ -168,6 +171,14 @@ export function MuscleRegion({
         pointerEvents="auto"
         data-muscle-slug={definition.slug}
         {...pressProps}
+        {...(focusable
+          ? {
+              // accessibilityRole="button" makes react-native-web replace this
+              // SVG path with an HTML button and drops the fill.
+              tabIndex: 0,
+              accessibilityLabel,
+            }
+          : {})}
       />
 
       {showFibers ? (
