@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Kettlebell</title>
+  <path d="M24 28v-4a8 8 0 0 1 16 0v4" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round"/>
+  <circle cx="32" cy="40" r="13" stroke="#F2F3F4" stroke-width="2.25"/>
+</svg>

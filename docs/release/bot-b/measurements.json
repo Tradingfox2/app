@@ -1,0 +1,159 @@
+{
+  "authWord": [
+    {
+      "text": "IRONFLOW",
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "42px",
+      "fontWeight": "900",
+      "color": "rgb(242, 243, 244)",
+      "width": 342,
+      "height": 57,
+      "x": 24,
+      "y": 96
+    }
+  ],
+  "authPlaceholder": [
+    {
+      "text": "Placeholder",
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "12px",
+      "fontWeight": "400",
+      "color": "rgb(168, 178, 188)",
+      "width": 67,
+      "height": 17,
+      "x": 162,
+      "y": 217
+    }
+  ],
+  "authTag": [
+    {
+      "text": "Welcome back.",
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(197, 204, 211)",
+      "width": 342,
+      "height": 22,
+      "x": 24,
+      "y": 157
+    }
+  ],
+  "overflowAuth": {
+    "scroll": 390,
+    "client": 390
+  },
+  "remoteAuth": [],
+  "homeWide": {
+    "home": {
+      "x": 160,
+      "w": 1120
+    },
+    "stage": {
+      "x": 176,
+      "y": 86,
+      "w": 660,
+      "h": 420,
+      "font": "\"Times New Roman\"",
+      "size": "16px",
+      "weight": "400",
+      "bg": "rgb(16, 20, 24)"
+    },
+    "readiness": {
+      "x": 848,
+      "y": 252,
+      "w": 416,
+      "h": 219,
+      "font": "\"Times New Roman\"",
+      "size": "16px",
+      "weight": "400",
+      "bg": "rgb(26, 31, 36)"
+    },
+    "recovery": {
+      "x": 865,
+      "y": 598,
+      "w": 382,
+      "h": 52,
+      "font": "\"Times New Roman\"",
+      "size": "16px",
+      "weight": "400",
+      "bg": "rgba(0, 0, 0, 0)"
+    },
+    "overflow": false
+  },
+  "stageTitle": null,
+  "tips": {
+    "text": "\uf58c DID YOU KNOW? 1/2 \uf484 NUTRITION Protein at each meal A serving of protein at each meal keeps the day recoverable. \uf62e HYDRATION Drink before you thirst A small glass before the session is easier than catching up mid-set. \uf229 \uf23b",
+    "colors": [
+      "rgb(0, 0, 0)",
+      "rgb(255, 138, 0)",
+      "rgb(168, 178, 188)",
+      "rgb(197, 204, 211)",
+      "rgb(242, 243, 244)",
+      "rgb(182, 241, 58)"
+    ]
+  },
+  "addErrorVisible": 1,
+  "addErrorValues": {
+    "reps": "",
+    "weight": ""
+  },
+  "addErrorText": "Enter reps and weight before adding a set.",
+  "timer": {
+    "borderTopColor": "rgb(214, 227, 90)",
+    "borderTopWidth": "1px",
+    "text": "Rest 90s Skip"
+  },
+  "loggerWide": {
+    "logger": {
+      "x": 160,
+      "y": 0,
+      "w": 1120,
+      "h": 900
+    },
+    "add": {
+      "x": 676,
+      "y": 832,
+      "w": 60,
+      "h": 56
+    },
+    "reps": {
+      "x": 172,
+      "y": 832,
+      "w": 160,
+      "h": 56
+    },
+    "overflow": false
+  },
+  "fonts": {
+    "stagePush": {
+      "fontFamily": "IronflowDisplayStrong, system-ui, sans-serif",
+      "fontSize": "40px",
+      "fontWeight": "400",
+      "letterSpacing": "0.2px"
+    },
+    "homeName": {
+      "fontFamily": "IronflowDisplay, system-ui, sans-serif",
+      "fontSize": "32px",
+      "fontWeight": "600",
+      "letterSpacing": "0.2px"
+    },
+    "coachEyebrow": {
+      "fontFamily": "IronflowTextStrong, system-ui, sans-serif",
+      "fontSize": "16px",
+      "fontWeight": "600"
+    }
+  },
+  "pixels": {
+    "authErrorRed": "sampled rgb(226, 59, 59) on auth-error-390x844.png",
+    "restTimerBorder": "rgb(214, 227, 90)",
+    "tipsColors": [
+      "rgb(255, 138, 0)",
+      "rgb(182, 241, 58)"
+    ],
+    "home1440": "shell x=160 w=1120; stage x=176 y=86 w=660 h=420; readiness x=848 y=252 w=416",
+    "logger1440": "logger w=1120; reps x=172 w=160; add x=676 w=60 h=56",
+    "auth1440Inputs": "surface2 span x=185-1254 at y=320",
+    "shell768": "content span x=160-607",
+    "remoteImageRequests": "none recorded on the auth capture; frontend source has no pexels or unsplash URL"
+  }
+}

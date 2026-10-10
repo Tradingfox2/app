@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Stride</title>
+  <circle cx="34" cy="14" r="3" stroke="#F2F3F4" stroke-width="2.25"/>
+  <path d="M33 17l-4 14 12 4-2 16M29 31l-10 8M41 35l10 14" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

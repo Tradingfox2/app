@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Core</title>
+  <circle cx="14" cy="40" r="3" stroke="#F2F3F4" stroke-width="2.25"/>
+  <path d="M17 38l28-12 8 2" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 34l-4 12" stroke="#F2F3F4" stroke-width="2.25" stroke-linecap="round"/>
+</svg>

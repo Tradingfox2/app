@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>IronFlow plate glyphs</title>
+  <style>
+    @font-face { font-family: "IronflowDisplay"; src: url("../../../../frontend/assets/fonts/BarlowCondensed-Bold.ttf"); }
+    @font-face { font-family: "IronflowText"; src: url("../../../../frontend/assets/fonts/Barlow-Regular.ttf"); }
+    body { margin: 0; background: #101418; color: #F2F3F4; font-family: IronflowText, system-ui, sans-serif; }
+    main { padding: 32px; max-width: 1100px; }
+    h1 { font-family: IronflowDisplay, system-ui, sans-serif; font-weight: 400; font-size: 40px; line-height: 40px; letter-spacing: 0.2px; margin: 0 0 8px; }
+    p { color: #C5CCD3; font-size: 16px; line-height: 24px; max-width: 62ch; }
+    h2 { font-family: IronflowText, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; color: #C5CCD3; margin: 28px 0 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; }
+    figure { margin: 0; width: 148px; background: #1A1F24; border: 1px solid #3A4652; border-radius: 16px; padding: 12px; }
+    figure.plate { background: #2E3842; }
+    img { width: 64px; height: 64px; display: block; }
+    figcaption { margin-top: 8px; font-size: 13px; line-height: 18px; color: #C5CCD3; }
+    .sizes { display: flex; align-items: flex-end; gap: 16px; background: #1A1F24; border: 1px solid #3A4652; border-radius: 16px; padding: 16px; }
+    .sizes span { color: #A8B2BC; font-size: 12px; display: block; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Plate glyphs</h1>
+    <p>Original vector marks for Night Studio. Ivory on charcoal. Chartreuse is not in the artwork. These files are references, not runtime assets.</p>
+    <h2>Mark at three sizes</h2>
+    <div class="sizes">
+      <div><img src="mark.svg" width="22" height="22" alt="" /><span>22</span></div>
+      <div><img src="mark.svg" width="48" height="48" alt="" /><span>48</span></div>
+      <div><img src="mark.svg" width="88" height="88" alt="" /><span>88</span></div>
+    </div>
+    <h2>Equipment, library row</h2>
+    <div class="row">
+      <figure class="plate"><img src="glyph-barbell.svg" alt="" /><figcaption>Barbell</figcaption></figure>
+      <figure class="plate"><img src="glyph-dumbbell.svg" alt="" /><figcaption>Dumbbell</figcaption></figure>
+      <figure class="plate"><img src="glyph-machine.svg" alt="" /><figcaption>Machine</figcaption></figure>
+      <figure class="plate"><img src="glyph-bodyweight.svg" alt="" /><figcaption>Bodyweight</figcaption></figure>
+      <figure class="plate"><img src="glyph-kettlebell.svg" alt="" /><figcaption>Kettlebell</figcaption></figure>
+    </div>
+    <h2>Movement, demo stage</h2>
+    <div class="row">
+      <figure><img src="glyph-press.svg" alt="" /><figcaption>Press</figcaption></figure>
+      <figure><img src="glyph-squat.svg" alt="" /><figcaption>Squat</figcaption></figure>
+      <figure><img src="glyph-hinge.svg" alt="" /><figcaption>Hinge</figcaption></figure>
+      <figure><img src="glyph-pull.svg" alt="" /><figcaption>Pull</figcaption></figure>
+      <figure><img src="glyph-core.svg" alt="" /><figcaption>Core</figcaption></figure>
+      <figure><img src="glyph-stride.svg" alt="" /><figcaption>Stride</figcaption></figure>
+    </div>
+  </main>
+</body>
+</html>
