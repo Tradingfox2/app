@@ -24,7 +24,7 @@ export type AnatomyBodyProps = {
   interactive?: boolean;
   animateFibers?: boolean;
   reduceMotion?: boolean;
-  onMusclePress?: (muscle: MuscleSlug) => void;
+  onMusclePress?: (muscle: MuscleSlug, side: BodySide) => void;
   width?: number;
   height?: number;
   /** Overrides the side's viewBox so a callout gutter can share the same scale. */
@@ -143,9 +143,9 @@ export function AnatomyBody({
 
   const handleMusclePress = useCallback(
     (slug: MuscleSlug) => {
-      if (interactive && onMusclePress) onMusclePress(slug);
+      if (interactive && onMusclePress) onMusclePress(slug, side);
     },
-    [interactive, onMusclePress],
+    [interactive, onMusclePress, side],
   );
 
   // On web the listener lives on the wrapping <div>, not on the <svg>: the
@@ -157,6 +157,13 @@ export function AnatomyBody({
     if (Platform.OS !== "web" || !interactive) return;
     const container = containerRef.current as unknown as HTMLElement | null;
     if (!container || typeof container.addEventListener !== "function") return;
+
+    // role is applied on the DOM node. Passing it as accessibilityRole makes
+    // react-native-web swap the path for an HTML button.
+    for (const node of container.querySelectorAll("path[id]")) {
+      if (!idToSlug.has(node.id)) continue;
+      node.setAttribute("role", "button");
+    }
 
     const onClick = (event: Event) => {
       const svg =
@@ -177,7 +184,7 @@ export function AnatomyBody({
         (container.querySelector("svg") as SVGSVGElement | null);
       if (!svg) return;
       const target = event.target as Element | null;
-      if (!target || !svg.contains(target)) return;
+      if (!target || !container.contains(target)) return;
       if (event.key === "Enter" || event.key === " ") {
         const slug = slugFromDomEvent(event, svg, idToSlug);
         if (!slug) return;

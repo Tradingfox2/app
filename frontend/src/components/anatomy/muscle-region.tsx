@@ -173,12 +173,10 @@ export function MuscleRegion({
         {...pressProps}
         {...(focusable
           ? {
+              // accessibilityRole="button" makes react-native-web replace this
+              // SVG path with an HTML button and drops the fill.
               tabIndex: 0,
-              focusable: true,
-              accessible: true,
-              accessibilityRole: "button" as const,
               accessibilityLabel,
-              accessibilityState: { selected },
             }
           : {})}
       />

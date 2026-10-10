@@ -180,6 +180,7 @@ test("every muscle callout names the region, draws one leader, and keeps the det
     }
   }
 
+  await page.getByRole("tab", { name: "Overview" }).click();
   await expect(page.getByTestId("muscle-knowledge")).toContainText("Ankle plantar flexion");
   await page.getByRole("tab", { name: "Exercises" }).click();
   await page.getByTestId("add-exercise-bench-press").click();

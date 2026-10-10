@@ -230,15 +230,21 @@ function BodyColumn({
           { transform: [{ perspective: 600 }, { rotateY }] },
         ]}
       >
-        {callout && framed ? (
-          <View style={styles.calloutRow}>
-            {showBeside && callout.gutter === "left" ? (
-              <View style={[styles.calloutGutter, { height }]}>
-                <View style={[styles.calloutAnchor, { top: labelTop }]}>{callout.label}</View>
-              </View>
-            ) : null}
-            <View style={{ width: svgWidth, height }}>
-              <AnatomyBody {...bodyProps} side={side} width={svgWidth} height={height} viewBox={framed.viewBox} />
+        <View style={styles.calloutRow}>
+          {showBeside && callout?.gutter === "left" ? (
+            <View key="gutter" style={[styles.calloutGutter, { height }]}>
+              <View style={[styles.calloutAnchor, { top: labelTop }]}>{callout.label}</View>
+            </View>
+          ) : null}
+          <View key="figure" style={{ width: svgWidth, height }}>
+            <AnatomyBody
+              {...bodyProps}
+              side={side}
+              width={svgWidth}
+              height={height}
+              viewBox={framed?.viewBox}
+            />
+            {callout && framed ? (
               <CalloutLeader
                 points={callout.leader}
                 progress={callout.line}
@@ -246,16 +252,14 @@ function BodyColumn({
                 height={height}
                 viewBox={framed.viewBox}
               />
-            </View>
-            {showBeside && callout.gutter === "right" ? (
-              <View style={[styles.calloutGutter, { height }]}>
-                <View style={[styles.calloutAnchor, { top: labelTop }]}>{callout.label}</View>
-              </View>
             ) : null}
           </View>
-        ) : (
-          <AnatomyBody {...bodyProps} side={side} />
-        )}
+          {showBeside && callout?.gutter === "right" ? (
+            <View key="gutter" style={[styles.calloutGutter, { height }]}>
+              <View style={[styles.calloutAnchor, { top: labelTop }]}>{callout.label}</View>
+            </View>
+          ) : null}
+        </View>
       </Animated.View>
       <Text style={[styles.bodyLbl, emphasized && styles.bodyLblOn]}>
         {label}

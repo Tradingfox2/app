@@ -206,10 +206,10 @@ export function MuscleExplorer({
 
   // Handle muscle selection — highlight the muscle plus combination partners immediately
   const handleMusclePress = useCallback(
-    (muscle: MuscleSlug) => {
+    (muscle: MuscleSlug, pressedSide?: BodySide) => {
       setAiCircuit(null);
 
-      if (selectedMuscle === muscle) {
+      if (selectedMuscle === muscle && (!pressedSide || pressedSide === side)) {
         selectedRef.current = null;
         setSelectedMuscle(null);
         setRecommendations(null);
@@ -221,7 +221,9 @@ export function MuscleExplorer({
       setSelectedMuscle(muscle);
       setRecommendations(null);
       setActivation(combinationActivation(muscle));
-      if (!isVisibleOnSide(muscle, side)) {
+      if (pressedSide && isVisibleOnSide(muscle, pressedSide)) {
+        if (pressedSide !== side) changeSide(pressedSide);
+      } else if (!isVisibleOnSide(muscle, side)) {
         changeSide(MUSCLE_HOME_SIDE[muscle]);
       }
       loadRecommendations(muscle);
