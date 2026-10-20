@@ -105,6 +105,7 @@ class PublicUser(BaseModel):
     activity_ranking_opt_in: bool = False
     is_private: bool = False
     staff_role: Optional[str] = None
+    email_verified: bool = False
     bio: str = ""
     cover_url: Optional[str] = None
     sports: list[str] = []
@@ -222,9 +223,11 @@ def verify_password(pw: str, stored: str) -> bool:
         return False
 
 
-def make_token(user_id: str) -> str:
+def make_token(user_id: str, token_version: int = 0) -> str:
+    """`tv` is the user's token_version; bumping it (change password) revokes older tokens."""
     payload = {
         "sub": user_id,
+        "tv": token_version,
         "iat": now(),
         "exp": now() + timedelta(minutes=JWT_TTL_MIN),
     }
@@ -249,6 +252,8 @@ async def current_user(
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=401, detail="User no longer exists")
+    if payload.get("tv", 0) != user.get("token_version", 0):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     if user.get("suspended_at"):
         expires = user.get("suspended_until")
         if expires and expires.tzinfo is None:
@@ -323,6 +328,7 @@ def to_public_user(u: dict) -> PublicUser:
         activity_ranking_opt_in=u.get("activity_ranking_opt_in", False),
         is_private=u.get("is_private", False),
         staff_role=u.get("staff_role"),
+        email_verified=bool(u.get("email_verified", False)),
         bio=u.get("bio") or "",
         cover_url=u.get("cover_url"),
         sports=list(u.get("sports") or []),
@@ -337,6 +343,8 @@ def to_public_user(u: dict) -> PublicUser:
 async def lifespan(app: FastAPI):
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
+    await db.auth_tokens.create_index("token_hash", unique=True)
+    await db.auth_tokens.create_index("expires_at", expireAfterSeconds=0)
     # The feed's private-author filter scans only private accounts; this keeps
     # that scan proportional to them, not to every user.
     await db.users.create_index("is_private", partialFilterExpression={"is_private": True})
@@ -594,6 +602,7 @@ async def register(body: RegisterIn):
         "coach_status": "not_applied",
         "avatar_url": None,
         "preferred_locale": DEFAULT_LOCALE,
+        "email_verified": False,
         "created_at": now(),
     }
     code = (body.referral_code or "").strip().upper()
@@ -616,7 +625,7 @@ async def login(body: LoginIn):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(401, "Invalid email or password")
-    return TokenOut(access_token=make_token(user["id"]), user=to_public_user(user))
+    return TokenOut(access_token=make_token(user["id"], user.get("token_version", 0)), user=to_public_user(user))
 
 
 @api.get("/auth/me", response_model=PublicUser)
@@ -1450,6 +1459,7 @@ from routers.notifications import router as notifications_router  # noqa: E402
 from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
 from revenuecat import router as revenuecat_router  # noqa: E402
+from auth_account import router as auth_account_router  # noqa: E402
 
 
 async def home_today_for(uid: str) -> dict:
@@ -1483,6 +1493,7 @@ api.include_router(gyms_router)
 api.include_router(muscles_router)
 api.include_router(tips_router)
 api.include_router(revenuecat_router)
+api.include_router(auth_account_router)
 
 app.include_router(api)
 # Bundled local files (exercise posters) stay served even when uploads go to S3/R2.
