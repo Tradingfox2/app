@@ -34,7 +34,17 @@ router = APIRouter()
 
 RESET_TTL = timedelta(hours=1)
 VERIFY_TTL = timedelta(hours=48)
-APP_URL = os.environ.get("APP_PUBLIC_URL", "ironflow://").rstrip("/")
+APP_URL = os.environ.get("APP_PUBLIC_URL", "ironflow://")
+
+
+class AppLinks:
+    """Builds links into the app without collapsing a bare scheme (ironflow://)."""
+
+    @staticmethod
+    def build(path: str, base: str | None = None) -> str:
+        root = APP_URL if base is None else base
+        prefix = root if root.endswith("://") else root.rstrip("/") + "/"
+        return prefix + path.lstrip("/")
 
 
 def _db():
@@ -190,7 +200,7 @@ async def forgot_password(body: EmailIn):
     if user:
         raw = await EmailTokens.issue(user["id"], "reset_password", RESET_TTL)
         await Mailer.send(user["email"], "Reset your IronFlow password",
-                          f"Reset your password (valid 1 hour): {APP_URL}/reset-password?token={raw}\n"
+                          f"Reset your password (valid 1 hour): {AppLinks.build('reset-password')}?token={raw}\n"
                           "If you did not ask for this, ignore this email.")
     return {"ok": True}
 
@@ -215,7 +225,7 @@ async def verify_email_request(user: dict = Depends(current_user)):
     await _hit("verify_email", user["id"])
     raw = await EmailTokens.issue(user["id"], "verify_email", VERIFY_TTL)
     await Mailer.send(user["email"], "Confirm your IronFlow email",
-                      f"Confirm your email: {APP_URL}/verify-email?token={raw}")
+                      f"Confirm your email: {AppLinks.build('verify-email')}?token={raw}")
     return {"ok": True, "email_verified": False}
 
 

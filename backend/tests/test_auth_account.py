@@ -134,3 +134,14 @@ def test_delete_refuses_while_the_user_owns_a_community(monkeypatch):
         await expect(409, auth_account.delete_me(auth_account.DeleteAccountIn(password="old-password"), user))
         assert await db.users.count_documents({"id": "ann"}) == 1
     run_isolated(scenario)
+
+
+class TestAppLinks:
+    def test_bare_scheme_keeps_double_slash(self):
+        from auth_account import AppLinks
+        assert AppLinks.build("reset-password", "ironflow://") == "ironflow://reset-password"
+
+    def test_https_base_with_or_without_trailing_slash(self):
+        from auth_account import AppLinks
+        assert AppLinks.build("/verify-email", "https://app.example.com/") == "https://app.example.com/verify-email"
+        assert AppLinks.build("verify-email", "https://app.example.com") == "https://app.example.com/verify-email"
