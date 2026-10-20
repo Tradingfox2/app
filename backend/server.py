@@ -1460,6 +1460,7 @@ from routers.search import router as search_router  # noqa: E402
 from tips import router as tips_router  # noqa: E402
 from revenuecat import router as revenuecat_router  # noqa: E402
 from auth_account import router as auth_account_router  # noqa: E402
+from routers.nutrition import router as nutrition_router  # noqa: E402
 
 
 async def home_today_for(uid: str) -> dict:
@@ -1494,6 +1495,7 @@ api.include_router(muscles_router)
 api.include_router(tips_router)
 api.include_router(revenuecat_router)
 api.include_router(auth_account_router)
+api.include_router(nutrition_router)
 
 app.include_router(api)
 # Bundled local files (exercise posters) stay served even when uploads go to S3/R2.
