@@ -48,7 +48,7 @@ referrals — RLS enabled on every health/user table.
 
 ## Next building blocks
 - Real Terra connection (needs TERRA_API_KEY/TERRA_DEV_ID in backend/.env)
-- HealthKit / Health Connect native reads (needs native build)
+- HealthKit / Health Connect reads of steps, heart rate, and workouts already on the phone (native build; not a server sync)
 - Stripe subscriptions + coach payouts
 - Group session live streaming
 - Migration to real Supabase once user provides credentials

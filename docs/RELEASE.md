@@ -46,7 +46,7 @@ Phone push credentials (FCM and APNs) stay the steps in `frontend/README.md`. Up
 ## Apple Developer (one time)
 
 1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/). A personal or organization membership is enough. Note the Team ID (Membership details).
-2. In Certificates, Identifiers & Profiles, register an App ID with bundle id `com.ironflow.app`. Enable **HealthKit** and **Push Notifications**. Leave HealthKit Clinical Records off. This repo does not read HealthKit yet; the capability has to exist on the App ID before a later build can ask for it.
+2. In Certificates, Identifiers & Profiles, register an App ID with bundle id `com.ironflow.app`. Enable **HealthKit** and **Push Notifications**. Leave HealthKit Clinical Records off. The app reads step count, heart rate, and workouts in the foreground. It does not write health data and does not enable background delivery.
 3. In App Store Connect, create the app **IronFlow** with that bundle id. SKU: `ironflow`. Primary language can be English. Do not submit it for review in this step.
 4. Create an App Store Connect API key so EAS can upload without an Apple ID password. App Store Connect → Users and Access → Integrations → App Store Connect API → Generate API Key. Role: App Manager. Download the `.p8` once (Apple will not show it again). Keep the Issuer ID and the Key ID with the file.
 5. From `frontend/`, run `npx eas-cli credentials -p ios` and choose the production profile. Let EAS create the distribution certificate and provisioning profile. When it asks for the push key, let it create the APNs key. When you submit, give EAS the API key path, Key ID, and Issuer ID. You can also set `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID`, and `EXPO_ASC_ISSUER_ID` in the shell for that command. Do not commit the `.p8`.
@@ -57,7 +57,7 @@ The first iOS upload with `--auto-submit` lands in TestFlight for internal teste
 
 1. Register a [Google Play Console](https://play.google.com/console/signup) developer account and pay the one-time fee.
 2. Create the app **IronFlow**. Choose App, Free or Paid as you intend to sell it. The Android package is set by the first uploaded bundle and cannot be changed. It must be `com.ironflow.app`.
-3. Finish the dashboard tasks Play blocks an internal release on: privacy policy URL, app access, ads, content rating, target audience, and Data safety. Declare the Health Connect read permissions listed below even though the app does not request them yet. Policy → App content → Health apps. Say the app will read heart rate, resting heart rate, heart rate variability, sleep, steps, and active calories only after a member connects Health Connect, and that this build does not request that access.
+3. Finish the dashboard tasks Play blocks an internal release on: privacy policy URL, app access, ads, content rating, target audience, and Data safety. Policy → App content → Health apps. Say the app reads heart rate, steps, and exercise sessions only after a member allows Health Connect, that steps are aggregated, and that this build does not read exercise routes, sleep, calories, or history beyond the default window. The data is not used for ads.
 4. Play App Signing: accept it on the first release. EAS uses the upload key; Play holds the app signing key.
 
 ## Google service account (one time)
@@ -85,10 +85,10 @@ EAS Submit needs a Google service-account JSON key. The same style of key is als
 
 `frontend/plugins/withHealth.js` is config only:
 
-- iOS: HealthKit entitlement, `NSHealthShareUsageDescription`, `NSHealthUpdateUsageDescription`. No background delivery. The app does not write health data.
-- Android: Health Connect read permissions for heart rate, resting heart rate, heart-rate variability, sleep, steps, and active calories, plus the permission-rationale activity alias Play and Android 14 expect. No write permissions.
+- iOS: HealthKit entitlement, `NSHealthShareUsageDescription`, `NSHealthUpdateUsageDescription`. Read is separate from share. No background delivery. The app does not write health data.
+- Android: Health Connect read permissions for heart rate, steps, and exercise, plus the permission-rationale activity alias Play and Android 14 expect. No route, write, background, or history permission.
 
-No screen calls HealthKit or Health Connect. Connecting a watch still uses the existing sources list.
+The Apple Health and Health Connect cards ask for that read on a native build. Other watches still use the existing sources list.
 
 ## Ship a build
 
