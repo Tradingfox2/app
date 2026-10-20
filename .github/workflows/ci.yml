@@ -98,6 +98,10 @@ jobs:
         working-directory: frontend
         run: node --experimental-strip-types src/sentry-gate.test.ts
 
+      - name: Missed session note
+        working-directory: frontend
+        run: node --experimental-strip-types src/missed-session.test.ts
+
   api-image:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

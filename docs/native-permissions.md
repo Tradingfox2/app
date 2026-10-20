@@ -61,6 +61,8 @@ The system dialog is Notification Settings. The Push switch in `frontend/app/not
 
 The workout rest timer (`frontend/src/rest-timer.ts`, started from `frontend/app/workout/[id].tsx`) schedules a local notification for when rest ends. It does not request permission. If permission is already granted, the alert is scheduled on channel `rest-timer`. If it is undetermined or denied, the in-app countdown still runs and no alert is scheduled. Skip, finish, and leaving the screen cancel the pending alert.
 
+The missed-session note (`frontend/src/missed-session-note.ts`) is the same kind of local alert. Home schedules one per program week, after Today has painted, only when notification permission is already granted. It does not ask. The date falls between 08:00 and 20:59 local, because the trigger has no quiet-hours field. iOS sets `interruptionLevel` to `passive`. Android uses one channel, `missed-session` (name "Missed session"), created at importance low. That importance is not raised later. There is no background location permission.
+
 Turning Push on:
 
 - **Granted:** the app registers the Expo push token (`registerForPush`) and saves `push: true` on the server.

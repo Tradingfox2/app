@@ -29,6 +29,7 @@
     "src/sentry-gate.test.ts",
     "src/metric-state.test.ts",
     "src/components/anatomy/callout-geometry.test.ts",
-    "src/session-layout.test.ts"
+    "src/session-layout.test.ts",
+    "src/missed-session.test.ts"
   ]
 }
