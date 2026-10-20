@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from server import clean, current_user, db, new_id, now, require_pro
 from terra_labs import verify_webhook_signature
+from terra_wearables import TerraClient, TerraConfig, TerraError, TerraWebhook
 from routers.labs import claim_terra_lab_event, process_claimed_terra_lab_event
 
 router = APIRouter()
@@ -34,7 +35,7 @@ TERRA_SIGNING_SECRET = os.environ.get("TERRA_SIGNING_SECRET", "")
 TERRA_WIDGET_URL = os.environ.get("TERRA_WIDGET_URL", "https://access.tryterra.co/api/widget/session")
 # Where Terra sends the browser after the provider login (frontend /sources route).
 APP_PUBLIC_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:8082").rstrip("/")
-TERRA_PROVIDER_CODES = {"garmin": "GARMIN", "whoop": "WHOOP", "fitbit": "FITBIT", "oura": "OURA"}
+TERRA_PROVIDER_CODES = dict(TerraConfig.PROVIDER_CODES)
 SDK_ONLY_PROVIDERS = {"apple_health", "health_connect", "samsung_health"}
 # Technogym Mywellness cloud (gym equipment). Real activation needs a commercial
 # agreement + API key + auth domain from a local Technogym rep; endpoints then
@@ -57,6 +58,8 @@ PROVIDER_INFO: dict[str, dict] = {
                "provides": ["hrv", "resting_hr", "sleep_hours", "steps", "calories"]},
     "oura": {"kind": "wearable", "label": "Oura",
              "provides": ["hrv", "resting_hr", "sleep_hours", "recovery"]},
+    "polar": {"kind": "wearable", "label": "Polar",
+              "provides": ["hrv", "resting_hr", "sleep_hours", "steps", "calories"]},
     "apple_health": {"kind": "wearable", "label": "Apple Health",
                      "provides": ["hrv", "resting_hr", "sleep_hours", "steps"]},
     "health_connect": {"kind": "wearable", "label": "Health Connect",
@@ -752,6 +755,230 @@ async def terra_webhook(request: Request, background: BackgroundTasks):
         {"terra_user_id": terra_user}, {"$set": {"last_sync_at": now()}}
     )
     return {"received": True, "processed": processed}
+
+
+# --------------------------------------------------------------------------- #
+# Terra wearables v2: /api/wearables/terra/*, GET /api/wearables, DELETE      #
+# Off (503) unless TERRA_DEV_ID, TERRA_API_KEY and TERRA_SIGNING_SECRET are   #
+# set. Connections live in wearable_sources (the Sources screen reads it);    #
+# per-item samples live in wearable_samples, deduped on a natural key.        #
+# --------------------------------------------------------------------------- #
+class TerraConnectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    providers: Optional[list[str]] = None
+
+
+class TerraStore:
+    """Mongo writes for Terra connections and samples."""
+
+    @staticmethod
+    async def mark_pending(user_id: str, provider: str) -> None:
+        existing = await db.wearable_sources.find_one({"user_id": user_id, "provider": provider}, {"_id": 0})
+        if existing and existing.get("status") == "connected":
+            return
+        await db.wearable_sources.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": {"status": "pending", "pending_since": now()},
+             "$setOnInsert": {"id": new_id(), "user_id": user_id, "provider": provider}},
+            upsert=True,
+        )
+
+    @staticmethod
+    async def connect(user_id: str, provider: str, terra_user_id: str) -> None:
+        await db.wearable_sources.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": {"status": "connected", "terra_user_id": terra_user_id,
+                      "connected_at": now(), "source": "terra"},
+             "$setOnInsert": {"id": new_id(), "user_id": user_id, "provider": provider}},
+            upsert=True,
+        )
+
+    @staticmethod
+    async def disconnect_terra_user(terra_user_id: str) -> int:
+        res = await db.wearable_sources.update_many(
+            {"terra_user_id": terra_user_id},
+            {"$set": {"status": "disconnected", "disconnected_at": now()}},
+        )
+        return res.modified_count
+
+    @staticmethod
+    async def upsert_sample(src: dict, event_type: str, item: dict) -> bool:
+        sample = TerraWebhook.normalize(event_type, item)
+        if not sample["values"]:
+            return False
+        key = TerraWebhook.item_key(event_type, item)
+        await db.wearable_samples.update_one(
+            {"user_id": src["user_id"], "provider": src["provider"],
+             "event_type": event_type, "item_key": key},
+            {"$set": {**sample, "terra_user_id": src["terra_user_id"], "updated_at": now()},
+             "$setOnInsert": {"id": new_id(), "created_at": now()}},
+            upsert=True,
+        )
+        return True
+
+
+class TerraEvents:
+    """Dispatch one verified Terra webhook payload."""
+
+    @staticmethod
+    async def handle(payload: dict, background: BackgroundTasks) -> dict:
+        event_type = payload.get("type")
+        if event_type in {"lab_report.completed", "lab_report.failed"}:
+            if not await claim_terra_lab_event(payload):
+                return {"received": True, "duplicate": True, "processed": 0}
+            background.add_task(process_claimed_terra_lab_event, payload)
+            return {"received": True, "queued": True}
+        if event_type in TerraWebhook.AUTH_EVENTS:
+            return await TerraEvents._auth(payload)
+        if event_type in TerraWebhook.DEAUTH_EVENTS:
+            terra_user_id = (payload.get("user") or {}).get("user_id")
+            changed = await TerraStore.disconnect_terra_user(terra_user_id) if terra_user_id else 0
+            return {"received": True, "event": event_type, "processed": changed}
+        if event_type in TerraWebhook.DATA_EVENTS:
+            return await TerraEvents._data(event_type, payload)
+        return {"received": True, "event": event_type, "processed": 0, "reason": "ignored event"}
+
+    @staticmethod
+    async def _auth(payload: dict) -> dict:
+        if payload.get("type") == "auth" and payload.get("status") != "success":
+            return {"received": True, "event": "auth", "processed": 0, "reason": payload.get("status")}
+        if payload.get("type") == "user_reauth":
+            old = (payload.get("old_user") or {}).get("user_id")
+            if old:
+                await TerraStore.disconnect_terra_user(old)
+            terra_user = payload.get("new_user") or {}
+        else:
+            terra_user = payload.get("user") or {}
+        reference_id = terra_user.get("reference_id") or payload.get("reference_id")
+        provider = TerraConfig.provider_slug(terra_user.get("provider"))
+        if not (reference_id and provider and terra_user.get("user_id")):
+            return {"received": True, "event": payload.get("type"), "processed": 0, "reason": "incomplete user"}
+        await TerraStore.connect(reference_id, provider, terra_user["user_id"])
+        return {"received": True, "event": payload.get("type"), "processed": 1}
+
+    @staticmethod
+    async def _data(event_type: str, payload: dict) -> dict:
+        terra_user_id = (payload.get("user") or {}).get("user_id")
+        if not terra_user_id:
+            return {"received": True, "event": event_type, "processed": 0, "reason": "no user"}
+        src = await db.wearable_sources.find_one(
+            {"terra_user_id": terra_user_id, "status": "connected"}, {"_id": 0}
+        )
+        if not src:
+            return {"received": True, "event": event_type, "processed": 0, "reason": "unknown terra user"}
+        samples = 0
+        metrics = 0
+        for item in payload.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            if await TerraStore.upsert_sample(src, event_type, item):
+                samples += 1
+            if event_type == "activity":
+                continue  # workout totals are not day metrics
+            item_key = _terra_item_key(event_type, item)
+            for metric, value in _terra_metric_values(event_type, item).items():
+                await db.wearable_metrics.update_one(
+                    {"terra_user_id": terra_user_id, "terra_event_type": event_type,
+                     "terra_item_key": item_key, "metric": metric},
+                    {"$set": {"user_id": src["user_id"], "metric": metric, "value": value,
+                              "unit": METRIC_UNITS.get(metric), "device": src["provider"],
+                              "simulated": False, "terra_user_id": terra_user_id,
+                              "terra_event_type": event_type, "terra_item_key": item_key,
+                              "recorded_at": _terra_recorded_at(item), "updated_at": now()},
+                     "$setOnInsert": {"id": new_id(), "created_at": now()}},
+                    upsert=True,
+                )
+                metrics += 1
+        await db.wearable_sources.update_one(
+            {"terra_user_id": terra_user_id}, {"$set": {"last_sync_at": now()}}
+        )
+        return {"received": True, "event": event_type, "processed": samples, "metrics": metrics}
+
+
+def _require_terra() -> None:
+    if not TerraConfig.enabled():
+        raise HTTPException(503, "Terra is not configured on this server")
+
+
+@router.post("/wearables/terra/connect")
+async def terra_connect(body: Optional[TerraConnectIn] = None, user: dict = Depends(current_user)):
+    """Start a Terra widget session for this user (reference_id = user id)."""
+    _require_terra()
+    providers = (body.providers if body and body.providers else None) or list(TERRA_PROVIDER_CODES)
+    unknown = [p for p in providers if p not in TERRA_PROVIDER_CODES]
+    if unknown:
+        raise HTTPException(422, f"Unsupported provider: {', '.join(unknown)}")
+    try:
+        session = await run_in_threadpool(TerraClient.generate_widget_session, user["id"], providers)
+    except (TerraError, http.RequestException) as exc:
+        raise HTTPException(502, "Terra could not start the connection") from exc
+    for provider in providers:
+        await TerraStore.mark_pending(user["id"], provider)
+    return {**session, "providers": providers}
+
+
+@router.post("/wearables/terra/webhook")
+async def terra_wearables_webhook(request: Request, background: BackgroundTasks):
+    """Signed Terra webhook. Unsigned or badly signed bodies get 401."""
+    if not TerraConfig.signing_secret():
+        raise HTTPException(503, "Terra is not configured on this server")
+    raw_body = await request.body()
+    signature = request.headers.get("terra-signature")
+    if not TerraWebhook.verify(raw_body, signature):
+        raise HTTPException(401, "Invalid Terra webhook signature")
+    try:
+        payload = json.loads(raw_body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(400, "Invalid Terra webhook JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Invalid Terra webhook JSON")
+    return await TerraEvents.handle(payload, background)
+
+
+@router.get("/wearables")
+async def list_wearables(user: dict = Depends(current_user)):
+    """Terra wearable connections for this user, one row per supported provider."""
+    docs = {
+        d["provider"]: d
+        async for d in db.wearable_sources.find(
+            {"user_id": user["id"], "provider": {"$in": list(TERRA_PROVIDER_CODES)}}, {"_id": 0}
+        )
+    }
+    return {
+        "enabled": TerraConfig.enabled(),
+        "connections": [
+            {
+                "provider": p,
+                "label": PROVIDER_INFO[p]["label"],
+                "status": (docs.get(p) or {}).get("status", "disconnected"),
+                "connected_at": (docs.get(p) or {}).get("connected_at"),
+                "last_sync_at": (docs.get(p) or {}).get("last_sync_at"),
+            }
+            for p in TERRA_PROVIDER_CODES
+        ],
+    }
+
+
+@router.delete("/wearables/{provider}")
+async def delete_wearable(provider: str, user: dict = Depends(current_user)):
+    """Deauthenticate at Terra, then mark the connection disconnected."""
+    if provider not in TERRA_PROVIDER_CODES:
+        raise HTTPException(404, "Unknown provider")
+    src = await db.wearable_sources.find_one({"user_id": user["id"], "provider": provider}, {"_id": 0})
+    if not src or src.get("status") == "disconnected":
+        raise HTTPException(404, "Source not connected")
+    terra_user_id = src.get("terra_user_id")
+    if terra_user_id and not str(terra_user_id).startswith("sim-"):
+        _require_terra()
+        try:
+            await run_in_threadpool(TerraClient.deauthenticate_user, terra_user_id)
+        except (TerraError, http.RequestException) as exc:
+            raise HTTPException(502, "Terra could not disconnect this source") from exc
+    await db.wearable_sources.update_one(
+        {"user_id": user["id"], "provider": provider},
+        {"$set": {"status": "disconnected", "disconnected_at": now()}},
+    )
+    return {"provider": provider, "status": "disconnected"}
 
 
 # --------------------------------------------------------------------------- #

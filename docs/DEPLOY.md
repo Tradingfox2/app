@@ -175,6 +175,8 @@ not remove the routes.
 | `TERRA_DEV_ID` | Terra wearable and lab connection. |
 | `TERRA_API_KEY` | Terra. |
 | `TERRA_SIGNING_SECRET` | Required once Terra keys are set, or webhooks return 503. |
+
+Terra wearables (Garmin, Whoop, Fitbit, Oura, Polar) are off until `TERRA_DEV_ID`, `TERRA_API_KEY` and `TERRA_SIGNING_SECRET` are all set; until then `/api/wearables/terra/*` returns 503. In the Terra dashboard, set the webhook destination to `https://<api-host>/api/wearables/terra/webhook` and copy its signing secret into `TERRA_SIGNING_SECRET`. Endpoints: `POST /api/wearables/terra/connect`, `POST /api/wearables/terra/webhook`, `GET /api/wearables`, `DELETE /api/wearables/{provider}`. Samples are stored in `wearable_samples`; connections stay in `wearable_sources`.
 | `TERRA_WIDGET_URL` | Default `https://access.tryterra.co/api/widget/session`. |
 | `TERRA_BASE_URL` | Default `https://access.tryterra.co/api`. |
 | `TERRA_LABS_ENABLED` | `true` / `1` / `yes` turns lab fetch on. The Blueprint sets `false`. |
