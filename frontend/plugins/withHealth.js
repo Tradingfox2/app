@@ -1,22 +1,20 @@
 const { withAndroidManifest, withEntitlementsPlist, withInfoPlist } = require("@expo/config-plugins");
 
 /**
- * Store capability for a later native build.
- * This plugin only writes entitlements, usage strings, and manifest entries.
- * It does not request permission and it does not read HealthKit or Health Connect.
+ * Store capability for the phone health read.
+ * Usage strings and manifest entries live here. The read itself is
+ * frontend/src/phone-health.ts. No background delivery, no exercise route,
+ * and no write permission.
  */
 
 const SHARE =
-  "IronFlow can read heart rate, sleep, steps, and workouts from Apple Health after you connect that source.";
+  "IronFlow reads heart rate, steps, and workouts already in Apple Health. This data is not used for ads.";
 const UPDATE = "IronFlow does not write to Apple Health.";
 
 const HEALTH_CONNECT_READS = [
   "android.permission.health.READ_HEART_RATE",
-  "android.permission.health.READ_RESTING_HEART_RATE",
-  "android.permission.health.READ_HEART_RATE_VARIABILITY",
-  "android.permission.health.READ_SLEEP",
   "android.permission.health.READ_STEPS",
-  "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+  "android.permission.health.READ_EXERCISE",
 ];
 
 const RATIONALE_ACTION = "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE";
