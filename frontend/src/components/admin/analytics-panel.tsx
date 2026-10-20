@@ -35,7 +35,6 @@ export function AnalyticsPanel() {
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
-    setError("");
     try {
       const next = await api.adminAnalytics();
       if (id !== requestId.current) return;
@@ -49,7 +48,13 @@ export function AnalyticsPanel() {
     }
   }, [t]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // load() only updates state after its first await; handlers that refetch
+    // reset the error and loading state themselves.
+    void (async () => {
+      await load();
+    })();
+  }, [load]);
 
   const names = data ? Object.keys(data.windows["24h"]) : [];
   const chip = (window: "24h" | "7d", name: string) => {
@@ -84,14 +89,14 @@ export function AnalyticsPanel() {
     <View testID="analytics-panel">
       <Text style={styles.section}>{t("Product events")}</Text>
       <Text style={styles.hint}>{t("Counts are read from stored events. Nothing on this page is estimated.")}</Text>
-      <Affordance accessibilityRole="button" testID="analytics-refresh" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
+      <Affordance accessibilityRole="button" testID="analytics-refresh" onPress={() => { setLoading(true); setError(""); void load(); }} style={styles.action}>
         <Text style={styles.actionText}>{t("Refresh counts")}</Text>
       </Affordance>
       {loading ? <ActivityIndicator color={colors.text} /> : null}
       {error ? (
         <View accessibilityRole="alert">
           <Text style={styles.error}>{error}</Text>
-          <Affordance accessibilityRole="button" testID="analytics-retry" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
+          <Affordance accessibilityRole="button" testID="analytics-retry" onPress={() => { setLoading(true); setError(""); void load(); }} style={styles.action}>
             <Text style={styles.actionText}>{t("Retry")}</Text>
           </Affordance>
         </View>

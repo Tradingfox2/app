@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNow } from "@/src/use-now";
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -51,6 +52,7 @@ type Tri = "inherit" | "allow" | "deny";
 
 export default function ManageCommunity() {
   const { id } = useLocalSearchParams<{ id: string }>(); const router = useRouter(); const { t, formatDate, formatNumber } = useI18n();
+  const now = useNow();
   const [members, setMembers] = useState<Membership[]>([]); const [channels, setChannels] = useState<CommunityChannel[]>([]); const [channelName, setChannelName] = useState(""); const [error, setError] = useState("");
   const [roles, setRoles] = useState<CommunityRole[]>([]); const [roleName, setRoleName] = useState("");
   const [openRole, setOpenRole] = useState<string | null>(null);
@@ -357,7 +359,10 @@ export default function ManageCommunity() {
     || JSON.stringify(extras.rules) !== JSON.stringify(community.rules ?? [])
   );
   const settingsDirty = newRule.trim().length > 0 || settingsUnsaved;
-  dirtyRef.current = settingsDirty && !leaving;
+  const leaveGuarded = settingsDirty && !leaving;
+  useEffect(() => {
+    dirtyRef.current = leaveGuarded;
+  }, [leaveGuarded]);
   const requestLeave = () => {
     if (settingsDirty) setConfirmLeave(true);
     else router.back();
@@ -368,20 +373,12 @@ export default function ManageCommunity() {
   }, [leaving, router]);
   const sparkDays = insights?.daily_messages ?? [];
   const sparkTotal = sparkDays.reduce((sum, day) => sum + day.messages, 0);
-  const confirmMark = (actionId: string, hint: string, blocked: boolean, onPress: () => void, testID: string) => {
-    const pending = pendingAction === actionId;
-    const saved = savedAction === actionId;
-    const label = t(saved ? SAVED_LABEL : SAVE_LABEL);
-    return <Affordance signal="brand" {...iconButtonA11y(label, hint)} accessibilityState={{ disabled: blocked || pending, busy: pending }} testID={testID} disabled={blocked || pending} onPress={onPress} style={[styles.approve, (blocked || pending) && !pending && { opacity: 0.4 }]}>
-      {pending ? <ActivityIndicator color={colors.brandOn} size="small" /> : <Ionicons name={saved ? "checkmark-done" : "checkmark"} size={18} color={colors.brandOn} />}
-    </Affordance>;
-  };
   const triFor = (channel: CommunityChannel, roleId: string, bit: number): Tri => {
     const row = (channel.overwrites ?? []).find(entry => entry.role_id === roleId);
     if (!row) return "inherit";
     return can(row.allow, bit) ? "allow" : can(row.deny, bit) ? "deny" : "inherit";
   };
-  const timedOut = (member: Membership) => member.timeout_until && new Date(member.timeout_until).getTime() > Date.now();
+  const timedOut = (member: Membership) => member.timeout_until && new Date(member.timeout_until).getTime() > now;
 
   return <SafeAreaView style={styles.safe}><View style={styles.header}><Affordance accessibilityRole="button" accessibilityLabel={t("Back")} testID="manage-back" onPress={requestLeave} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance><Text style={styles.headerTitle}>{t("MANAGE COMMUNITY")}</Text></View>{confirmLeave ? <View style={styles.leaveRow} testID="unsaved-settings"><Text style={styles.error}>{t("Unsaved changes will be lost")}</Text><Affordance accessibilityRole="button" accessibilityLabel={t("Stay")} testID="unsaved-stay" onPress={() => setConfirmLeave(false)} style={styles.action}><Text style={styles.actionText}>{t("Stay")}</Text></Affordance><Affordance accessibilityRole="button" accessibilityLabel={t("Leave")} testID="unsaved-leave" onPress={() => { dirtyRef.current = false; setConfirmLeave(false); setLeaving(true); }} style={styles.action}><Text style={styles.actionText}>{t("Leave")}</Text></Affordance></View> : null}<ScrollView contentContainerStyle={styles.scroll}>
     {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Affordance accessibilityRole="button" disabled={reviewing} onPress={() => void load()} style={styles.icon}><Text style={styles.active}>{t("Retry")}</Text></Affordance></View> : null}
@@ -498,7 +495,7 @@ export default function ManageCommunity() {
           <View style={styles.addRow}>
             <TextInput value={roleEdit.name} onChangeText={name => setRoleEdit(current => ({ ...current, name }))} maxLength={32} style={styles.input} testID={`role-name-${role.id}`} />
             <TextInput value={roleEdit.rank} onChangeText={rank => setRoleEdit(current => ({ ...current, rank: rank.replace(/[^0-9]/g, "") }))} maxLength={3} keyboardType="number-pad" style={[styles.input, { flex: 0, width: 64 }]} testID={`role-rank-${role.id}`} />
-            {confirmMark(`role-${role.id}`, t("Save this role"), disabled || roleEdit.name.trim().length < 2, () => void saveRole(role, { name: roleEdit.name.trim(), rank: Math.max(1, Number(roleEdit.rank) || role.rank) }, `role-${role.id}`), `role-save-${role.id}`)}
+            <ConfirmMark actionId={`role-${role.id}`} pendingAction={pendingAction} savedAction={savedAction} hint={t("Save this role")} blocked={disabled || roleEdit.name.trim().length < 2} onPress={() => void saveRole(role, { name: roleEdit.name.trim(), rank: Math.max(1, Number(roleEdit.rank) || role.rank) }, `role-${role.id}`)} testID={`role-save-${role.id}`} />
           </View>
           <View style={styles.chipRow}>{ROLE_COLORS.map(color => <Affordance key={color} accessibilityRole="button" accessibilityLabel={color} testID={`role-color-${role.id}-${color}`} onPress={() => void saveRole(role, { color })} style={[styles.colorDot, { backgroundColor: color }, role.color === color && styles.colorOn]} />)}</View>
         </> : null}
@@ -529,12 +526,12 @@ export default function ManageCommunity() {
       {openChannel === channel.id ? <View style={styles.panel} testID={`channel-panel-${channel.id}`}>
         <View style={styles.addRow}>
           <TextInput value={renaming === channel.id ? renameTo : ""} onChangeText={value => { setRenaming(channel.id); setRenameTo(value); }} maxLength={50} editable={!disabled} placeholder={t("Rename channel")} placeholderTextColor={colors.textDim} style={styles.input} testID={`rename-input-${channel.id}`} />
-          {confirmMark(`rename-${channel.id}`, t("Save the channel name"), disabled || renaming !== channel.id || renameTo.trim().length < 2, () => void renameChannel(channel), `rename-${channel.id}`)}
+          <ConfirmMark actionId={`rename-${channel.id}`} pendingAction={pendingAction} savedAction={savedAction} hint={t("Save the channel name")} blocked={disabled || renaming !== channel.id || renameTo.trim().length < 2} onPress={() => void renameChannel(channel)} testID={`rename-${channel.id}`} />
         </View>
         <TextInput value={channelEdit.description} onChangeText={description => setChannelEdit(current => ({ ...current, description }))} maxLength={300} placeholder={t("Channel topic")} placeholderTextColor={colors.textDim} style={[styles.input, { marginTop: spacing.sm }]} testID={`channel-topic-${channel.id}`} />
         <View style={styles.addRow}>
           <TextInput value={channelEdit.category} onChangeText={category => setChannelEdit(current => ({ ...current, category }))} maxLength={32} placeholder={t("Category heading (e.g. Training)")} placeholderTextColor={colors.textDim} style={styles.input} testID={`channel-category-${channel.id}`} />
-          {confirmMark(`channel-${channel.id}`, t("Save the channel topic"), disabled, () => void saveChannelDetails(channel), `channel-save-${channel.id}`)}
+          <ConfirmMark actionId={`channel-${channel.id}`} pendingAction={pendingAction} savedAction={savedAction} hint={t("Save the channel topic")} blocked={disabled} onPress={() => void saveChannelDetails(channel)} testID={`channel-save-${channel.id}`} />
         </View>
         <Text style={styles.meta}>{t("Slow mode")}</Text>
         <View style={styles.chipRow}>{SLOWMODES.map(seconds => <Affordance key={seconds} accessibilityRole="button" {...selectedControl((channel.slowmode_sec ?? 0) === seconds)} testID={`slowmode-${channel.id}-${seconds}`} disabled={disabled} onPress={() => void setSlowmode(channel, seconds)} style={[styles.chip, (channel.slowmode_sec ?? 0) === seconds && styles.chipOn]}><Text style={styles.chipText}>{seconds === 0 ? t("OFF") : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`}</Text></Affordance>)}</View>
@@ -670,3 +667,13 @@ export default function ManageCommunity() {
   </ScrollView></SafeAreaView>;
 }
 const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.bg }, header: { height: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }, icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, small: { width: 30, height: 30, alignItems: "center", justifyContent: "center" }, headerTitle: { ...type.section, color: colors.text }, scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl }, section: { ...type.section, marginTop: spacing.xl, marginBottom: spacing.sm }, row: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }, name: { color: colors.text, fontWeight: "800", flex: 1 }, meta: { color: colors.textMuted, fontSize: 10, marginTop: 3 }, approve: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" }, active: { color: colors.text, fontSize: 10, fontWeight: "900" }, hash: { color: colors.text, fontSize: 20, fontWeight: "900" }, empty: { color: colors.textMuted, paddingVertical: spacing.lg }, addRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }, input: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, paddingHorizontal: spacing.md, color: colors.text }, error: { color: colors.error }, swatch: { width: 10, height: 10, borderRadius: 5 }, panel: { paddingVertical: spacing.sm, paddingLeft: spacing.md, borderLeftWidth: 2, borderLeftColor: colors.borderStrong, marginBottom: spacing.sm }, checkRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: spacing.sm }, checkLabel: { color: colors.text, fontSize: 13, flex: 1 }, danger: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, minHeight: 40 }, dangerText: { color: colors.error, fontSize: 12, fontWeight: "800" }, chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginVertical: spacing.sm }, chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong }, chipOn: { borderColor: colors.text, backgroundColor: colors.surface2 }, chipText: { color: colors.text, fontSize: 11, fontWeight: "800" }, action: { minHeight: 48, paddingHorizontal: spacing.lg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" }, actionText: { color: colors.text, fontSize: 12, fontWeight: "800" }, multiline: { minHeight: 80, paddingTop: spacing.sm, textAlignVertical: "top", marginTop: spacing.sm }, primary: { minHeight: 48, borderRadius: radius.sm, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", marginTop: spacing.md }, primaryText: { color: colors.brandOn, fontWeight: "900", fontSize: 12, letterSpacing: 1 }, dangerSolid: { minHeight: 48, paddingHorizontal: spacing.lg, borderRadius: radius.sm, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" }, dangerSolidText: { color: colors.text, fontWeight: "900", fontSize: 12, letterSpacing: 1 }, stats: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg }, stat: { minWidth: 70 }, statValue: { color: colors.text, fontSize: 22, fontWeight: "900", fontVariant: ["tabular-nums"] }, sparkline: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 48, marginTop: spacing.sm }, bar: { flex: 1, backgroundColor: colors.text, borderRadius: 1 }, imagesRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm }, avatarBox: { width: 72, height: 72, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", overflow: "hidden" }, coverBox: { flex: 1, height: 72, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center", overflow: "hidden" }, fill: { width: "100%", height: "100%" }, switchRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md }, ruleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm }, colorDot: { width: 26, height: 26, borderRadius: 13 }, colorOn: { borderWidth: 3, borderColor: colors.text }, reportRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 4 }, snapshot: { color: colors.text, fontStyle: "italic" }, auditRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }, leaveRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm } });
+
+function ConfirmMark({ actionId, pendingAction, savedAction, hint, blocked, onPress, testID }: { actionId: string; pendingAction: string | null; savedAction: string | null; hint: string; blocked: boolean; onPress: () => void; testID: string }) {
+  const { t } = useI18n();
+  const pending = pendingAction === actionId;
+  const saved = savedAction === actionId;
+  const label = t(saved ? SAVED_LABEL : SAVE_LABEL);
+  return <Affordance signal="brand" {...iconButtonA11y(label, hint)} accessibilityState={{ disabled: blocked || pending, busy: pending }} testID={testID} disabled={blocked || pending} onPress={onPress} style={[styles.approve, (blocked || pending) && !pending && { opacity: 0.4 }]}>
+    {pending ? <ActivityIndicator color={colors.brandOn} size="small" /> : <Ionicons name={saved ? "checkmark-done" : "checkmark"} size={18} color={colors.brandOn} />}
+  </Affordance>;
+}

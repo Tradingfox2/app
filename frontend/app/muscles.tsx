@@ -71,7 +71,11 @@ export default function MusclesScreen() {
   }, [t]);
 
   useEffect(() => {
-    fetchData();
+    // fetchData() only updates state after its first await, so nothing is set
+    // synchronously during the effect.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   const handleRefresh = useCallback(() => {

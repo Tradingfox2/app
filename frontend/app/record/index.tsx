@@ -45,6 +45,12 @@ const PENDING_KEY = "ironflow_pending_recording";
 type Phase = "idle" | "recording" | "paused";
 type LocationState = "idle" | "waiting" | "watching" | "off";
 
+// The recorder's press handlers (start, pause, finish) stamp wall-clock time.
+// They only run on presses, never during render.
+function wallClockMs(): number {
+  return Date.now();
+}
+
 function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback;
 }
@@ -98,6 +104,17 @@ export default function RecordScreen() {
     return () => clearInterval(id);
   }, [phase]);
 
+  const releaseSensors = () => {
+    stopGpsRef.current?.();
+    stopGpsRef.current = null;
+    stopStepsRef.current?.();
+    stopStepsRef.current = null;
+    stopBarometerRef.current?.();
+    stopBarometerRef.current = null;
+    releaseAwakeRef.current?.();
+    releaseAwakeRef.current = null;
+  };
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
       if (next !== "active") pauseRef.current();
@@ -112,17 +129,6 @@ export default function RecordScreen() {
     const total = stepsAccumRef.current + stepsLiveRef.current;
     setSteps(total > 0 ? total : null);
   };
-
-  function releaseSensors() {
-    stopGpsRef.current?.();
-    stopGpsRef.current = null;
-    stopStepsRef.current?.();
-    stopStepsRef.current = null;
-    stopBarometerRef.current?.();
-    stopBarometerRef.current = null;
-    releaseAwakeRef.current?.();
-    releaseAwakeRef.current = null;
-  }
 
   const stopWatch = () => {
     stopGpsRef.current?.();
@@ -198,7 +204,7 @@ export default function RecordScreen() {
   const start = () => {
     if (phaseRef.current === "recording" || saving) return;
     setError(null);
-    if (startedAtRef.current === null) startedAtRef.current = Date.now();
+    if (startedAtRef.current === null) startedAtRef.current = wallClockMs();
     breakRef.current = phaseRef.current === "paused";
     accumulatedRef.current = phaseRef.current === "paused" ? accumulatedRef.current : 0;
     if (phaseRef.current !== "paused") {
@@ -210,7 +216,7 @@ export default function RecordScreen() {
       elevationRef.current = emptyElevation();
       setElevation(emptyElevation());
     }
-    stretchStartRef.current = Date.now();
+    stretchStartRef.current = wallClockMs();
     phaseRef.current = "recording";
     setPhase("recording");
     sensorGen.current += 1;
@@ -221,7 +227,7 @@ export default function RecordScreen() {
     if (phaseRef.current !== "recording") return;
     sensorGen.current += 1;
     const startAt = stretchStartRef.current;
-    if (startAt !== null) accumulatedRef.current += Date.now() - startAt;
+    if (startAt !== null) accumulatedRef.current += wallClockMs() - startAt;
     stretchStartRef.current = null;
     setMovingMs(accumulatedRef.current);
     phaseRef.current = "paused";
@@ -237,11 +243,13 @@ export default function RecordScreen() {
     stopBarometerRef.current?.();
     stopBarometerRef.current = null;
   };
-  pauseRef.current = pause;
+  useEffect(() => {
+    pauseRef.current = pause;
+  });
 
   const movingSecNow = () => {
     const extra = phaseRef.current === "recording" && stretchStartRef.current !== null
-      ? Date.now() - stretchStartRef.current
+      ? wallClockMs() - stretchStartRef.current
       : 0;
     return Math.round((accumulatedRef.current + extra) / 1000);
   };
@@ -271,7 +279,7 @@ export default function RecordScreen() {
     if (phaseRef.current === "recording") pause();
     releaseAwakeRef.current?.();
     releaseAwakeRef.current = null;
-    const endedAt = Date.now();
+    const endedAt = wallClockMs();
     const stepTotal = stepsAccumRef.current;
     const gained = elevationRef.current;
     const body = recordingBody({

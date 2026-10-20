@@ -29,7 +29,9 @@ export function useRealtimeChannel(
 ): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   const handler = useRef(onEvent);
-  handler.current = onEvent;
+  useEffect(() => {
+    handler.current = onEvent;
+  });
 
   useEffect(() => {
     if (!channel) return;
@@ -102,7 +104,9 @@ export function useRealtimeChannel(
 export function useRealtimeUser(enabled: boolean, onEvent: (event: RealtimeEvent) => void): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   const handler = useRef(onEvent);
-  handler.current = onEvent;
+  useEffect(() => {
+    handler.current = onEvent;
+  });
 
   useEffect(() => {
     if (!enabled) return;

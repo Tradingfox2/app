@@ -188,7 +188,11 @@ export default function ProgramScreen() {
   }, [t]);
 
   useEffect(() => {
-    load();
+    // `loading` already starts true, so the initial fetch skips load()'s
+    // synchronous setLoading(true) and only updates state after its await.
+    void (async () => {
+      await load(true);
+    })();
   }, [load]);
 
   const generate = async () => {

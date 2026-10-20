@@ -187,8 +187,10 @@ export default function WorkoutLogger() {
   const [summary, setSummary] = useState<{ sets: number; minutes: number | null; tonnage: number } | null>(null);
   const finishErrorRef = useRef("");
   const loggerErrorRef = useRef("");
-  finishErrorRef.current = finishError;
-  loggerErrorRef.current = loggerError;
+  useEffect(() => {
+    finishErrorRef.current = finishError;
+    loggerErrorRef.current = loggerError;
+  }, [finishError, loggerError]);
 
   // Rest timer
   const [restRemaining, setRestRemaining] = useState<number>(0);
@@ -213,9 +215,11 @@ export default function WorkoutLogger() {
   const exercisesRef = useRef<any[]>([]);
   const sourceExercisesRef = useRef<any[]>(remembered?.sourceExercises ?? []);
   const priorSetsRef = useRef<any[]>([]);
-  setsRef.current = sets;
-  plannedRef.current = planned;
-  exercisesRef.current = exercises;
+  useEffect(() => {
+    setsRef.current = sets;
+    plannedRef.current = planned;
+    exercisesRef.current = exercises;
+  }, [sets, planned, exercises]);
 
   useEffect(() => {
     const key = Array.isArray(id) ? id[0] : id;
@@ -345,20 +349,26 @@ export default function WorkoutLogger() {
   // A hint fills a field only until the athlete types in it. Changing exercise
   // or set index clears those flags so the next hint is not blocked by the
   // previous set. Empty fields are not edits.
+  // Reset the hint fields while rendering when the exercise or set changes
+  // (React's "adjust state on change" pattern); the effect only fetches.
+  const hintKey = `${selectedEx?.id ?? ""}|${nextSetIndex}`;
+  const [hintFor, setHintFor] = useState<string | null>(null);
+  if (hintFor !== hintKey) {
+    setHintFor(hintKey);
+    setLastTime(null);
+    if (selectedEx?.id) {
+      setReps("");
+      setWeight("");
+      setRpe("");
+    }
+  }
   useEffect(() => {
     repsDirty.current = false;
     weightDirty.current = false;
     rpeDirty.current = false;
     const exerciseId = selectedEx?.id;
-    if (!exerciseId) {
-      setLastTime(null);
-      return;
-    }
+    if (!exerciseId) return;
     let cancelled = false;
-    setLastTime(null);
-    setReps("");
-    setWeight("");
-    setRpe("");
     api.previousSets(exerciseId, 1).then((payload) => {
       if (cancelled) return;
       const prior = (payload.sessions?.[0]?.sets ?? []) as any[];

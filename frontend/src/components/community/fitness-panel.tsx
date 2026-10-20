@@ -70,7 +70,12 @@ export function ChallengePanel({ channelId, refreshKey }: { channelId: string; r
     try { setBoard(await api.challengeBoard(channelId)); setError(""); }
     catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
   }, [channelId, t]);
-  useEffect(() => { void load(); }, [load, refreshKey]);
+  useEffect(() => {
+    // load() only updates state after its first await; refreshKey forces a refetch.
+    void (async () => {
+      await load();
+    })();
+  }, [load, refreshKey]);
 
   const toggle = async () => {
     if (!board || busyRef.current) return;
@@ -252,7 +257,12 @@ function LivePanel({ channelId, refreshKey, mask, userId }: { channelId: string;
     const timer = setInterval(() => void load(), 4000);
     return () => clearInterval(timer);
   }, [load]));
-  useEffect(() => { void load(); }, [load, refreshKey]);
+  useEffect(() => {
+    // load() only updates state after its first await; refreshKey forces a refetch.
+    void (async () => {
+      await load();
+    })();
+  }, [load, refreshKey]);
 
   const act = async (action: () => Promise<unknown>) => {
     if (busy) return;

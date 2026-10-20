@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -299,9 +299,12 @@ export function MuscleDetailSheet({
     ANTAGONISTS[muscle],
   ].filter((slug, index, list) => list.indexOf(slug) === index);
 
-  useEffect(() => {
+  // Back to the first tab whenever the muscle changes, adjusted during render.
+  const [tabFor, setTabFor] = useState(muscle);
+  if (tabFor !== muscle) {
+    setTabFor(muscle);
     setTab("exercises");
-  }, [muscle]);
+  }
 
   const handleCircuitExerciseSelect = (slug: string) => {
     // Find the exercise in recommendations to get full data

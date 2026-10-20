@@ -256,7 +256,11 @@ export default function LabsScreen() {
   }, [t]);
 
   useEffect(() => {
-    load();
+    // load() only updates state after its first await, so nothing is set
+    // synchronously during the effect.
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   // poll while a report is processing
