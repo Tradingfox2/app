@@ -26,6 +26,7 @@ import { colors, fonts, radius, spacing } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 import { useI18n } from "@/src/i18n";
 import { SessionLayout } from "@/src/session-layout";
+import { SessionNutrition } from "@/src/components/session-nutrition";
 
 /** Club is `community_id`. `public` and `friends` are the only audience values sent. */
 type ShareAudience =
@@ -850,6 +851,7 @@ export default function WorkoutLogger() {
           {" · "}
           {formatNumber(Math.round(summary.tonnage))} kg
         </Text>
+        {id ? <SessionNutrition workoutId={id} /> : null}
         <Text style={styles.shareCopy}>{t("Share it with the people you train with?")}</Text>
         <Text style={styles.shareAudienceLabel}>{t("Choose audience")}</Text>
         {!audienceReady ? <ActivityIndicator color={colors.text} /> : <View style={styles.shareChips} testID="share-audience">

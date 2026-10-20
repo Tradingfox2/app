@@ -19,7 +19,8 @@
     "test:sentry-gate": "node --experimental-strip-types src/sentry-gate.test.ts",
     "test:callout-geometry": "node --experimental-strip-types src/components/anatomy/callout-geometry.test.ts",
     "test:session-layout": "node --experimental-strip-types src/session-layout.test.ts",
-    "test:missed-session": "node --experimental-strip-types src/missed-session.test.ts"
+    "test:missed-session": "node --experimental-strip-types src/missed-session.test.ts",
+    "test:nutrition": "node --experimental-strip-types src/nutrition.test.ts"
   },
   "dependencies": {
     "@babel/core": "^7.29.0",

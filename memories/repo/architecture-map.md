@@ -505,3 +505,7 @@ The phone recorder landed from `cursor/phone-recorder-d3c3` and is on main.
 ## Added 2026-10-02 (weekly missed-session note)
 
 - **Weekly missed-session note.** One local reminder (`frontend/src/missed-session.ts`, scheduled from Home after Today paints) when a planned day in the current calendar-age program week was missed. The week index stays `(now - created) // 7 + 1`. The note does not replay that day, does not move Home or `/program`, and is not a challenge against another person. A finished week cancels it. The fire time is a local hour from 8 through 20, because Expo has no quiet-hours field. iOS `interruptionLevel` is `passive`. Android uses the single channel `missed-session` at importance low, which is not changed later. The notification handler returns immediately. No background location, no Pro gate, no webhook change.
+
+## Added 2026-10-02 (session nutrition)
+
+- **Session nutrition.** `backend/nutrition.py` owns typed protein and water (`PUT /api/workouts/{id}/nutrition`) and one Open Food Facts product read (`GET /api/nutrition/products/{barcode}`, custom User-Agent, no search). Unentered amounts stay absent, never 0. A nutrient is shown only when that basis has a value; `no_nutrition_data` and a failed read invent nothing. Sodium or salt, sugars, and fibre can carry one general WHO opinion, labeled as an opinion on `SessionNutrition` in the workout finish panel. No calorie target and no blood reading. The lookup is not on first paint.
