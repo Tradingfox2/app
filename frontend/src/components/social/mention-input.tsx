@@ -16,8 +16,18 @@ export function MentionInput({ value, onChangeText, style, testID, ...props }: O
   const query = activeQuery(value);
   const latest = useRef(0);
 
+  const searching = query !== null && query.length >= 2;
+  // Typing out of a mention clears the picker in the change handler, and the
+  // picker is hidden whenever no mention is being typed.
+  const changeText = (next: string) => {
+    const nextQuery = activeQuery(next);
+    if (nextQuery === null || nextQuery.length < 2) setSuggestions([]);
+    onChangeText(next);
+  };
+  const shown = searching ? suggestions : [];
+
   useEffect(() => {
-    if (query === null || query.length < 2) { setSuggestions([]); return; }
+    if (query === null || query.length < 2) return;
     const ticket = ++latest.current;
     const timer = setTimeout(() => {
       api.searchUsers(query)
@@ -28,12 +38,12 @@ export function MentionInput({ value, onChangeText, style, testID, ...props }: O
   }, [query]);
 
   return <View>
-    {suggestions.length && query !== null ? <View style={styles.list} testID={testID ? `${testID}-suggestions` : undefined}>
-      {suggestions.map(person => <Affordance key={person.id} accessibilityRole="button" onPress={() => { onChangeText(applyMention(value, person)); setSuggestions([]); }} style={styles.row} testID={`mention-suggestion-${person.id}`}>
+    {shown.length && query !== null ? <View style={styles.list} testID={testID ? `${testID}-suggestions` : undefined}>
+      {shown.map(person => <Affordance key={person.id} accessibilityRole="button" onPress={() => { onChangeText(applyMention(value, person)); setSuggestions([]); }} style={styles.row} testID={`mention-suggestion-${person.id}`}>
         <Avatar user={person} size={24} /><Text style={styles.name}>{person.full_name || "?"}</Text>
       </Affordance>)}
     </View> : null}
-    <TextInput {...props} testID={testID} value={value} onChangeText={onChangeText} style={style} />
+    <TextInput {...props} testID={testID} value={value} onChangeText={changeText} style={style} />
   </View>;
 }
 

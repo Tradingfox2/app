@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNow } from "@/src/use-now";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +17,7 @@ const MINUTES = [0, 15, 30, 45];
  */
 export function SchedulePicker({ value, onChange, testID }: { value: Date; onChange: (next: Date) => void; testID?: string }) {
   const { t, formatDate } = useI18n();
+  const now = useNow();
   const days = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -36,7 +38,7 @@ export function SchedulePicker({ value, onChange, testID }: { value: Date; onCha
     onChange(next);
   };
   const hour = value.getHours();
-  const inPast = value.getTime() < Date.now() - 5 * 60 * 1000;
+  const inPast = value.getTime() < now - 5 * 60 * 1000;
 
   return <View style={styles.wrap} testID={testID}>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.days}>

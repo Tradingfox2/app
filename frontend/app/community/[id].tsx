@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNow } from "@/src/use-now";
 import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,7 +27,8 @@ const KIND_ICONS: Record<ChannelKind, keyof typeof Ionicons.glyphMap> = {
 
 export default function CommunityDetail() {
   const { id, checkout } = useLocalSearchParams<{ id: string; checkout?: string }>(); const router = useRouter(); const { t, formatNumber, localeTag, formatDate } = useI18n();
-  const [community, setCommunity] = useState<Community | null>(null); const [channels, setChannels] = useState<CommunityChannel[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const now = useNow();
+  const [community, setCommunity] = useState<Community | null>(null); const [channels, setChannels] = useState<CommunityChannel[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(() => checkout === "cancelled" ? t("Checkout cancelled. No payment was taken.") : "");
   const [inviteLink, setInviteLink] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -48,7 +50,12 @@ export default function CommunityDetail() {
       } else setChannels([]);
     } catch (cause) { setError(cause instanceof Error ? cause.message : t("Could not load community")); }
   }, [id, t]);
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    // load() only updates state after its first await.
+    void (async () => {
+      await load();
+    })();
+  }, [load]);
   const isActive = community?.membership?.status === "active";
   useEffect(() => {
     if (tab === "wall" && isActive) void wall.load();
@@ -71,13 +78,17 @@ export default function CommunityDetail() {
   }, [id, load, t]);
   // Stripe's redirect opens this page cold, before the router can take a
   // setParams — so remember the handled value instead of clearing the URL.
-  const handledCheckout = useRef<string | null>(null);
+  // A cancelled checkout needs no server call: its notice is the initial error above.
+  const handledCheckout = useRef<string | null>(checkout === "cancelled" ? checkout : null);
   useEffect(() => {
     if (!checkout || handledCheckout.current === checkout) return;
     handledCheckout.current = checkout;
-    if (checkout === "cancelled") setError(t("Checkout cancelled. No payment was taken."));
-    else void confirmPayment();
-  }, [checkout, confirmPayment, t]);
+    if (checkout !== "cancelled") {
+      void (async () => {
+        await confirmPayment();
+      })();
+    }
+  }, [checkout, confirmPayment]);
   const join = async () => {
     if (!id || busy) return;
     setBusy(true); setError("");
@@ -123,12 +134,12 @@ export default function CommunityDetail() {
 
   const membership = community?.membership;
   const isManager = membership?.role === "owner" || membership?.role === "moderator" || channels.some(channel => can(channel.permissions, MANAGE_CHANNEL));
-  const timedOutUntil = membership?.timeout_until && new Date(membership.timeout_until).getTime() > Date.now() ? membership.timeout_until : null;
+  const timedOutUntil = membership?.timeout_until && new Date(membership.timeout_until).getTime() > now ? membership.timeout_until : null;
   // Channels grouped under their manager-set headings, ungrouped ones first.
   const openChallenges = channels.filter(channel => {
     if (channel.kind !== "challenge") return false;
     const ends = channel.challenge?.ends_at;
-    return !ends || new Date(ends).getTime() > Date.now();
+    return !ends || new Date(ends).getTime() > now;
   });
   const groups: [string, CommunityChannel[]][] = [];
   for (const channel of channels) {

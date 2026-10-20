@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -79,7 +79,7 @@ export function MuscleHeatmap({
   const { t } = useI18n();
   const softenMotion = useReducedMotion();
   const mapped = volumes as Partial<Record<MuscleSlug, number>>;
-  const yaw = useRef(new Animated.Value(0.5)).current;
+  const [yaw] = useState(() => new Animated.Value(0.5));
   const shouldSpin = spinning && !reduceMotion;
   const holdYaw = callout != null;
   const useNative = Platform.OS !== "web";
@@ -115,15 +115,15 @@ export function MuscleHeatmap({
     return () => loop.stop();
   }, [holdYaw, shouldSpin, yaw, useNative]);
 
-  const rotateY = yaw.interpolate({
+  const rotateY = useMemo(() => yaw.interpolate({
     inputRange: [0, 1],
     outputRange: ["-18deg", "18deg"],
-  });
+  }), [yaw]);
   // The back body yaws in counter-phase so the pair reads as one turning figure.
-  const rotateYBack = yaw.interpolate({
+  const rotateYBack = useMemo(() => yaw.interpolate({
     inputRange: [0, 1],
     outputRange: ["18deg", "-18deg"],
-  });
+  }), [yaw]);
 
   const bodyProps = {
     volumes: mapped,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -97,13 +97,24 @@ export default function Settings() {
   const [savingRanking, setSavingRanking] = useState(false);
   const [rankingError, setRankingError] = useState("");
   const [rankingOptIn, setRankingOptIn] = useState(user?.activity_ranking_opt_in ?? false);
-  useEffect(() => setRankingOptIn(user?.activity_ranking_opt_in ?? false), [user?.activity_ranking_opt_in]);
+  // Re-sync with the account when it changes (React's "adjust state on prop change" pattern).
+  const accountRankingOptIn = user?.activity_ranking_opt_in ?? false;
+  const [syncedRankingOptIn, setSyncedRankingOptIn] = useState(accountRankingOptIn);
+  if (syncedRankingOptIn !== accountRankingOptIn) {
+    setSyncedRankingOptIn(accountRankingOptIn);
+    setRankingOptIn(accountRankingOptIn);
+  }
   const [unreadCount, setUnreadCount] = useState(0);
   const [requestCount, setRequestCount] = useState(0);
   const [isPrivate, setIsPrivate] = useState(user?.is_private ?? false);
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const privacyBusy = useRef(false);
-  useEffect(() => setIsPrivate(user?.is_private ?? false), [user?.is_private]);
+  const accountPrivate = user?.is_private ?? false;
+  const [syncedPrivate, setSyncedPrivate] = useState(accountPrivate);
+  if (syncedPrivate !== accountPrivate) {
+    setSyncedPrivate(accountPrivate);
+    setIsPrivate(accountPrivate);
+  }
   const savePrivacy = async (value: boolean) => {
     if (privacyBusy.current) return;
     privacyBusy.current = true; setSavingPrivacy(true); setRankingError("");

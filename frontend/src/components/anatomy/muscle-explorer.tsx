@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   AccessibilityInfo,
-  PanResponder,
+  type GestureResponderEvent,
   Dimensions,
   Pressable,
   Platform,
@@ -143,31 +143,6 @@ export function MuscleExplorer({
     sideRef.current = side;
   }, [side]);
 
-  // Pan responder for swipe navigation
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        const { dx, dy } = gestureState;
-        return (
-          Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5
-        );
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const { dx } = gestureState;
-        if (Math.abs(dx) >= SWIPE_THRESHOLD) {
-          if (dx < 0) {
-            // Swipe left -> show back
-            changeSide("back");
-          } else {
-            // Swipe right -> show front
-            changeSide("front");
-          }
-        }
-      },
-    }),
-  ).current;
-
   const changeSide = useCallback(
     (newSide: BodySide) => {
       if (newSide !== sideRef.current) {
@@ -182,6 +157,32 @@ export function MuscleExplorer({
     },
     [reduceMotion],
   );
+
+  // Swipe navigation, via the View responder props. The touch origin lives in
+  // a ref that only the handlers read, so nothing touches it during render.
+  const swipeOrigin = useRef<{ x: number; y: number } | null>(null);
+  const swipeDelta = (event: GestureResponderEvent) => {
+    const origin = swipeOrigin.current;
+    if (!origin) return { dx: 0, dy: 0 };
+    return { dx: event.nativeEvent.pageX - origin.x, dy: event.nativeEvent.pageY - origin.y };
+  };
+  const swipeHandlers = {
+    onTouchStart: (event: GestureResponderEvent) => {
+      swipeOrigin.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+    },
+    onStartShouldSetResponder: () => false,
+    onMoveShouldSetResponder: (event: GestureResponderEvent) => {
+      const { dx, dy } = swipeDelta(event);
+      return Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5;
+    },
+    onResponderRelease: (event: GestureResponderEvent) => {
+      const { dx } = swipeDelta(event);
+      if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+        // Swipe left -> show back; swipe right -> show front
+        changeSide(dx < 0 ? "back" : "front");
+      }
+    },
+  };
 
   // Load recommendations when muscle is selected
   const loadRecommendations = useCallback(async (muscle: MuscleSlug) => {
@@ -514,7 +515,7 @@ export function MuscleExplorer({
       {/* Anatomy body */}
       <View
         style={styles.bodyContainer}
-        {...(Platform.OS === "web" ? {} : panResponder.panHandlers)}
+        {...(Platform.OS === "web" ? {} : swipeHandlers)}
       >
         <LinearGradient
           colors={["#020617", "#0F172A", "#020617"]}

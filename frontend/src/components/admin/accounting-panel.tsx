@@ -85,7 +85,6 @@ export function AccountingPanel() {
   const requestId = useRef(0);
   const load = useCallback(async () => {
     const id = ++requestId.current;
-    setError("");
     const period = periodFor(days);
     try {
       const next = await api.adminAccounting(period.from, period.to);
@@ -99,7 +98,13 @@ export function AccountingPanel() {
       if (id === requestId.current) setLoading(false);
     }
   }, [days, t]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // load() only updates state after its first await; handlers that refetch
+    // reset the error and loading state themselves.
+    void (async () => {
+      await load();
+    })();
+  }, [load]);
 
   const moneyText = (cents: number, currency: string | null) => {
     const digits = currency ? EXPONENT[currency.toUpperCase()] ?? 2 : 0;
@@ -188,14 +193,14 @@ export function AccountingPanel() {
       <Text style={styles.hint}>{t("Money recorded by Stripe and RevenueCat. Amounts stay in the currency they were charged. Nothing here is converted.")}</Text>
       <FilterBar label={t("Accounting period")}>
         {DAYS.map(item => (
-          <FilterChip key={item} label={t(periodLabel(item))} selected={days === item} testID={`accounting-period-${item}`} onPress={() => { if (item === days) return; setDays(item); setLoading(true); }} />
+          <FilterChip key={item} label={t(periodLabel(item))} selected={days === item} testID={`accounting-period-${item}`} onPress={() => { if (item === days) return; setDays(item); setLoading(true); setError(""); }} />
         ))}
       </FilterBar>
       {loading ? <ActivityIndicator color={colors.text} /> : null}
       {error ? (
         <View accessibilityRole="alert">
           <Text style={styles.error}>{error}</Text>
-          <Pressable accessibilityRole="button" testID="accounting-retry" onPress={() => { setLoading(true); void load(); }} style={styles.action}>
+          <Pressable accessibilityRole="button" testID="accounting-retry" onPress={() => { setLoading(true); setError(""); void load(); }} style={styles.action}>
             <Text style={styles.actionText}>{t("Retry")}</Text>
           </Pressable>
         </View>

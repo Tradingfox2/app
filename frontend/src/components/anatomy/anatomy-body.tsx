@@ -103,12 +103,20 @@ export function AnatomyBody({
   const [glow, setGlow] = useState(1);
   const [sweep, setSweep] = useState(0);
 
-  useEffect(() => {
-    if (reduceMotion || !selectedMuscle) {
+  // Reset the highlight while rendering when the animation turns off
+  // (React's "adjust state on prop change" pattern); the effect only animates.
+  const animatedMuscle = reduceMotion || !selectedMuscle ? null : selectedMuscle;
+  const [animatedFor, setAnimatedFor] = useState(animatedMuscle);
+  if (animatedFor !== animatedMuscle) {
+    setAnimatedFor(animatedMuscle);
+    if (!animatedMuscle) {
       setGlow(1);
       setSweep(0);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (reduceMotion || !selectedMuscle) return;
     const startedAt = Date.now();
     const id = setInterval(() => {
       const progress = Math.min((Date.now() - startedAt) / 560, 1);

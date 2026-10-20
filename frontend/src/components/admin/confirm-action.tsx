@@ -42,7 +42,9 @@ export function ConfirmAction({
   const ready = minReason <= 0 || draft.trim().length >= minReason;
   const confirmDisabled = Boolean(busy) || !ready;
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
   const openedWithReason = useRef(reason);
 
   useEffect(() => {

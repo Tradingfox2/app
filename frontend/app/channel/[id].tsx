@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNow } from "@/src/use-now";
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -36,6 +37,7 @@ const TYPING_EVERY_MS = 3000;
 
 export default function ChannelScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(); const router = useRouter(); const { user } = useAuth(); const { t, formatDate } = useI18n();
+  const now = useNow();
   const [messages, setMessages] = useState<CommunityMessage[]>([]); const [draft, setDraft] = useState(""); const [sending, setSending] = useState(false); const [error, setError] = useState("");
   const [channel, setChannel] = useState<CommunityChannel | null>(null);
   const [replyTo, setReplyTo] = useState<CommunityMessage | null>(null);
@@ -172,12 +174,14 @@ export default function ChannelScreen() {
     return () => clearInterval(timer);
   }, [load, connected]));
 
-  // Search inside the channel, debounced.
+  // Search inside the channel, debounced. Results only show while a search is active.
+  const searchActive = searchOpen && Boolean(id) && query.trim().length >= 2;
   useEffect(() => {
-    if (!searchOpen || !id || query.trim().length < 2) { setResults(null); return; }
+    if (!searchActive || !id) return;
     const timer = setTimeout(() => { api.searchChannel(id, query.trim()).then(setResults).catch(() => setResults([])); }, 300);
     return () => clearTimeout(timer);
-  }, [query, searchOpen, id]);
+  }, [query, searchActive, id]);
+  const shownResults = searchActive ? results : null;
 
   // One in-flight mutation at a time: the poll above would otherwise overwrite
   // an optimistic row before the server echoes it back.
@@ -223,7 +227,7 @@ export default function ChannelScreen() {
     setActionsFor(null);
   }, "Could not delete message");
   const startEdit = (message: CommunityMessage) => { setEditing(message); setReplyTo(null); setDraft(message.content); setActionsFor(null); };
-  const canEdit = (message: CommunityMessage) => message.author_id === user?.id && !message.program && Date.now() - new Date(message.created_at).getTime() < EDIT_WINDOW_MS;
+  const canEdit = (message: CommunityMessage) => message.author_id === user?.id && !message.program && now - new Date(message.created_at).getTime() < EDIT_WINDOW_MS;
   const canDelete = (message: CommunityMessage) => message.author_id === user?.id || can(mask, MANAGE_MESSAGES);
 
   const typed = (value: string) => {
@@ -313,13 +317,13 @@ export default function ChannelScreen() {
     <View style={styles.header}>
       <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <View style={{ flex: 1 }}><Text style={styles.headerTitle}># {channel?.name || t("CHANNEL")}</Text><Text style={styles.live}>{kindLabel}{slowmode}</Text></View>
-      <Affordance accessibilityRole="button" accessibilityLabel={t("Search this channel")} testID="toggle-search" onPress={() => { setSearchOpen(open => !open); setQuery(""); }} style={styles.icon}><Ionicons name="search" size={18} color={searchOpen ? colors.text : colors.text} /></Affordance>
+      <Affordance accessibilityRole="button" accessibilityLabel={t("Search this channel")} testID="toggle-search" onPress={() => { setSearchOpen(open => !open); setQuery(""); setResults(null); }} style={styles.icon}><Ionicons name="search" size={18} color={searchOpen ? colors.text : colors.text} /></Affordance>
       {pins.length ? <Affordance accessibilityRole="button" testID="toggle-pins" onPress={() => setPinsOpen(open => !open)} style={styles.icon}><Ionicons name="pin" size={18} color={pinsOpen ? colors.text : colors.text} /></Affordance> : null}
     </View>
     {channel?.description ? <Text style={styles.topic} numberOfLines={2}>{channel.description}</Text> : null}
     {searchOpen ? <View style={styles.searchBox} testID="channel-search">
       <TextInput autoFocus value={query} onChangeText={setQuery} maxLength={80} placeholder={t("Search messages")} placeholderTextColor={colors.textDim} style={styles.input} testID="channel-search-input" />
-      {results ? results.length === 0 ? <Text style={styles.readOnlyText}>{t("No messages match.")}</Text> : results.map(row => <View key={row.id} style={styles.searchRow} testID={`search-hit-${row.id}`}>
+      {shownResults ? shownResults.length === 0 ? <Text style={styles.readOnlyText}>{t("No messages match.")}</Text> : shownResults.map(row => <View key={row.id} style={styles.searchRow} testID={`search-hit-${row.id}`}>
         <Text style={styles.author}>{row.author?.full_name || t("Member")} · {formatDate(row.created_at, { day: "numeric", month: "short" })}</Text>
         <RichText content={row.content} mentions={row.mentions ?? []} style={styles.pinsItem} numberOfLines={2} />
       </View>) : null}

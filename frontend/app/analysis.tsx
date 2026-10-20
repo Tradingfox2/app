@@ -44,11 +44,19 @@ export default function AnalysisScreen() {
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Reset to loading while rendering when the window or attempt changes
+  // (React's "adjust state on change" pattern); the effect only fetches.
+  const requestKey = `${days}|${attempt}`;
+  const [requestedFor, setRequestedFor] = useState(requestKey);
+  if (requestedFor !== requestKey) {
+    setRequestedFor(requestKey);
     setLoading(true);
     setError(null);
     setData(null);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
     api.trends(days).then(
       (body) => {
         if (!cancelled) {

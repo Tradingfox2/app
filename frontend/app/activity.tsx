@@ -66,11 +66,13 @@ export default function ActivityDayScreen() {
   const [calorieRows, setCalorieRows] = useState<unknown[] | null>(null);
   const [caloriesError, setCaloriesError] = useState<string | null>(null);
   const [caloriesSettled, setCaloriesSettled] = useState(false);
-  const [setsState, setSetsState] = useState<
-    | { kind: "pending" }
-    | { kind: "ready"; day: string; rollup: SetRollup }
-    | { kind: "error"; day: string; message: string }
-  >({ kind: "pending" });
+  // The fetched sets for one (workouts, day, attempt) request. Anything that
+  // doesn't match the current request is derived as pending below.
+  const [setsResult, setSetsResult] = useState<
+    | { source: ActivityWorkout[]; day: string; attempt: number; kind: "ready"; rollup: SetRollup }
+    | { source: ActivityWorkout[]; day: string; attempt: number; kind: "error"; message: string }
+    | null
+  >(null);
   const [setsAttempt, setSetsAttempt] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -116,40 +118,52 @@ export default function ActivityDayScreen() {
   }, [t]);
 
   useEffect(() => {
-    void load();
+    // load() only updates state after its first await, so nothing is set
+    // synchronously during the effect.
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
+  const dayIds = workouts ? workoutIdsOnDay(workouts, dayKey) : [];
+  const needsSets = workoutSettled && Boolean(workouts) && dayIds.length > 0;
+  const dayIdsKey = dayIds.join(",");
+
   useEffect(() => {
-    if (!workoutSettled) return undefined;
-    if (!workouts) {
-      setSetsState({ kind: "pending" });
-      return undefined;
-    }
-    const ids = workoutIdsOnDay(workouts, dayKey);
+    if (!needsSets || !workouts) return undefined;
+    const ids = dayIdsKey.split(",");
     const recorded = recordedDistanceRows(workouts, dayKey);
-    if (ids.length === 0) {
-      setSetsState({ kind: "ready", day: dayKey, rollup: rollupSets(recorded) });
-      return undefined;
-    }
+    const request = { source: workouts, day: dayKey, attempt: setsAttempt };
     let cancel = false;
-    setSetsState({ kind: "pending" });
     Promise.all(ids.map((id) => api.listSets(id)))
       .then((groups) => {
         if (cancel) return;
         if (groups.some((group) => !Array.isArray(group))) {
-          setSetsState({ kind: "error", day: dayKey, message: t("Could not load distance") });
+          setSetsResult({ ...request, kind: "error", message: t("Could not load distance") });
           return;
         }
-        setSetsState({ kind: "ready", day: dayKey, rollup: rollupSets([...groups.flat(), ...recorded]) });
+        setSetsResult({ ...request, kind: "ready", rollup: rollupSets([...groups.flat(), ...recorded]) });
       })
       .catch((cause: unknown) => {
         if (cancel) return;
-        setSetsState({ kind: "error", day: dayKey, message: messageOf(cause, t("Could not load distance")) });
+        setSetsResult({ ...request, kind: "error", message: messageOf(cause, t("Could not load distance")) });
       });
     return () => {
       cancel = true;
     };
-  }, [workouts, workoutSettled, dayKey, setsAttempt, t]);
+  }, [needsSets, dayIdsKey, workouts, dayKey, setsAttempt, t]);
+
+  type SetsState =
+    | { kind: "pending" }
+    | { kind: "ready"; day: string; rollup: SetRollup }
+    | { kind: "error"; day: string; message: string };
+  const setsState: SetsState = !workoutSettled || !workouts
+    ? { kind: "pending" }
+    : dayIds.length === 0
+      ? { kind: "ready", day: dayKey, rollup: rollupSets(recordedDistanceRows(workouts, dayKey)) }
+      : setsResult && setsResult.source === workouts && setsResult.day === dayKey && setsResult.attempt === setsAttempt
+        ? setsResult
+        : { kind: "pending" };
 
   const steps = stepRows ? readDailyMetric(stepRows, dayKey) : null;
   const calories = calorieRows ? readDailyMetric(calorieRows, dayKey) : null;

@@ -63,11 +63,15 @@ export default function SourcesScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string>("");
 
-  useEffect(() => {
-    // Terra redirects back here after the provider login.
-    if (params.connected) setNotice(t("{provider} authorised. Live data arrives via secure webhook within minutes.", { provider: params.connected }));
+  // Terra redirects back here after the provider login. Adjust the notice
+  // while rendering when those params change, rather than in an effect.
+  const redirectKey = `${params.connected ?? ""}|${params.failed ?? ""}`;
+  const [seenRedirect, setSeenRedirect] = useState<string | null>(null);
+  if (seenRedirect !== redirectKey) {
+    setSeenRedirect(redirectKey);
     if (params.failed) setNotice(t("{provider} connection was cancelled or failed. Try again.", { provider: params.failed }));
-  }, [params.connected, params.failed, t]);
+    else if (params.connected) setNotice(t("{provider} authorised. Live data arrives via secure webhook within minutes.", { provider: params.connected }));
+  }
 
   const load = useCallback(async () => {
     try {
@@ -81,7 +85,10 @@ export default function SourcesScreen() {
   }, [t]);
 
   useEffect(() => {
-    load();
+    // load() only updates state after its first await.
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const act = async (provider: string, action: "connect" | "disconnect" | "sync" | "import") => {

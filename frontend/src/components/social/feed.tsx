@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import { Affordance } from "@/src/press-affordance";
 import { Ionicons } from "@expo/vector-icons";
@@ -431,7 +431,6 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [editError, setEditError] = useState("");
-  const loaded = useRef(false);
   const commentGen = useRef(0);
 
   const guard = async (action: () => Promise<void>) => {
@@ -440,9 +439,8 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
     try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : t("Something went wrong")); }
     finally { setBusy(false); }
   };
-  const loadComments = () => {
+  const fetchComments = useCallback(() => {
     const gen = ++commentGen.current;
-    setLoadError("");
     api.comments(post.id).then(page => {
       if (gen !== commentGen.current) return;
       setRows(page);
@@ -451,11 +449,15 @@ function CommentThread({ post, onCountChange, onReport }: { post: Post; onCountC
       if (gen !== commentGen.current) return;
       setLoadError(cause instanceof Error ? cause.message : t("Something went wrong"));
     });
+  }, [post.id, t]);
+  const loadComments = () => {
+    setLoadError("");
+    fetchComments();
   };
-  if (!loaded.current) {
-    loaded.current = true;
-    loadComments();
-  }
+  // First page once on mount; loadError already starts empty.
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
   const retryComments = () => {
     setRows(null);
     setHasOlder(false);

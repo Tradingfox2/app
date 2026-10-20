@@ -26,11 +26,10 @@ export default function SearchScreen() {
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < MIN_QUERY) { setResults({ users: [], communities: [], posts: [], tags: [] }); setLoading(false); return; }
+    if (q.length < MIN_QUERY) return;
     // Every keystroke bumps the revision, so a slow response for "dea" can
     // never overwrite the results for "deadlift" that arrived first.
     const current = ++revision.current;
-    setLoading(true); setError("");
     const timer = setTimeout(async () => {
       try {
         const rows = kind === "users" ? (await api.searchUsers(q)).results
@@ -45,6 +44,14 @@ export default function SearchScreen() {
     return () => clearTimeout(timer);
   }, [query, kind, t]);
 
+  // The loading/cleared state for a new search is set where the search
+  // changes; the effect above only runs the debounced request.
+  const changeSearch = (nextQuery: string, nextKind: SearchKind) => {
+    if (nextQuery === query && nextKind === kind) return;
+    setQuery(nextQuery); setKind(nextKind);
+    if (nextQuery.trim().length < MIN_QUERY) { setResults({ users: [], communities: [], posts: [], tags: [] }); setLoading(false); }
+    else { setLoading(true); setError(""); }
+  };
   const active = query.trim().length >= MIN_QUERY;
   const rows = results[kind];
 
@@ -53,13 +60,13 @@ export default function SearchScreen() {
       <Affordance accessibilityLabel={t("Back")} onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={20} color={colors.text} /></Affordance>
       <View style={styles.inputWrap}>
         <Ionicons name="search" size={16} color={colors.textDim} />
-        <TextInput autoFocus value={query} onChangeText={value => { setQuery(value); if (value.startsWith("#")) setKind("tags"); }} maxLength={80} placeholder={t("Search people, communities, posts, #tags")} placeholderTextColor={colors.textDim} style={styles.input} testID="search-input" returnKeyType="search" />
-        {query ? <Affordance accessibilityRole="button" accessibilityLabel={t("Clear")} testID="search-clear" onPress={() => setQuery("")}><Ionicons name="close-circle" size={16} color={colors.textDim} /></Affordance> : null}
+        <TextInput autoFocus value={query} onChangeText={value => changeSearch(value, value.startsWith("#") ? "tags" : kind)} maxLength={80} placeholder={t("Search people, communities, posts, #tags")} placeholderTextColor={colors.textDim} style={styles.input} testID="search-input" returnKeyType="search" />
+        {query ? <Affordance accessibilityRole="button" accessibilityLabel={t("Clear")} testID="search-clear" onPress={() => changeSearch("", kind)}><Ionicons name="close-circle" size={16} color={colors.textDim} /></Affordance> : null}
       </View>
     </View>
     <View style={styles.tabs}>
       {(["users", "communities", "posts", "tags"] as SearchKind[]).map(item => (
-        <Affordance key={item} accessibilityRole="button" testID={`search-tab-${item}`} onPress={() => setKind(item)} style={[styles.tab, kind === item && styles.tabOn]}>
+        <Affordance key={item} accessibilityRole="button" testID={`search-tab-${item}`} onPress={() => changeSearch(query, item)} style={[styles.tab, kind === item && styles.tabOn]}>
           <Text style={[styles.tabText, kind === item && styles.tabTextOn]}>{t(item === "users" ? "PEOPLE" : item.toUpperCase())}</Text>
         </Affordance>
       ))}

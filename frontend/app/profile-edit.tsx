@@ -34,8 +34,10 @@ export default function EditProfileScreen() {
   const seeded = useRef(false);
   const userRef = useRef(user);
   const tRef = useRef(t);
-  userRef.current = user;
-  tRef.current = t;
+  useEffect(() => {
+    userRef.current = user;
+    tRef.current = t;
+  });
 
   // The inputs are useState, so they freeze whatever `user` was on the first
   // paint — often null, while /auth/me is still in flight. Saving that blank

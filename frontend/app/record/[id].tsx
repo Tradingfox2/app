@@ -51,21 +51,14 @@ export default function RecordSummaryScreen() {
   const reduceMotion = useReducedMotion();
   const [workout, setWorkout] = useState<Record<string, unknown> | null>(null);
   const [segments, setSegments] = useState<Fix[][] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchError, setError] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [fetching, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!id) {
-      setError(t("Could not load this recording"));
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setRouteError(null);
+  // Fetches the recording; every state update happens after the first await.
+  const fetchRecording = useCallback(async (recordingId: string) => {
     try {
-      const row = await api.workout(id);
+      const row = await api.workout(recordingId);
       setWorkout(row as Record<string, unknown>);
       const activity = readStoredActivity((row as { activity?: unknown }).activity);
       if (!activity?.hasRoute) {
@@ -73,7 +66,7 @@ export default function RecordSummaryScreen() {
         return;
       }
       try {
-        const route = await api.workoutRoute(id);
+        const route = await api.workoutRoute(recordingId);
         setSegments(routeFixes(route));
       } catch (cause) {
         const status = (cause as { status?: number }).status;
@@ -86,11 +79,31 @@ export default function RecordSummaryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, t]);
+  }, [t]);
 
+  const load = useCallback(async () => {
+    if (!id) {
+      setError(t("Could not load this recording"));
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setRouteError(null);
+    await fetchRecording(id);
+  }, [id, fetchRecording, t]);
+
+  // Initial fetch. Loading starts true and the errors start null, so only the
+  // async part of load() is needed here; a missing id is derived below.
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!id) return;
+    void (async () => {
+      await fetchRecording(id);
+    })();
+  }, [id, fetchRecording]);
+  const missingId = !id;
+  const error = missingId ? t("Could not load this recording") : fetchError;
+  const loading = missingId ? false : fetching;
 
   const activity = readStoredActivity(workout?.activity);
   const movingSec = activity?.movingSec ?? null;

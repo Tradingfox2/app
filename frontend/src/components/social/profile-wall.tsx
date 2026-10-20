@@ -75,12 +75,22 @@ export function ProfileWall({ userId, variant }: ProfileWallProps) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
   const canSeePosts = !!profile?.can_view_posts && !profile?.is_blocked;
 
-  useEffect(() => {
-    if (canSeePosts && userId) {
-      void posts.load();
+  // Clear the previous profile's media while rendering when the viewed
+  // profile (or access to it) changes; the effect below only fetches.
+  const mediaKey = canSeePosts && userId ? userId : null;
+  const [mediaFor, setMediaFor] = useState<string | null>(null);
+  if (mediaFor !== mediaKey) {
+    setMediaFor(mediaKey);
+    if (mediaKey) {
       setStories([]);
       setHighlights([]);
       setPhotos([]);
+    }
+  }
+
+  useEffect(() => {
+    if (canSeePosts && userId) {
+      void posts.load();
       let cancelled = false;
       Promise.all([
         api.userStories(userId).catch(() => [] as Story[]),
