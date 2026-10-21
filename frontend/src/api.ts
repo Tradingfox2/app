@@ -681,7 +681,7 @@ export type PartnerDashboard = {
   active_members: number;
   pending_members: number;
   payout_status: string;
-  balances: { _id: string; gross_cents: number; net_cents: number }[];
+  balances: { _id: string; gross_cents: number; net_cents: number; paid_out_cents?: number }[];
   communities: Community[];
 };
 

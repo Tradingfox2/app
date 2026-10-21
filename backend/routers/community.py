@@ -17,6 +17,7 @@ from community_rankings import build_rankings
 import billing
 import pro_billing
 import referrals
+from partner_payouts import PartnerPayouts
 from routers import gyms
 import challenges
 import moderation
@@ -1030,6 +1031,8 @@ async def stripe_webhook(request: Request):
             await referrals.invoice_paid(obj)
     elif kind == "charge.refunded":
         await referrals.charge_refunded(obj)
+    elif PartnerPayouts.handles(event):
+        await PartnerPayouts.apply(event)
     await db.billing_events.update_one(
         {"id": event.get("id")}, {"$setOnInsert": {"type": kind, "received_at": now()}}, upsert=True)
     return {"received": True}
@@ -3300,12 +3303,17 @@ async def partner_dashboard(user: dict = Depends(current_user)):
         {"community_id": {"$in": community_ids}, "status": "pending"}
     )
     ledger_pipeline = [
-        {"$match": {"partner_id": user["id"], "status": "available"}},
-        {"$group": {"_id": "$currency", "gross_cents": {"$sum": "$gross_cents"}, "net_cents": {"$sum": "$net_cents"}}},
+        # Net revenue recorded: rows still with the coach's Stripe balance and rows already paid out.
+        {"$match": {"partner_id": user["id"], "status": {"$in": ["available", "paid_out"]}}},
+        {"$group": {
+            "_id": "$currency", "gross_cents": {"$sum": "$gross_cents"}, "net_cents": {"$sum": "$net_cents"},
+            "paid_out_cents": {"$sum": {"$cond": [{"$eq": ["$status", "paid_out"]}, "$net_cents", 0]}},
+        }},
     ]
     # `clean` drops Mongo `_id`, which is the currency this total is grouped by.
     balances = [
-        {"_id": row.get("_id"), "gross_cents": row.get("gross_cents", 0), "net_cents": row.get("net_cents", 0)}
+        {"_id": row.get("_id"), "gross_cents": row.get("gross_cents", 0), "net_cents": row.get("net_cents", 0),
+         "paid_out_cents": row.get("paid_out_cents", 0)}
         async for row in db.partner_ledger.aggregate(ledger_pipeline)
     ]
     return {
