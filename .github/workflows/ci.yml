@@ -102,6 +102,10 @@ jobs:
         working-directory: frontend
         run: node --experimental-strip-types src/missed-session.test.ts
 
+      - name: Money formatting test
+        working-directory: frontend
+        run: node --experimental-strip-types src/money.test.ts
+
       - name: Exercise thumbnail map test
         working-directory: frontend
         run: node --experimental-strip-types --import ./src/activity-day-test-register.mjs src/components/exercises/exercise-thumb-map.test.ts
