@@ -5,8 +5,11 @@ checks those fields were stored and that nulls, scores, and Terra's own
 enrichment were not turned into extra metrics.
 """
 import asyncio
+import hashlib
+import hmac
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -71,8 +74,22 @@ class _Database:
         self.wearable_sources = _Collection()
 
 
-def _request(payload: dict) -> Request:
+LEGACY_SECRET = "legacy-terra-test-secret"
+
+
+def _signature(raw: bytes, secret: str = LEGACY_SECRET) -> str:
+    stamp = str(int(time.time()))
+    mac = hmac.new(secret.encode(), stamp.encode() + b"." + raw, hashlib.sha256).hexdigest()
+    return f"t={stamp},v1={mac}"
+
+
+def _request(payload: dict, signature: str | None = None) -> Request:
     raw = json.dumps(payload).encode()
+    headers = [(b"content-type", b"application/json")]
+    if signature == "sign":
+        signature = _signature(raw)
+    if signature:
+        headers.append((b"terra-signature", signature.encode()))
 
     async def receive():
         return {"type": "http.request", "body": raw, "more_body": False}
@@ -87,7 +104,7 @@ def _request(payload: dict) -> Request:
             "path": "/api/webhooks/terra",
             "raw_path": b"/api/webhooks/terra",
             "query_string": b"",
-            "headers": [(b"content-type", b"application/json")],
+            "headers": headers,
             "client": ("127.0.0.1", 123),
             "server": ("test", 80),
         },
@@ -182,7 +199,7 @@ def test_whoop_sleep_webhook_stores_only_reported_fields(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(wearables, "db", db)
         monkeypatch.setattr(wearables, "TERRA_CONFIGURED", False)
-        monkeypatch.setattr(wearables, "TERRA_SIGNING_SECRET", "")
+        monkeypatch.setattr(wearables, "TERRA_SIGNING_SECRET", LEGACY_SECRET)
         await db.wearable_sources.insert_one(
             {
                 "id": "src-whoop",
@@ -192,7 +209,7 @@ def test_whoop_sleep_webhook_stores_only_reported_fields(monkeypatch):
                 "terra_user_id": "terra-whoop-sample",
             }
         )
-        result = await wearables.terra_webhook(_request(WHOOP_SLEEP), BackgroundTasks())
+        result = await wearables.terra_webhook(_request(WHOOP_SLEEP, "sign"), BackgroundTasks())
         assert result == {"received": True, "processed": 3}
         rows = {
             doc["metric"]: doc
@@ -211,5 +228,25 @@ def test_whoop_sleep_webhook_stores_only_reported_fields(monkeypatch):
             assert row["recorded_at"] == datetime(
                 2026, 9, 30, 22, 10, tzinfo=timezone(timedelta(hours=-4))
             )
+
+    asyncio.run(scenario(_Database()))
+
+
+@pytest.mark.parametrize("secret,signature,status", [
+    ("", None, 503),                      # no secret: nothing is accepted
+    ("", "sign", 503),                    # not even a signed-looking post
+    (LEGACY_SECRET, None, 401),           # secret set, unsigned
+    (LEGACY_SECRET, "t=1,v1=deadbeef", 401),
+])
+def test_legacy_terra_webhook_rejects_unsigned_posts(monkeypatch, secret, signature, status):
+    async def scenario(db):
+        monkeypatch.setattr(wearables, "db", db)
+        monkeypatch.setattr(wearables, "TERRA_SIGNING_SECRET", secret)
+        auth = {"type": "auth", "status": "success",
+                "user": {"user_id": "forged", "provider": "GARMIN", "reference_id": "victim"}}
+        with pytest.raises(HTTPException) as rejected:
+            await wearables.terra_webhook(_request(auth, signature), BackgroundTasks())
+        assert rejected.value.status_code == status
+        assert db.wearable_sources.docs == []
 
     asyncio.run(scenario(_Database()))

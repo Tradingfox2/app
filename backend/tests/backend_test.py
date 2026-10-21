@@ -547,14 +547,15 @@ class TestWearables:
         assert whoop["status"] == "connected"
         assert whoop["last_sync_at"]
 
-        # Terra webhook — must accept and process fields
+        # Legacy Terra webhook: an unsigned post must be refused (503 without a
+        # secret on the server, 401 with one). Signed processing is covered by
+        # tests/test_terra_live_path.py and tests/test_wearable_aggregators.py.
         wh = requests.post(
             f"{API}/webhooks/terra",
             json={"user": {"user_id": terra_user_id}, "data": [{"hrv_avg": 70, "steps": 9000}]},
             timeout=30,
         )
-        assert wh.status_code == 200, wh.text
-        assert wh.json().get("processed", 0) >= 2
+        assert wh.status_code in (401, 503), wh.text
 
         d = api_client.post(f"{API}/wearables/sources/whoop/disconnect", headers=demo_headers)
         assert d.status_code == 200, d.text

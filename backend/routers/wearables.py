@@ -25,16 +25,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from server import clean, current_user, db, new_id, now, require_pro
 from terra_labs import verify_webhook_signature
+from wearable_aggregators import PROVIDERS as AGGREGATOR_PROVIDERS
+from wearable_aggregators import AggregatorError, Aggregators
 from routers.labs import claim_terra_lab_event, process_claimed_terra_lab_event
 
 router = APIRouter()
 
+# Kept for older imports; the live check is _aggregator_live().
 TERRA_CONFIGURED = bool(os.environ.get("TERRA_API_KEY") and os.environ.get("TERRA_DEV_ID"))
 TERRA_SIGNING_SECRET = os.environ.get("TERRA_SIGNING_SECRET", "")
 TERRA_WIDGET_URL = os.environ.get("TERRA_WIDGET_URL", "https://access.tryterra.co/api/widget/session")
 # Where Terra sends the browser after the provider login (frontend /sources route).
 APP_PUBLIC_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:8082").rstrip("/")
-TERRA_PROVIDER_CODES = {"garmin": "GARMIN", "whoop": "WHOOP", "fitbit": "FITBIT", "oura": "OURA"}
 SDK_ONLY_PROVIDERS = {"apple_health", "health_connect", "samsung_health"}
 # Technogym Mywellness cloud (gym equipment). Real activation needs a commercial
 # agreement + API key + auth domain from a local Technogym rep; endpoints then
@@ -57,6 +59,8 @@ PROVIDER_INFO: dict[str, dict] = {
                "provides": ["hrv", "resting_hr", "sleep_hours", "steps", "calories"]},
     "oura": {"kind": "wearable", "label": "Oura",
              "provides": ["hrv", "resting_hr", "sleep_hours", "recovery"]},
+    "polar": {"kind": "wearable", "label": "Polar",
+              "provides": ["hrv", "resting_hr", "sleep_hours", "steps", "calories"]},
     "apple_health": {"kind": "wearable", "label": "Apple Health",
                      "provides": ["hrv", "resting_hr", "sleep_hours", "steps"]},
     "health_connect": {"kind": "wearable", "label": "Health Connect",
@@ -92,7 +96,12 @@ def _provider_configured(provider: str) -> bool:
         return TECHNOGYM_CONFIGURED
     if provider == "egym":
         return EGYM_CONFIGURED
-    return TERRA_CONFIGURED
+    return _aggregator_live()
+
+
+def _aggregator_live() -> bool:
+    """The aggregator chosen by WEARABLES_AGGREGATOR has all of its keys."""
+    return Aggregators.selected().enabled()
 
 
 def _source_mode(provider: str, demo: bool) -> str:
@@ -367,23 +376,6 @@ async def list_sources(user: dict = Depends(current_user)):
     return out
 
 
-def _terra_widget_session(user_id: str, provider: str) -> str:
-    response = http.post(
-        TERRA_WIDGET_URL,
-        headers={"dev-id": os.environ["TERRA_DEV_ID"], "x-api-key": os.environ["TERRA_API_KEY"]},
-        json={
-            "reference_id": user_id,
-            "providers": TERRA_PROVIDER_CODES[provider],
-            "auth_success_redirect_url": f"{APP_PUBLIC_URL}/sources?connected={provider}",
-            "auth_failure_redirect_url": f"{APP_PUBLIC_URL}/sources?failed={provider}",
-        },
-        timeout=15,
-    )
-    if response.status_code not in (200, 201) or not response.json().get("url"):
-        raise HTTPException(502, "Terra could not start the connection. Check the Terra dashboard credentials.")
-    return response.json()["url"]
-
-
 @router.post("/wearables/sources/{provider}/connect")
 async def connect_source(provider: str, user: dict = Depends(current_user)):
     if provider not in PROVIDERS:
@@ -393,8 +385,10 @@ async def connect_source(provider: str, user: dict = Depends(current_user)):
     # Only demo accounts get an instantly "connected" simulated source. Real users
     # stay `pending` until the provider authorises (Terra auth webhook / OAuth callback).
     status = "connected" if demo else "pending"
-    if provider in TERRA_PROVIDER_CODES and TERRA_CONFIGURED and not demo:
-        auth_url = await run_in_threadpool(_terra_widget_session, user["id"], provider)
+    if provider in AGGREGATOR_PROVIDERS and _aggregator_live() and not demo:
+        # The selected aggregator (WEARABLES_AGGREGATOR) marks the row pending itself.
+        session = await _aggregator_connect(Aggregators.selected(), user["id"], [provider])
+        auth_url = session["url"]
     elif provider == "technogym" and TECHNOGYM_CONFIGURED:
         domain = os.environ.get("TECHNOGYM_AUTH_DOMAIN", "")
         auth_url = f"https://{domain}/oauth/authorize?response_type=code&client_id={os.environ.get('TECHNOGYM_CLIENT_ID', '')}"
@@ -617,7 +611,8 @@ async def sync_source(provider: str, user: dict = Depends(require_pro)):
             "simulated": False,
             "message": (
                 "Live sync will start once this source is authorised "
-                + ("(Terra webhook)." if TERRA_CONFIGURED else "(Terra keys not configured yet).")
+                + (f"({Aggregators.selected_name()} webhook)." if _aggregator_live()
+                   else "(Terra keys not configured yet).")
             ),
         }
     written = await _simulate_wearable_week(user, provider)
@@ -675,14 +670,16 @@ async def _simulate_wearable_week(user: dict, provider: str) -> int:
 
 @router.post("/webhooks/terra")
 async def terra_webhook(request: Request, background: BackgroundTasks):
-    """Map a Terra webhook onto wearable_metrics. Missing fields are left missing."""
-    raw_body = await request.body()
-    if TERRA_SIGNING_SECRET:
-        signature = request.headers.get("terra-signature") or request.headers.get("x-terra-signature")
-        if not verify_webhook_signature(raw_body, signature, TERRA_SIGNING_SECRET):
-            raise HTTPException(401, "Invalid Terra webhook signature")
-    elif TERRA_CONFIGURED:
+    """Legacy Terra webhook (signed only). Missing fields are left missing."""
+    # Locked down: without a signing secret nothing is accepted, so an unsigned
+    # post can never create a connection or write metrics. New integrations
+    # should use /api/wearables/terra/webhook.
+    if not TERRA_SIGNING_SECRET:
         raise HTTPException(503, "TERRA_SIGNING_SECRET is required for Terra webhooks")
+    raw_body = await request.body()
+    signature = request.headers.get("terra-signature") or request.headers.get("x-terra-signature")
+    if not verify_webhook_signature(raw_body, signature, TERRA_SIGNING_SECRET):
+        raise HTTPException(401, "Invalid Terra webhook signature")
 
     try:
         payload = json.loads(raw_body)
@@ -752,6 +749,262 @@ async def terra_webhook(request: Request, background: BackgroundTasks):
         {"terra_user_id": terra_user}, {"$set": {"last_sync_at": now()}}
     )
     return {"received": True, "processed": processed}
+
+
+# --------------------------------------------------------------------------- #
+# Wearable aggregators (Terra, Junction, Thryve)                              #
+# WEARABLES_AGGREGATOR picks the one used to connect. Each vendor has its own #
+# webhook route and keys; a missing key turns that vendor off with 503.      #
+# Connections: wearable_sources (aggregator + aggregator_user_id).            #
+# Samples: wearable_samples, unique on user/provider/event_type/item_key.     #
+# Day metrics: wearable_metrics, so the Home rings keep working.              #
+# --------------------------------------------------------------------------- #
+class WearableConnectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    providers: Optional[list[str]] = None
+
+
+class WearableStore:
+    """Mongo writes shared by every aggregator."""
+
+    @staticmethod
+    def _ids(aggregator: str, aggregator_user_id: str) -> dict:
+        ids = {"aggregator": aggregator, "aggregator_user_id": aggregator_user_id}
+        if aggregator == "terra":
+            ids["terra_user_id"] = aggregator_user_id  # legacy /webhooks/terra reads this
+        return ids
+
+    @staticmethod
+    async def mark_pending(user_id: str, provider: str, aggregator: str, aggregator_user_id) -> None:
+        existing = await db.wearable_sources.find_one({"user_id": user_id, "provider": provider}, {"_id": 0})
+        if existing and existing.get("status") == "connected":
+            return
+        fields = {"status": "pending", "pending_since": now(), "aggregator": aggregator}
+        if aggregator_user_id:
+            fields.update(WearableStore._ids(aggregator, aggregator_user_id))
+        await db.wearable_sources.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": fields, "$setOnInsert": {"id": new_id(), "user_id": user_id, "provider": provider}},
+            upsert=True,
+        )
+
+    @staticmethod
+    async def owner(aggregator: str, aggregator_user_id: str) -> Optional[str]:
+        doc = await db.wearable_sources.find_one(
+            {"aggregator": aggregator, "aggregator_user_id": aggregator_user_id}, {"_id": 0})
+        return doc["user_id"] if doc else None
+
+    @staticmethod
+    async def apply(aggregator: str, event: dict) -> dict:
+        kind = event["kind"]
+        if kind == "connect":
+            if event.get("replaces"):
+                await WearableStore.disconnect(aggregator, event["replaces"], None)
+            user_id = event.get("reference_id") or await WearableStore.owner(aggregator, event["aggregator_user_id"])
+            if not user_id:
+                return {"processed": 0, "reason": "unknown user"}
+            await db.wearable_sources.update_one(
+                {"user_id": user_id, "provider": event["provider"]},
+                {"$set": {"status": "connected", "connected_at": now(),
+                          **WearableStore._ids(aggregator, event["aggregator_user_id"])},
+                 "$setOnInsert": {"id": new_id(), "user_id": user_id, "provider": event["provider"]}},
+                upsert=True,
+            )
+            return {"processed": 1}
+        if kind == "disconnect":
+            return {"processed": await WearableStore.disconnect(aggregator, event["aggregator_user_id"],
+                                                               event.get("provider"))}
+        if kind == "sample":
+            return await WearableStore.sample(aggregator, event)
+        return {"processed": 0, "reason": event.get("reason")}
+
+    @staticmethod
+    async def disconnect(aggregator: str, aggregator_user_id: str, provider: Optional[str]) -> int:
+        query = {"aggregator": aggregator, "aggregator_user_id": aggregator_user_id}
+        if provider:
+            query["provider"] = provider
+        res = await db.wearable_sources.update_many(
+            query, {"$set": {"status": "disconnected", "disconnected_at": now()}})
+        return res.modified_count
+
+    @staticmethod
+    async def sample(aggregator: str, event: dict) -> dict:
+        query = {"aggregator": aggregator, "aggregator_user_id": event["aggregator_user_id"], "status": "connected"}
+        if event.get("provider"):
+            query["provider"] = event["provider"]
+        src = await db.wearable_sources.find_one(query, {"_id": 0})
+        if not src:
+            return {"processed": 0, "reason": "unknown user"}
+        written = 0
+        if event["values"]:
+            await db.wearable_samples.update_one(
+                {"user_id": src["user_id"], "provider": src["provider"],
+                 "event_type": event["event_type"], "item_key": event["item_key"]},
+                {"$set": {"start_time": event["start_time"], "end_time": event["end_time"],
+                          "values": event["values"], "aggregator": aggregator,
+                          "aggregator_user_id": event["aggregator_user_id"], "updated_at": now()},
+                 "$setOnInsert": {"id": new_id(), "created_at": now()}},
+                upsert=True,
+            )
+            written = 1
+        recorded_at = event["start_time"] or now()
+        for metric, value in event["metrics"].items():
+            await db.wearable_metrics.update_one(
+                {"terra_user_id": f"{aggregator}:{event['aggregator_user_id']}" if aggregator != "terra"
+                 else event["aggregator_user_id"],
+                 "terra_event_type": event["event_type"], "terra_item_key": event["item_key"], "metric": metric},
+                {"$set": {"user_id": src["user_id"], "metric": metric, "value": value,
+                          "unit": METRIC_UNITS.get(metric), "device": src["provider"], "simulated": False,
+                          "aggregator": aggregator, "recorded_at": recorded_at, "updated_at": now()},
+                 "$setOnInsert": {"id": new_id(), "created_at": now()}},
+                upsert=True,
+            )
+        await db.wearable_sources.update_one(
+            {"user_id": src["user_id"], "provider": src["provider"]}, {"$set": {"last_sync_at": now()}})
+        return {"processed": written, "metrics": len(event["metrics"])}
+
+
+class WearableWebhook:
+    """Verify, parse and apply one vendor webhook."""
+
+    @staticmethod
+    async def handle(name: str, request: Request, background: BackgroundTasks) -> dict:
+        adapter = Aggregators.get(name)
+        if not adapter or not adapter.enabled():
+            raise HTTPException(503, f"{name} is not configured on this server")
+        raw_body = await request.body()
+        if not adapter.verify(raw_body, request.headers):
+            raise HTTPException(401, f"Invalid {name} webhook signature")
+        try:
+            payload = adapter.parse(raw_body, request.headers)
+        except Exception as exc:  # bad JSON or bad compression
+            raise HTTPException(400, f"Invalid {name} webhook body") from exc
+        if name == "terra" and payload.get("type") in {"lab_report.completed", "lab_report.failed"}:
+            if not await claim_terra_lab_event(payload):
+                return {"received": True, "duplicate": True, "processed": 0}
+            background.add_task(process_claimed_terra_lab_event, payload)
+            return {"received": True, "queued": True}
+        processed = 0
+        metrics = 0
+        reasons = []
+        for event in adapter.events(payload):
+            result = await WearableStore.apply(name, event)
+            processed += result.get("processed", 0)
+            metrics += result.get("metrics", 0)
+            if result.get("reason"):
+                reasons.append(result["reason"])
+        out = {"received": True, "aggregator": name, "processed": processed, "metrics": metrics}
+        if reasons and not processed:
+            out["reason"] = reasons[0]
+        return out
+
+
+def _selected_enabled():
+    adapter = Aggregators.selected()
+    if not adapter.enabled():
+        raise HTTPException(503, f"{adapter.name} is not configured on this server")
+    return adapter
+
+
+async def _aggregator_connect(adapter, user_id: str, providers: list[str]) -> dict:
+    unknown = [p for p in providers if p not in AGGREGATOR_PROVIDERS]
+    if unknown:
+        raise HTTPException(422, f"Unsupported provider: {', '.join(unknown)}")
+    try:
+        session = await run_in_threadpool(adapter.connect_url, user_id, providers)
+    except (AggregatorError, http.RequestException, ValueError) as exc:
+        raise HTTPException(502, f"{adapter.name} could not start the connection") from exc
+    for provider in providers:
+        await WearableStore.mark_pending(user_id, provider, adapter.name, session.get("aggregator_user_id"))
+    return {"url": session["url"], "session_id": session.get("session_id"),
+            "expires_in": session.get("expires_in"), "aggregator": adapter.name, "providers": providers}
+
+
+@router.post("/wearables/connect")
+async def wearables_connect(body: Optional[WearableConnectIn] = None, user: dict = Depends(current_user)):
+    """Sign-in link from the aggregator chosen by WEARABLES_AGGREGATOR."""
+    adapter = _selected_enabled()
+    providers = (body.providers if body and body.providers else None) or list(AGGREGATOR_PROVIDERS)
+    return await _aggregator_connect(adapter, user["id"], providers)
+
+
+@router.post("/wearables/{aggregator}/connect")
+async def wearables_connect_named(aggregator: str, body: Optional[WearableConnectIn] = None,
+                                  user: dict = Depends(current_user)):
+    if aggregator not in Aggregators.ALL:
+        raise HTTPException(404, "Unknown aggregator")
+    if aggregator != Aggregators.selected_name():
+        raise HTTPException(409, f"This server uses {Aggregators.selected_name()} (WEARABLES_AGGREGATOR)")
+    return await wearables_connect(body, user)
+
+
+@router.post("/wearables/terra/webhook")
+async def terra_wearables_webhook(request: Request, background: BackgroundTasks):
+    return await WearableWebhook.handle("terra", request, background)
+
+
+@router.post("/wearables/junction/webhook")
+async def junction_wearables_webhook(request: Request, background: BackgroundTasks):
+    return await WearableWebhook.handle("junction", request, background)
+
+
+@router.post("/wearables/thryve/webhook")
+async def thryve_wearables_webhook(request: Request, background: BackgroundTasks):
+    return await WearableWebhook.handle("thryve", request, background)
+
+
+@router.get("/wearables")
+async def list_wearables(user: dict = Depends(current_user)):
+    """Aggregator connections for this user, one row per supported provider."""
+    docs = {
+        d["provider"]: d
+        async for d in db.wearable_sources.find(
+            {"user_id": user["id"], "provider": {"$in": list(AGGREGATOR_PROVIDERS)}}, {"_id": 0}
+        )
+    }
+    selected = Aggregators.selected()
+    return {
+        "aggregator": selected.name,
+        "enabled": selected.enabled(),
+        "connections": [
+            {
+                "provider": p,
+                "label": PROVIDER_INFO[p]["label"],
+                "status": (docs.get(p) or {}).get("status", "disconnected"),
+                "aggregator": (docs.get(p) or {}).get("aggregator"),
+                "connected_at": (docs.get(p) or {}).get("connected_at"),
+                "last_sync_at": (docs.get(p) or {}).get("last_sync_at"),
+            }
+            for p in AGGREGATOR_PROVIDERS
+        ],
+    }
+
+
+@router.delete("/wearables/{provider}")
+async def delete_wearable(provider: str, user: dict = Depends(current_user)):
+    """Revoke at the aggregator that holds the connection, then mark it disconnected."""
+    if provider not in PROVIDERS:
+        raise HTTPException(404, "Unknown provider")
+    src = await db.wearable_sources.find_one({"user_id": user["id"], "provider": provider}, {"_id": 0})
+    if not src or src.get("status") == "disconnected":
+        raise HTTPException(404, "Source not connected")
+    remote_id = src.get("aggregator_user_id") or src.get("terra_user_id")
+    name = src.get("aggregator") or ("terra" if src.get("terra_user_id") else None)
+    adapter = Aggregators.get(name) if name else None
+    is_remote = (provider in AGGREGATOR_PROVIDERS and adapter and remote_id
+                 and not str(remote_id).startswith("sim-") and src.get("status") == "connected")
+    if is_remote:
+        if not adapter.enabled():
+            raise HTTPException(503, f"{adapter.name} is not configured on this server")
+        try:
+            await run_in_threadpool(adapter.deauthenticate, remote_id, provider)
+        except (AggregatorError, http.RequestException) as exc:
+            raise HTTPException(502, f"{adapter.name} could not disconnect this source") from exc
+    await db.wearable_sources.update_one(
+        {"user_id": user["id"], "provider": provider},
+        {"$set": {"status": "disconnected", "disconnected_at": now()}},
+    )
+    return {"provider": provider, "status": "disconnected"}
 
 
 # --------------------------------------------------------------------------- #
