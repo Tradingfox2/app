@@ -1596,8 +1596,9 @@ export const api = {
   wearableSources: () => request<any[]>("/wearables/sources"),
   connectSource: (provider: string) =>
     request<any>(`/wearables/sources/${provider}/connect`, { method: "POST" }),
+  // Revokes at the aggregator (Terra, Junction or Thryve) when the source is live there.
   disconnectSource: (provider: string) =>
-    request<any>(`/wearables/sources/${provider}/disconnect`, { method: "POST" }),
+    request<any>(`/wearables/${encodeURIComponent(provider)}`, { method: "DELETE" }),
   syncSource: (provider: string) =>
     request<any>(`/wearables/sources/${provider}/sync`, { method: "POST" }),
   morningCheckin: (payload: { sleep_hours: number; soreness: number; mood: number; local_day: string }) =>

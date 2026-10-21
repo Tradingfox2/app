@@ -176,7 +176,15 @@ not remove the routes.
 | `TERRA_API_KEY` | Terra. |
 | `TERRA_SIGNING_SECRET` | Required once Terra keys are set, or webhooks return 503. |
 
-Terra wearables (Garmin, Whoop, Fitbit, Oura, Polar) are off until `TERRA_DEV_ID`, `TERRA_API_KEY` and `TERRA_SIGNING_SECRET` are all set; until then `/api/wearables/terra/*` returns 503. In the Terra dashboard, set the webhook destination to `https://<api-host>/api/wearables/terra/webhook` and copy its signing secret into `TERRA_SIGNING_SECRET`. Endpoints: `POST /api/wearables/terra/connect`, `POST /api/wearables/terra/webhook`, `GET /api/wearables`, `DELETE /api/wearables/{provider}`. Samples are stored in `wearable_samples`; connections stay in `wearable_sources`.
+Wearables (Garmin, Whoop, Fitbit, Oura, Polar) connect through one aggregator, chosen by `WEARABLES_AGGREGATOR` (`terra`, `junction` or `thryve`, default `terra`). `POST /api/wearables/connect` returns 503 until the chosen vendor's keys are all set. Webhooks, one per vendor, each accepted only when that vendor's keys are set:
+
+| Vendor | Keys | Webhook URL | Auth |
+|---|---|---|---|
+| Terra | `TERRA_DEV_ID`, `TERRA_API_KEY`, `TERRA_SIGNING_SECRET` | `/api/wearables/terra/webhook` | `terra-signature` HMAC |
+| Junction | `JUNCTION_API_KEY`, `JUNCTION_WEBHOOK_SECRET` (+ `JUNCTION_ENVIRONMENT`, `JUNCTION_REGION`) | `/api/wearables/junction/webhook` | Svix signature |
+| Thryve | `THRYVE_USERNAME`, `THRYVE_PASSWORD`, `THRYVE_AUTH_ID`, `THRYVE_AUTH_SECRET`, `THRYVE_WEBHOOK_AUTH` | `/api/wearables/thryve/webhook` | `Authorization` header set in the Thryve Dashboard (Thryve does not document its HMAC format) |
+
+Other endpoints: `GET /api/wearables`, `DELETE /api/wearables/{provider}`. The legacy `/api/webhooks/terra` now refuses everything unless `TERRA_SIGNING_SECRET` is set, and requires a valid signature.
 | `TERRA_WIDGET_URL` | Default `https://access.tryterra.co/api/widget/session`. |
 | `TERRA_BASE_URL` | Default `https://access.tryterra.co/api`. |
 | `TERRA_LABS_ENABLED` | `true` / `1` / `yes` turns lab fetch on. The Blueprint sets `false`. |

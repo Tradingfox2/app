@@ -118,6 +118,26 @@ envVarGroups:
         sync: false
       - key: TERRA_SIGNING_SECRET
         sync: false
+      - key: WEARABLES_AGGREGATOR
+        value: terra
+      - key: JUNCTION_API_KEY
+        sync: false
+      - key: JUNCTION_WEBHOOK_SECRET
+        sync: false
+      - key: JUNCTION_ENVIRONMENT
+        sync: false
+      - key: JUNCTION_REGION
+        sync: false
+      - key: THRYVE_USERNAME
+        sync: false
+      - key: THRYVE_PASSWORD
+        sync: false
+      - key: THRYVE_AUTH_ID
+        sync: false
+      - key: THRYVE_AUTH_SECRET
+        sync: false
+      - key: THRYVE_WEBHOOK_AUTH
+        sync: false
       - key: TERRA_LABS_ENABLED
         value: "false"
       - key: N8N_WEBHOOK_SECRET
