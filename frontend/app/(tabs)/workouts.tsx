@@ -17,12 +17,14 @@ import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { api } from "@/src/api";
 import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { card, colors, radius, spacing, type } from "@/src/theme";
+import { ExerciseThumb } from "@/src/components/exercises/exercise-thumb";
+import { ExerciseThumbMap } from "@/src/components/exercises/exercise-thumb-map";
+import { PosterPlate } from "@/src/components/night/coach-mark";
 import { ExerciseDemoModal } from "@/src/components/exercises/exercise-demo-modal";
 import { MUSCLE_NAMES } from "@/src/components/anatomy/anatomy-artwork";
 import type { MuscleSlug, RecommendationExercise } from "@/src/components/anatomy/muscle-types";
 import { useI18n } from "@/src/i18n";
 import { datedSessionTitle } from "@/src/session-title";
-import { PosterPlate } from "@/src/components/night/coach-mark";
 import { listOpenSessions, openSessionHref, type OpenSession } from "@/src/open-session";
 
 type Tab = "sessions" | "library";
@@ -428,7 +430,11 @@ export default function Workouts() {
                   accessibilityState={{ checked: selectedSlugs.includes(item.slug) }}
                   accessibilityLabel={t("Select {name}", { name: item.name })}
                 >
-                  <PosterPlate name={item.name} equipment={item.equipment} compact />
+                  {ExerciseThumbMap.hasExactIcon(item.slug) ? (
+                    <ExerciseThumb slug={item.slug} equipment={item.equipment} size={44} />
+                  ) : (
+                    <PosterPlate name={item.name} equipment={item.equipment} compact />
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.exName}>{item.name}</Text>
                     <Text style={styles.exMeta}>

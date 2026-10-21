@@ -24,6 +24,7 @@ import {
 import { SessionLayout, type CatalogExercise } from "@/src/session-layout";
 import { usePressFeedback } from "@/src/press-feedback";
 import { colors, radius, spacing } from "@/src/theme";
+import { ExerciseThumb } from "@/src/components/exercises/exercise-thumb";
 import { useI18n } from "@/src/i18n";
 import { isActivitySession, listOpenSessions, openSessionHref, type OpenSession } from "@/src/open-session";
 
@@ -90,6 +91,7 @@ function ExerciseRow({
   return (
     <View style={styles.exRow}>
       <View style={styles.exTop}>
+        <ExerciseThumb slug={ex.exercise_slug} size={36} />
         <View style={{ flex: 1 }}>
           <Text style={styles.exName}>{ex.name}</Text>
           <Text style={styles.exMeta}>
@@ -168,6 +170,7 @@ function DayCard({
   return (
     <View style={styles.dayCard} testID={`day-card-${idPrefix}`}>
       <View style={styles.dayHead}>
+        <ExerciseThumb dayFocus={day.focus} size={28} testID={`day-thumb-${idPrefix}`} />
         <Text style={styles.dayTitle}>{t("DAY {day}", { day: day.day_index })}</Text>
         <View style={styles.focusBadge}>
           <Text style={styles.focusTxt}>{t(FOCUS_LABELS[day.focus] ?? day.focus)}</Text>
