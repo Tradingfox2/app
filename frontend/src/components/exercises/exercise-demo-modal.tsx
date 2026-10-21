@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import type { RecommendationExercise } from "../anatomy/muscle-types";
 import { colors, fonts, radius, spacing } from "../../theme";
+import { ExerciseThumb } from "./exercise-thumb";
 import { useI18n } from "../../i18n";
 
 function composePressStyle(base: ViewStyle, extra?: PressableProps["style"]): PressableProps["style"] {
@@ -37,6 +38,7 @@ export function ExerciseDemoModal({
       <View style={styles.backdrop}>
         <View style={styles.panel}>
           <View style={styles.header}>
+            {exercise ? <ExerciseThumb slug={exercise.slug} equipment={exercise.equipment} size={56} /> : null}
             <View style={styles.titleBlock}>
               <Text style={styles.eyebrow}>{t("MOVEMENT DEMO")}</Text>
               <Text style={styles.title}>{exercise?.name}</Text>

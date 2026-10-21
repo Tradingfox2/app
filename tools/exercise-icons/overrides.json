@@ -1,0 +1,6 @@
+{"scapular-raise":{"pattern":"carry","low":1},
+ "kettlebell-swing":{"pattern":"hinge","equipment":"kettlebell","low":0},
+ "machine-lateral-raise":{"pattern":"latraise","equipment":"machine","low":0},
+ "machine-shoulder-press":{"pattern":"ohpress","equipment":"machine","low":0},
+ "machine-fly":{"pattern":"fly","equipment":"machine","low":0},
+ "chest-press-machine":{"pattern":"hpress","equipment":"machine","low":0}}

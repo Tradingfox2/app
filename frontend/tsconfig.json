@@ -31,6 +31,7 @@
     "src/components/anatomy/callout-geometry.test.ts",
     "src/session-layout.test.ts",
     "src/missed-session.test.ts",
-    "src/nutrition.test.ts"
+    "src/nutrition.test.ts",
+    "src/components/exercises/exercise-thumb-map.test.ts"
   ]
 }

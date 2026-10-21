@@ -1,0 +1,2107 @@
+[
+{
+"slug": "45-degree-hyper",
+"name": "45-Degree Hyper",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"hamstrings",
+"lower_back"
+]
+},
+{
+"slug": "ab-wheel-rollout",
+"name": "Ab Wheel Rollout",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": [
+"shoulders",
+"lower_back"
+]
+},
+{
+"slug": "arnold-press",
+"name": "Arnold Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "around-the-world",
+"name": "Around the World",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "assault-bike",
+"name": "Assault Bike Sprint",
+"category": "cardio",
+"equipment": "machine",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"shoulders",
+"quads"
+]
+},
+{
+"slug": "assisted-pull-up",
+"name": "Assisted Pull Up",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "back-extension",
+"name": "Back Extension",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "back-squat",
+"name": "Back Squat",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes",
+"hamstrings"
+]
+},
+{
+"slug": "band-calf-raise",
+"name": "Band Calf Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "band-hip-hinge",
+"name": "Band Hip Hinge",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "barbell-bench-press",
+"name": "Barbell Bench Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "barbell-curl",
+"name": "Barbell Curl",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "barbell-shrug",
+"name": "Barbell Shrug",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "battle-rope",
+"name": "Battle Rope Waves",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"shoulders",
+"abs"
+]
+},
+{
+"slug": "bayesian-curl",
+"name": "Bayesian Cable Curl",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "behind-back-wrist-curl",
+"name": "Behind-Back Wrist Curl",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "belt-squat",
+"name": "Belt Squat",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "bench-dips",
+"name": "Bench Dips",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest",
+"shoulders"
+]
+},
+{
+"slug": "bent-over-row",
+"name": "Bent Over Barbell Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "bicycle-crunch",
+"name": "Bicycle Crunch",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": [
+"obliques"
+]
+},
+{
+"slug": "bike-erg",
+"name": "Bike Erg",
+"category": "cardio",
+"equipment": "machine",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"quads"
+]
+},
+{
+"slug": "bird-dog",
+"name": "Bird Dog",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"abs",
+"glutes"
+]
+},
+{
+"slug": "box-jump",
+"name": "Box Jump",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"calves",
+"glutes"
+]
+},
+{
+"slug": "bulgarian-split-squat",
+"name": "Bulgarian Split Squat",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "burpee",
+"name": "Burpee",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"chest",
+"quads"
+]
+},
+{
+"slug": "bus-driver",
+"name": "Bus Driver",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "cable-chest-press",
+"name": "Cable Chest Press",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "cable-crossover",
+"name": "Cable Crossover",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "cable-crunch",
+"name": "Cable Crunch",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "cable-curl",
+"name": "Cable Curl",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "cable-hammer-curl",
+"name": "Cable Hammer Curl",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "cable-kickback",
+"name": "Cable Kickback",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "cable-lateral-raise",
+"name": "Cable Lateral Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "cable-overhead-extension",
+"name": "Cable Overhead Extension",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "cable-pull-through",
+"name": "Cable Pull-Through",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"hamstrings"
+]
+},
+{
+"slug": "cable-rear-delt-fly",
+"name": "Cable Rear Delt Fly",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"back"
+]
+},
+{
+"slug": "cable-shrug",
+"name": "Cable Shrug",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "cable-woodchop",
+"name": "Cable Woodchop",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "chest-press-machine",
+"name": "Chest Press Machine",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "chest-supported-row",
+"name": "Chest-Supported Row",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "chin-up",
+"name": "Chin Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"lats",
+"back"
+]
+},
+{
+"slug": "clamshell",
+"name": "Clamshell",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "close-grip-bench-press",
+"name": "Close-Grip Bench Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest",
+"shoulders"
+]
+},
+{
+"slug": "close-grip-pulldown",
+"name": "Close-Grip Pulldown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "concentration-curl",
+"name": "Concentration Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "copenhagen-plank",
+"name": "Copenhagen Plank",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "crunch",
+"name": "Crunch",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "cuban-press",
+"name": "Cuban Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"back"
+]
+},
+{
+"slug": "curtsy-lunge",
+"name": "Curtsy Lunge",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"quads"
+]
+},
+{
+"slug": "dead-bug",
+"name": "Dead Bug",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "dead-hang",
+"name": "Dead Hang",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": [
+"lats"
+]
+},
+{
+"slug": "deadlift",
+"name": "Deadlift",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"hamstrings",
+"glutes",
+"lower_back"
+]
+},
+{
+"slug": "decline-bench-press",
+"name": "Decline Bench Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "decline-push-up",
+"name": "Decline Push Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders",
+"triceps"
+]
+},
+{
+"slug": "decline-sit-up",
+"name": "Decline Sit-Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "deficit-rdl",
+"name": "Deficit RDL",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes",
+"lower_back"
+]
+},
+{
+"slug": "diamond-push-up",
+"name": "Diamond Push Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest"
+]
+},
+{
+"slug": "dips",
+"name": "Dips",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest",
+"shoulders"
+]
+},
+{
+"slug": "donkey-calf-raise",
+"name": "Donkey Calf Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "donkey-kick",
+"name": "Donkey Kick",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "drag-curl",
+"name": "Drag Curl",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "dragon-flag",
+"name": "Dragon Flag",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": [
+"lower_back"
+]
+},
+{
+"slug": "dumbbell-bench-press",
+"name": "Dumbbell Bench Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "dumbbell-curl",
+"name": "Dumbbell Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "dumbbell-fly",
+"name": "Dumbbell Fly",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "dumbbell-pullover",
+"name": "Dumbbell Pullover",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"chest"
+]
+},
+{
+"slug": "dumbbell-rdl",
+"name": "Dumbbell RDL",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes",
+"lower_back"
+]
+},
+{
+"slug": "dumbbell-shoulder-press",
+"name": "Dumbbell Shoulder Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "elliptical",
+"name": "Elliptical",
+"category": "cardio",
+"equipment": "machine",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"quads"
+]
+},
+{
+"slug": "ez-bar-curl",
+"name": "EZ-Bar Curl",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "face-pull",
+"name": "Face Pull",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"back"
+]
+},
+{
+"slug": "farmer-carry",
+"name": "Farmer Carry",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": [
+"abs",
+"back"
+]
+},
+{
+"slug": "fat-grip-hold",
+"name": "Fat-Grip Hold",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "floor-press",
+"name": "Floor Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "frog-pump",
+"name": "Frog Pump",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "front-raise",
+"name": "Front Raise",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"chest"
+]
+},
+{
+"slug": "front-squat",
+"name": "Front Squat",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes",
+"abs"
+]
+},
+{
+"slug": "glute-bridge",
+"name": "Glute Bridge",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"hamstrings"
+]
+},
+{
+"slug": "glute-ham-raise",
+"name": "Glute Ham Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "goblet-squat",
+"name": "Goblet Squat",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "good-morning",
+"name": "Good Morning",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"hamstrings",
+"glutes"
+]
+},
+{
+"slug": "hack-squat",
+"name": "Hack Squat",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "hammer-curl",
+"name": "Hammer Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "hanging-knee-raise",
+"name": "Hanging Knee Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": [
+"obliques"
+]
+},
+{
+"slug": "hanging-leg-raise",
+"name": "Hanging Leg Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": [
+"obliques"
+]
+},
+{
+"slug": "hanging-oblique-raise",
+"name": "Hanging Oblique Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "hanging-windshield-wiper",
+"name": "Hanging Windshield Wiper",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "heel-elevated-squat",
+"name": "Heel-Elevated Squat",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "heel-tap",
+"name": "Heel Tap",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "hex-press",
+"name": "Hex Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "high-knees",
+"name": "High Knees",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"abs",
+"quads"
+]
+},
+{
+"slug": "hip-abduction",
+"name": "Hip Abduction",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "hip-thrust",
+"name": "Hip Thrust",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"hamstrings"
+]
+},
+{
+"slug": "hollow-hold",
+"name": "Hollow Hold",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "hyperextension-hold",
+"name": "Hyperextension Hold",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "incline-bench-press",
+"name": "Incline Bench Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "incline-dumbbell-curl",
+"name": "Incline Dumbbell Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "incline-dumbbell-press",
+"name": "Incline Dumbbell Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders",
+"triceps"
+]
+},
+{
+"slug": "incline-hammer-curl",
+"name": "Incline Hammer Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+},
+{
+"slug": "incline-push-up",
+"name": "Incline Push Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "inverted-row",
+"name": "Inverted Row",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"biceps",
+"lats"
+]
+},
+{
+"slug": "jm-press",
+"name": "JM Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest"
+]
+},
+{
+"slug": "jump-calf-raise",
+"name": "Jump Calf Raise",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": [
+"quads"
+]
+},
+{
+"slug": "jump-rope",
+"name": "Jump Rope",
+"category": "cardio",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"calves"
+]
+},
+{
+"slug": "jump-squat",
+"name": "Jump Squat",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"quads",
+"glutes"
+]
+},
+{
+"slug": "kettlebell-deadlift",
+"name": "Kettlebell Deadlift",
+"category": "strength",
+"equipment": "kettlebell",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"glutes",
+"hamstrings"
+]
+},
+{
+"slug": "kettlebell-swing",
+"name": "Kettlebell Swing",
+"category": "plyo",
+"equipment": "kettlebell",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"hamstrings",
+"abs"
+]
+},
+{
+"slug": "kneeling-lat-pulldown",
+"name": "Kneeling Straight-Arm Pulldown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "landmine-lateral-raise",
+"name": "Landmine Lateral Raise",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "landmine-press",
+"name": "Landmine Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders",
+"triceps"
+]
+},
+{
+"slug": "landmine-rotation",
+"name": "Landmine Rotation",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "lat-pulldown",
+"name": "Lat Pulldown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps",
+"back"
+]
+},
+{
+"slug": "lateral-raise",
+"name": "Lateral Raise",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "leg-curl",
+"name": "Leg Curl",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "leg-extension",
+"name": "Leg Extension",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "leg-press",
+"name": "Leg Press",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes",
+"hamstrings"
+]
+},
+{
+"slug": "leg-press-calf-raise",
+"name": "Leg-Press Calf Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "leg-press-narrow",
+"name": "Narrow-Stance Leg Press",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "low-cable-fly",
+"name": "Low Cable Fly",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "lunge",
+"name": "Walking Lunge",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "lying-dumbbell-extension",
+"name": "Lying Dumbbell Extension",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "lying-leg-curl",
+"name": "Lying Leg Curl",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "machine-fly",
+"name": "Machine Fly",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "machine-lateral-raise",
+"name": "Machine Lateral Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "machine-row",
+"name": "Machine Row",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "machine-shoulder-press",
+"name": "Machine Shoulder Press",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "machine-tricep-dip",
+"name": "Machine Tricep Dip",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest"
+]
+},
+{
+"slug": "meadow-row",
+"name": "Meadow Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"back",
+"biceps"
+]
+},
+{
+"slug": "mountain-climber",
+"name": "Mountain Climber",
+"category": "plyo",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "neutral-grip-pull-up",
+"name": "Neutral-Grip Pull Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "nordic-curl",
+"name": "Nordic Curl",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "one-arm-dumbbell-row",
+"name": "One-Arm Dumbbell Row",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"back",
+"biceps"
+]
+},
+{
+"slug": "overhead-press",
+"name": "Overhead Press",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "overhead-triceps-extension",
+"name": "Overhead Triceps Extension",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "pallof-press",
+"name": "Pallof Press",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "pec-deck",
+"name": "Pec Deck",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "pendlay-row",
+"name": "Pendlay Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "pendulum-squat",
+"name": "Pendulum Squat",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "pike-push-up",
+"name": "Pike Push Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "pistol-squat",
+"name": "Pistol Squat",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "plank",
+"name": "Plank",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "plate-pinch",
+"name": "Plate Pinch Hold",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "preacher-curl",
+"name": "Preacher Curl",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "pull-up",
+"name": "Pull Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps",
+"back"
+]
+},
+{
+"slug": "push-up",
+"name": "Push Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "rack-chin",
+"name": "Rack Chin-Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "rack-pull",
+"name": "Rack Pull",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"back",
+"glutes"
+]
+},
+{
+"slug": "rear-delt-fly",
+"name": "Rear Delt Fly",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"back"
+]
+},
+{
+"slug": "reverse-curl",
+"name": "Reverse Curl",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "reverse-grip-row",
+"name": "Reverse-Grip Barbell Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"biceps",
+"lats"
+]
+},
+{
+"slug": "reverse-hyper",
+"name": "Reverse Hyper",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"glutes",
+"hamstrings"
+]
+},
+{
+"slug": "reverse-lunge",
+"name": "Reverse Lunge",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"quads"
+]
+},
+{
+"slug": "reverse-wrist-curl",
+"name": "Reverse Wrist Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "reverse-wrist-roller",
+"name": "Wrist Roller",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "romanian-deadlift",
+"name": "Romanian Deadlift",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes",
+"lower_back"
+]
+},
+{
+"slug": "rowing-erg",
+"name": "Rowing Erg",
+"category": "cardio",
+"equipment": "machine",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"back",
+"lats"
+]
+},
+{
+"slug": "run",
+"name": "Run",
+"category": "cardio",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"quads",
+"calves"
+]
+},
+{
+"slug": "russian-twist",
+"name": "Russian Twist",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "scapular-raise",
+"name": "Scapular Raise",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "seal-row",
+"name": "Seal Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "seated-cable-row",
+"name": "Seated Cable Row",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "seated-calf-raise",
+"name": "Seated Calf Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "seated-dumbbell-calf-raise",
+"name": "Seated Dumbbell Calf Raise",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "seated-good-morning",
+"name": "Seated Good Morning",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"hamstrings"
+]
+},
+{
+"slug": "seated-leg-curl",
+"name": "Seated Leg Curl",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "side-crunch",
+"name": "Side Crunch",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "side-plank",
+"name": "Side Plank",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs"
+]
+},
+{
+"slug": "single-arm-lat-pulldown",
+"name": "Single-Arm Lat Pulldown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "single-arm-pushdown",
+"name": "Single-Arm Pushdown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "single-leg-calf-raise",
+"name": "Single-Leg Calf Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "single-leg-rdl",
+"name": "Single-Leg RDL",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "sissy-squat",
+"name": "Sissy Squat",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "sit-up",
+"name": "Sit Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "ski-erg",
+"name": "Ski Erg",
+"category": "cardio",
+"equipment": "machine",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"lats",
+"abs"
+]
+},
+{
+"slug": "skull-crusher",
+"name": "Skull Crusher",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "sliding-leg-curl",
+"name": "Sliding Leg Curl",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "smith-bench-press",
+"name": "Smith Machine Bench Press",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps",
+"shoulders"
+]
+},
+{
+"slug": "smith-calf-raise",
+"name": "Smith Calf Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "smith-hip-thrust",
+"name": "Smith Machine Hip Thrust",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"hamstrings"
+]
+},
+{
+"slug": "smith-squat",
+"name": "Smith Machine Squat",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "snatch-grip-row",
+"name": "Snatch-Grip Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"shoulders"
+]
+},
+{
+"slug": "spider-curl",
+"name": "Spider Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "split-squat",
+"name": "Split Squat",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "squeeze-press",
+"name": "Squeeze Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"triceps"
+]
+},
+{
+"slug": "stair-climber",
+"name": "Stair Climber",
+"category": "cardio",
+"equipment": "machine",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"quads",
+"glutes"
+]
+},
+{
+"slug": "standing-calf-raise",
+"name": "Standing Calf Raise",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "standing-hip-abduction",
+"name": "Standing Cable Abduction",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "step-up",
+"name": "Step Up",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "stiff-leg-deadlift",
+"name": "Stiff-Leg Deadlift",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"lower_back",
+"glutes"
+]
+},
+{
+"slug": "straight-arm-pulldown",
+"name": "Straight-Arm Pulldown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"chest"
+]
+},
+{
+"slug": "suitcase-carry",
+"name": "Suitcase Carry",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "obliques",
+"secondary_muscle_slugs": [
+"abs",
+"forearms"
+]
+},
+{
+"slug": "suitcase-deadlift",
+"name": "Suitcase Deadlift",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"obliques",
+"glutes"
+]
+},
+{
+"slug": "sumo-deadlift",
+"name": "Sumo Deadlift",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "glutes",
+"secondary_muscle_slugs": [
+"quads",
+"back"
+]
+},
+{
+"slug": "superman",
+"name": "Superman",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "lower_back",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "swim",
+"name": "Swim",
+"category": "cardio",
+"equipment": "bodyweight",
+"primary_muscle_slug": "cardio",
+"secondary_muscle_slugs": [
+"lats",
+"shoulders"
+]
+},
+{
+"slug": "swiss-ball-leg-curl",
+"name": "Swiss-Ball Leg Curl",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "hamstrings",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "t-bar-row",
+"name": "T-Bar Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"lats",
+"biceps"
+]
+},
+{
+"slug": "tate-press",
+"name": "Tate Press",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "tib-raise",
+"name": "Tibialis Raise",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "toe-touch",
+"name": "Toe Touch",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "toes-walk",
+"name": "Toes Walk",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "calves",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "towel-hang",
+"name": "Towel Hang",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "trap-bar-deadlift",
+"name": "Trap-Bar Deadlift",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"quads",
+"glutes"
+]
+},
+{
+"slug": "tricep-kickback",
+"name": "Tricep Kickback",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "tricep-pushdown",
+"name": "Tricep Pushdown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "upright-row",
+"name": "Upright Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "shoulders",
+"secondary_muscle_slugs": [
+"biceps"
+]
+},
+{
+"slug": "v-up",
+"name": "V-Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "vacuum",
+"name": "Stomach Vacuum",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "waiter-curl",
+"name": "Waiter Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "wall-sit",
+"name": "Wall Sit",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "quads",
+"secondary_muscle_slugs": [
+"glutes"
+]
+},
+{
+"slug": "weighted-crunch",
+"name": "Weighted Crunch",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "abs",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "weighted-dip",
+"name": "Weighted Dip",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "triceps",
+"secondary_muscle_slugs": [
+"chest",
+"shoulders"
+]
+},
+{
+"slug": "wide-grip-pulldown",
+"name": "Wide-Grip Pulldown",
+"category": "strength",
+"equipment": "machine",
+"primary_muscle_slug": "lats",
+"secondary_muscle_slugs": [
+"biceps",
+"back"
+]
+},
+{
+"slug": "wide-push-up",
+"name": "Wide Push Up",
+"category": "strength",
+"equipment": "bodyweight",
+"primary_muscle_slug": "chest",
+"secondary_muscle_slugs": [
+"shoulders"
+]
+},
+{
+"slug": "wrist-curl",
+"name": "Wrist Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "forearms",
+"secondary_muscle_slugs": []
+},
+{
+"slug": "yates-row",
+"name": "Yates Row",
+"category": "strength",
+"equipment": "barbell",
+"primary_muscle_slug": "back",
+"secondary_muscle_slugs": [
+"biceps",
+"lats"
+]
+},
+{
+"slug": "zottman-curl",
+"name": "Zottman Curl",
+"category": "strength",
+"equipment": "dumbbell",
+"primary_muscle_slug": "biceps",
+"secondary_muscle_slugs": [
+"forearms"
+]
+}
+]

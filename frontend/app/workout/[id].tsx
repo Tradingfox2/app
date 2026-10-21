@@ -23,6 +23,7 @@ import { enqueueSet, flushQueue, onQueueChange, pendingFor, pendingState } from 
 import { cancelRestEndNotification, scheduleRestEndNotification } from "@/src/rest-timer";
 import { fieldTextStyle, useFieldAffordance, usePressFeedback } from "@/src/press-feedback";
 import { colors, fonts, radius, spacing } from "@/src/theme";
+import { ExerciseThumb } from "@/src/components/exercises/exercise-thumb";
 import { storage } from "@/src/utils/storage";
 import { useI18n } from "@/src/i18n";
 import { SessionLayout } from "@/src/session-layout";
@@ -634,6 +635,7 @@ export default function WorkoutLogger() {
                   testID={`planned-${p.slug}`}
                 >
                   <Text style={[styles.planIdx, active && styles.planTxtActive]}>{i + 1}</Text>
+                  <ExerciseThumb slug={p.slug} equipment={p.equipment} size={24} />
                   <Text style={[styles.planName, active && styles.planTxtActive]} numberOfLines={1}>
                     {p.name}
                   </Text>
@@ -832,10 +834,13 @@ export default function WorkoutLogger() {
                     setPickerQuery("");
                   }}
                 >
-                  <Text style={styles.pickerItemName}>{item.name}</Text>
-                  <Text style={styles.pickerItemMeta}>
-                    {item.equipment} · {item.difficulty}
-                  </Text>
+                  <ExerciseThumb slug={item.slug} equipment={item.equipment} size={40} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickerItemName}>{item.name}</Text>
+                    <Text style={styles.pickerItemMeta}>
+                      {item.equipment} · {item.difficulty}
+                    </Text>
+                  </View>
                 </Pressable>
               )}
             />
@@ -1204,6 +1209,9 @@ const styles = StyleSheet.create({
   pchipTxt: { color: colors.textMuted, fontWeight: "700", fontSize: 11 },
   pchipTxtActive: { color: colors.text },
   pickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
     padding: spacing.md,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,

@@ -22,6 +22,7 @@ import { localizeMuscleKnowledge } from "./muscle-knowledge-locales";
 import { ANTAGONISTS, SYNERGISTS } from "./muscle-relations";
 import { loadState, type LoadState } from "./muscle-region";
 import { colors, fonts, spacing, radius } from "../../theme";
+import { ExerciseThumb } from "../exercises/exercise-thumb";
 import { ExerciseDemoModal } from "../exercises/exercise-demo-modal";
 import { useI18n } from "../../i18n";
 
@@ -140,6 +141,7 @@ function ExerciseCard({
         accessibilityRole="button"
         accessibilityLabel={t("Preview {name} on the body", { name: exercise.name })}
       >
+        <ExerciseThumb slug={exercise.slug} equipment={exercise.equipment} size={40} />
         <View style={styles.exerciseInfo}>
           <Text style={styles.exerciseName}>{exercise.name}</Text>
           <View style={styles.exerciseMeta}>
