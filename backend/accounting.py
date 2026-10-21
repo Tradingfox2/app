@@ -125,12 +125,17 @@ def _positive(row: dict, *keys: str) -> tuple:
     source = row.get("currency") if "currency" in row else row.get("reward_currency")
     return ("ok", raw, _currency(source))
 def _fee(row: dict) -> tuple:
+    """Platform fee: `fee_cents` when stored, else gross - tax - net. Tax is not a fee."""
+    if type(row.get("fee_cents")) is int:
+        fee = row["fee_cents"]
+        return ("ok", fee, _currency(row.get("currency"))) if fee > 0 else ("skip", 0, None)
     gross, net = row.get("gross_cents"), row.get("net_cents")
+    tax = row.get("tax_cents") if type(row.get("tax_cents")) is int else 0
     if type(gross) is not int or type(net) is not int:
         return ("bad", 0, None)
-    if gross == net:
+    if gross - tax == net:
         return ("skip", 0, None)
-    return ("ok", gross - net, _currency(row.get("currency")))
+    return ("ok", gross - tax - net, _currency(row.get("currency")))
 def _owed(row: dict) -> tuple:
     if row.get("status") not in {"available", "pending"}:
         return ("skip", 0, None)

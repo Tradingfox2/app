@@ -18,6 +18,11 @@ Environment:
 - `STRIPE_PRICE_PRO_YEARLY`   Price id for the Pro yearly plan
 - `STRIPE_PRICE_GYM_PARTNER`  Price id for the gym partner plan
 - `PUBLIC_APP_URL`            where Stripe sends people back, e.g. https://app.ironflow.fit
+- `CONNECT_FEE_PERCENT`       platform share of a connected coach's sale, whole percent (default 20)
+- `STRIPE_COMMUNITY_AUTOMATIC_TAX` "true" turns on Stripe Tax for paid-community Checkout
+  (default off: production behaviour is unchanged until the seller-of-record decision)
+- `STRIPE_COMMUNITY_TAX_BEHAVIOR` "inclusive" (default; the community price already
+  contains tax) or "exclusive" (tax is added on top)
 """
 from __future__ import annotations
 
@@ -37,7 +42,7 @@ API = "https://api.stripe.com/v1"
 TIMEOUT_SECONDS = 10.0
 #: Stripe's own default: a signed event older than this is a replay.
 SIGNATURE_TOLERANCE_SECONDS = 300
-#: Platform share of a connected coach's community subscription.
+#: Platform share of a connected coach's community subscription. Default for `CONNECT_FEE_PERCENT`.
 CONNECT_FEE_PERCENT = 20
 # Express countries Stripe lists, kept to the EU, the UK, the US, Canada,
 # Japan, Singapore, Hong Kong, Australia, New Zealand, and South Korea.
@@ -52,6 +57,50 @@ EXPRESS_COUNTRIES = frozenset({
 
 class BillingError(Exception):
     """Stripe refused or could not be reached."""
+
+
+class CommunityTax:
+    """Fee and tax settings for paid-community sales, read from the environment each time."""
+
+    @staticmethod
+    def fee_percent() -> int:
+        raw = os.environ.get("CONNECT_FEE_PERCENT", "").strip()
+        if raw.isdigit() and 0 <= int(raw) <= 100:
+            return int(raw)
+        return CONNECT_FEE_PERCENT
+
+    @staticmethod
+    def automatic_tax() -> bool:
+        return os.environ.get("STRIPE_COMMUNITY_AUTOMATIC_TAX", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def tax_behavior() -> str:
+        value = os.environ.get("STRIPE_COMMUNITY_TAX_BEHAVIOR", "").strip().lower()
+        return value if value in {"inclusive", "exclusive"} else "inclusive"
+
+    @staticmethod
+    def checkout_fields() -> dict:
+        """Extra Checkout fields when automatic tax is on. Empty when it is off."""
+        if not CommunityTax.automatic_tax():
+            return {}
+        return {
+            "automatic_tax[enabled]": "true",
+            "billing_address_collection": "required",
+            "line_items[0][price_data][tax_behavior]": CommunityTax.tax_behavior(),
+        }
+
+    @staticmethod
+    def invoice_tax(invoice: dict) -> int:
+        """Tax on an invoice in minor units: `tax` (older API versions), then
+        `total_taxes`, then `total_tax_amounts`. No tax data is zero tax."""
+        tax = invoice.get("tax")
+        if type(tax) is int:
+            return max(0, tax)
+        for key in ("total_taxes", "total_tax_amounts"):
+            rows = invoice.get(key)
+            if isinstance(rows, list) and rows:
+                return max(0, sum(row["amount"] for row in rows if isinstance(row, dict) and type(row.get("amount")) is int))
+        return 0
 
 
 def secret_key() -> str:
@@ -108,13 +157,14 @@ async def create_checkout(*, community: dict, user: dict, success_url: str, canc
     }
     if user.get("email"):
         data["customer_email"] = user["email"]
+    data.update(CommunityTax.checkout_fields())
     for key, value in tags.items():
         data[f"metadata[{key}]"] = value
         data[f"subscription_data[metadata][{key}]"] = value
     # A connected coach is paid by destination. Everyone else stays on the platform.
     if destination:
         data["subscription_data[transfer_data][destination]"] = destination
-        data["subscription_data[application_fee_percent]"] = str(CONNECT_FEE_PERCENT)
+        data["subscription_data[application_fee_percent]"] = str(CommunityTax.fee_percent())
     return await _call("POST", "/checkout/sessions", data)
 
 
