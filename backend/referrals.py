@@ -1,18 +1,27 @@
 """Referral commissions. A sign-up stores the link and pays nothing.
 
-The first paid invoice (amount above zero) pays two levels and then stops:
-20% to the direct referrer, 5% to that referrer's referrer. There is no
-third level. Amounts stay in the invoice currency; nothing is converted,
-and a missing amount is never stored as zero.
+Single level only. The payer's first paid invoice (amount above zero) pays
+the direct referrer and nobody above them. Amounts stay in the invoice
+currency; nothing is converted, and a missing amount is never stored as zero.
+
+The commission base is the invoice amount net of tax: Stripe's amount_paid
+includes VAT/sales tax whenever automatic tax is on, and a reward is not paid
+on tax. The rate is `REFERRAL_RATE_PERCENT` (default 20).
 
 Athletes, and anyone who is not a connected partner, receive the reward as
 Pro credit days (the same percent of the billed period). A connected partner
 is an approved coach with payout_status "connected"; their row stays pending
-cash. charge.refunded claws the whole commission back, including a partial
-refund. Mongo is the writer.
+cash. Nothing in the code transfers that cash yet: who funds it is an open
+decision.
+
+charge.refunded claws back in proportion to what was refunded. Stripe sends
+the cumulative amount_refunded, so a second partial refund only claws the
+difference, and a full refund claws everything that is left. Mongo is the
+writer.
 """
 from __future__ import annotations
 
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -24,15 +33,72 @@ import pro_billing
 import server
 
 router = APIRouter()
-_RATES = {1: 20, 2: 5}
 _CAP = 2000
+
+
+class ReferralPolicy:
+    """The money rules, kept in one place so tests and callers share them."""
+
+    LEVEL = 1
+    DEFAULT_RATE_PERCENT = 20
+
+    @staticmethod
+    def rate_percent() -> int:
+        """`REFERRAL_RATE_PERCENT`, a whole percent from 0 to 100. Anything else is the default."""
+        raw = os.environ.get("REFERRAL_RATE_PERCENT", "").strip()
+        if raw.isdigit() and 0 <= int(raw) <= 100:
+            return int(raw)
+        return ReferralPolicy.DEFAULT_RATE_PERCENT
+
+    @staticmethod
+    def invoice_tax(invoice: dict) -> int:
+        """Tax on the invoice in minor units. Reads `tax` (older API versions),
+        then `total_taxes`, then `total_tax_amounts`. No tax data is zero tax."""
+        tax = invoice.get("tax")
+        if type(tax) is int:
+            return max(0, tax)
+        for key in ("total_taxes", "total_tax_amounts"):
+            rows = invoice.get(key)
+            if isinstance(rows, list) and rows:
+                return max(0, sum(row["amount"] for row in rows if isinstance(row, dict) and type(row.get("amount")) is int))
+        return 0
+
+    @staticmethod
+    def commission_base(invoice: dict, amount_paid: int) -> int:
+        """What the reward is computed on: amount paid minus tax, never below zero."""
+        return max(0, amount_paid - ReferralPolicy.invoice_tax(invoice))
+
+    @staticmethod
+    def commission(base: int, rate: int) -> int:
+        return base * rate // 100
+
+    @staticmethod
+    def refunded_share(charge: dict) -> tuple[int, int] | None:
+        """(refunded, amount) from a charge, or None when Stripe did not send both.
+        A charge marked fully refunded without amounts counts as all of it."""
+        amount, refunded = charge.get("amount"), charge.get("amount_refunded")
+        if type(amount) is int and type(refunded) is int and amount > 0:
+            return min(max(refunded, 0), amount), amount
+        return None
+
+    @staticmethod
+    def clawback_target(total: int, share: tuple[int, int] | None) -> int:
+        """How much of `total` should be clawed back in all, given the refunded share."""
+        if share is None:
+            return total
+        refunded, amount = share
+        if refunded >= amount:
+            return total
+        return total * refunded // amount
 
 
 def _connected_partner(user: dict) -> bool:
     """Approved coach with a connected payout account.
 
-    Matches community._coach_is_approved, plus payout_status. That flag is
-    not written anywhere yet, so athletes and unconnected coaches get days.
+    Matches community._coach_is_approved, plus payout_status. The writer is
+    GET /partner/connect/status (routers/community.py connect_status): it sets
+    "connected" once Stripe reports charges_enabled and payouts_enabled on the
+    coach's Express account. Athletes and unconnected coaches get days.
     """
     approved = user.get("role") == "coach" and user.get("coach_status", "approved") == "approved"
     return approved and user.get("payout_status") == "connected"
@@ -81,6 +147,7 @@ async def _target(invoice: dict) -> tuple[str, str] | None:
 
 
 async def _upline(payer_id: str) -> list[tuple[int, dict]]:
+    """The direct referrer only. Their own referrer earns nothing from this payer."""
     payer = await server.db.users.find_one({"id": payer_id}, {"_id": 0, "referred_by": 1})
     first_id = (payer or {}).get("referred_by")
     if not isinstance(first_id, str) or not first_id or first_id == payer_id:
@@ -88,13 +155,7 @@ async def _upline(payer_id: str) -> list[tuple[int, dict]]:
     first = await server.db.users.find_one({"id": first_id}, {"_id": 0})
     if not first:
         return []
-    found: list[tuple[int, dict]] = [(1, first)]
-    second_id = first.get("referred_by")
-    if isinstance(second_id, str) and second_id not in {payer_id, first_id}:
-        second = await server.db.users.find_one({"id": second_id}, {"_id": 0})
-        if second:
-            found.append((2, second))
-    return found
+    return [(ReferralPolicy.LEVEL, first)]
 
 
 def _aware(value: datetime) -> datetime:
@@ -150,9 +211,11 @@ async def invoice_paid(invoice: dict) -> None:
     if not upline or not await _first_invoice(payer_id, invoice_id):
         return
     days = _period_days(invoice)
+    rate = ReferralPolicy.rate_percent()
+    base = ReferralPolicy.commission_base(invoice, amount)
     charge_id, intent = pro_billing._id(invoice.get("charge")), _payment_intent(invoice)
     for level, beneficiary in upline:
-        cents = amount * _RATES[level] // 100
+        cents = ReferralPolicy.commission(base, rate)
         if cents <= 0:
             continue
         if await server.db.commissions.find_one(
@@ -160,7 +223,7 @@ async def invoice_paid(invoice: dict) -> None:
         ):
             continue
         cash = _connected_partner(beneficiary)
-        credit = None if days is None else _RATES[level] * days // 100
+        credit = None if days is None else rate * days // 100
         doc = {
             "id": server.new_id(),
             "beneficiary_id": beneficiary["id"],
@@ -168,6 +231,8 @@ async def invoice_paid(invoice: dict) -> None:
             "level": level,
             "kind": kind,
             "amount_cents": cents,
+            "base_cents": base,
+            "rate_percent": rate,
             "currency": currency,
             "status": "pending" if cash else "paid",
             "invoice_id": invoice_id,
@@ -191,7 +256,11 @@ async def invoice_paid(invoice: dict) -> None:
 
 
 async def charge_refunded(charge: dict) -> None:
-    """Claw back every open commission tied to this charge. Partial refunds included."""
+    """Claw back commissions tied to this charge, in proportion to the refund.
+
+    `clawed_back_cents` and `clawed_back_days` record what was already taken
+    back, so a redelivered or later cumulative refund only claws the rest.
+    """
     keys = [
         value for value in (
             pro_billing._id(charge.get("id")),
@@ -201,6 +270,7 @@ async def charge_refunded(charge: dict) -> None:
     ]
     if not keys:
         return
+    share = ReferralPolicy.refunded_share(charge)
     rows = await server.db.commissions.find({
         "status": {"$in": ["pending", "paid"]},
         "$or": [
@@ -210,14 +280,26 @@ async def charge_refunded(charge: dict) -> None:
         ],
     }).to_list(50)
     for row in rows:
+        cents = row.get("amount_cents") if type(row.get("amount_cents")) is int else 0
+        done = row.get("clawed_back_cents") if type(row.get("clawed_back_cents")) is int else 0
+        target = ReferralPolicy.clawback_target(cents, share)
+        full = share is None or share[0] >= share[1]
+        days = row.get("credit_days") if type(row.get("credit_days")) is int else 0
+        days_done = row.get("clawed_back_days") if type(row.get("clawed_back_days")) is int else 0
+        days_target = ReferralPolicy.clawback_target(days, share)
+        if not full and target <= done and days_target <= days_done:
+            continue
+        update: dict = {"clawed_back_cents": max(target, done), "clawed_back_days": max(days_target, days_done),
+                        "clawed_back_at": server.now()}
+        if full:
+            update["status"] = "clawed_back"
         updated = await server.db.commissions.update_one(
-            {"id": row["id"], "status": {"$in": ["pending", "paid"]}},
-            {"$set": {"status": "clawed_back", "clawed_back_at": server.now()}},
+            {"id": row["id"], "status": {"$in": ["pending", "paid"]},
+             "clawed_back_cents": row.get("clawed_back_cents"), "clawed_back_days": row.get("clawed_back_days")},
+            {"$set": update},
         )
         if updated.modified_count == 1 and row.get("reward") == "pro_credit_days":
-            days = row.get("credit_days")
-            if type(days) is int:
-                await _retract_credit(row["beneficiary_id"], days)
+            await _retract_credit(row["beneficiary_id"], days_target - days_done)
 
 
 async def _ensure_code(user_id: str) -> str:
@@ -240,14 +322,22 @@ async def _ensure_code(user_id: str) -> str:
     return code
 
 
+def net_amount(row: dict) -> dict:
+    """The row with `amount_cents` reduced by any partial clawback."""
+    cents, done = row.get("amount_cents"), row.get("clawed_back_cents")
+    if type(cents) is int and type(done) is int:
+        return {**row, "amount_cents": max(0, cents - done)}
+    return row
+
+
 async def _sum(user_id: str, status: str) -> dict:
     rows = await server.db.commissions.find(
         {"beneficiary_id": user_id, "status": status},
-        {"_id": 0, "amount_cents": 1, "currency": 1},
+        {"_id": 0, "amount_cents": 1, "currency": 1, "clawed_back_cents": 1},
     ).limit(_CAP + 1).to_list(_CAP + 1)
     if len(rows) > _CAP:
         return {"state": "unavailable"}
-    return accounting._totals(rows, lambda row: accounting._positive(row, "amount_cents"))
+    return accounting._totals([net_amount(row) for row in rows], lambda row: accounting._positive(row, "amount_cents"))
 
 
 @router.get("/referrals/mine")

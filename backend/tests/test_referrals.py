@@ -1,7 +1,6 @@
 """Referral ledger: the code is stored at signup, and only the first paid invoice pays."""
 import inspect
 import os
-from datetime import timedelta
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
 import referrals  # noqa: E402
@@ -47,7 +46,7 @@ def test_signup_stores_a_referrer_and_pays_nothing(monkeypatch):
     run_isolated(scenario)
 
 
-def test_first_paid_invoice_pays_two_levels_and_a_refund_claws_them_back(monkeypatch):
+def test_first_paid_invoice_pays_one_level_and_a_refund_claws_it_back(monkeypatch):
     async def scenario(db):
         _bind(db, monkeypatch)
         monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", SECRET)
@@ -85,13 +84,11 @@ def test_first_paid_invoice_pays_two_levels_and_a_refund_claws_them_back(monkeyp
         club = {"id": "in_club", "amount_paid": 2000, "currency": "eur", "subscription": "sub_club", "charge": "ch_club", **_period()}
         await community.stripe_webhook(signed(_event("evt-club", "invoice.paid", club)))
         rows = await db.commissions.find({}, {"_id": 0}).to_list(20)
-        assert len(rows) == 6
-        assert not any(row["beneficiary_id"] == "ancient" or row["level"] == 3 for row in rows)
+        # Single level: the coach's own referrer (grand) and anyone above earn nothing.
+        assert len(rows) == 3
+        assert all(row["level"] == 1 and row["beneficiary_id"] == "coach" for row in rows)
         cash = next(row for row in rows if row["source_user_id"] == "payer" and row["level"] == 1)
-        days = next(row for row in rows if row["source_user_id"] == "payer" and row["level"] == 2)
         assert cash == {**cash, "beneficiary_id": "coach", "kind": "pro", "amount_cents": 200, "currency": "eur", "status": "pending", "reward": "cash", "invoice_id": "in_eur"}
-        assert days["beneficiary_id"] == "grand" and days["amount_cents"] == 50 and days["status"] == "paid"
-        assert days["reward"] == "pro_credit_days" and days["credit_days"] == 1
         assert next(row for row in rows if row["invoice_id"] == "in_jpy" and row["level"] == 1)["amount_cents"] == 300
         assert next(row for row in rows if row["invoice_id"] == "in_club" and row["level"] == 1)["kind"] == "club"
         mine = await referrals.mine(account("coach"))
@@ -99,8 +96,8 @@ def test_first_paid_invoice_pays_two_levels_and_a_refund_claws_them_back(monkeyp
         assert mine["pending"]["totals"] == [{"amount_cents": 600, "currency": "EUR"}, {"amount_cents": 300, "currency": "JPY"}]
         assert mine["paid"] == {"state": "none_in_period"}
         grand = await referrals.mine(account("grand"))
-        assert grand["paid"]["totals"] == [{"amount_cents": 150, "currency": "EUR"}, {"amount_cents": 75, "currency": "JPY"}]
-        assert (await server.require_pro(await db.users.find_one({"id": "grand"})))["id"] == "grand"
+        assert grand["paid"] == {"state": "none_in_period"} and grand["pending"] == {"state": "none_in_period"}
+        assert "pro_credit_until" not in await db.users.find_one({"id": "grand"})
         await db.users.insert_one({**account("tiny"), "referred_by": "coach"})
         await db.subscriptions.insert_one({"user_id": "tiny", "plan": "pro_monthly", "status": "active", "stripe_subscription_id": "sub_tiny"})
         await community.stripe_webhook(signed(_event("evt-tiny", "invoice.paid", {**eur, "id": "in_tiny", "subscription": "sub_tiny", "amount_paid": 1})))
@@ -113,15 +110,12 @@ def test_first_paid_invoice_pays_two_levels_and_a_refund_claws_them_back(monkeyp
         missing = await referrals.mine(account("lonely"))
         assert missing["paid"] == {"state": "recorded", "amounts_stored": False, "row_count": 1}
         assert "totals" not in missing["paid"]
-        until = (await db.users.find_one({"id": "grand"}))["pro_credit_until"]
         await community.stripe_webhook(signed(_event("evt-refund-eur", "charge.refunded", {"id": "ch_eur", "invoice": "in_eur"})))
         await community.stripe_webhook(signed(_event("evt-refund-jpy", "charge.refunded", {"id": "ch_jpy", "payment_intent": "pi_jpy"})))
         await community.stripe_webhook(signed(_event("evt-refund-club", "charge.refunded", {"id": "ch_club", "invoice": "in_club"})))
-        assert await db.commissions.count_documents({"status": "clawed_back"}) == 6
+        # These charges carry no amounts, so each refund is treated as full.
+        assert await db.commissions.count_documents({"status": "clawed_back"}) == 3
         assert await db.commissions.count_documents({"status": {"$in": ["pending", "paid"]}}) == 1  # the row with no amount
-        after = (await db.users.find_one({"id": "grand"}))["pro_credit_until"]
-        assert until - after == timedelta(days=3)
-        await expect(402, server.require_pro(await db.users.find_one({"id": "grand"})))
         cleared = await referrals.mine(account("coach"))
         assert cleared["pending"] == {"state": "none_in_period"}
         assert cleared["counts"]["converted"] == 0

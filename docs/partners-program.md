@@ -8,14 +8,15 @@ Compensation for introducing someone who later pays. Creating an account is not 
 
 ## When it pays
 
-The signed Stripe webhook is unchanged in how it checks `Stripe-Signature`. After that check, the first **paid** invoice for a referred user (`invoice.paid` with `amount_paid` greater than zero) writes `commissions`. A zero trial invoice does not count, so the first invoice that actually collects money is the one that pays. A later invoice for the same person does not pay again. There is no third level.
+The signed Stripe webhook is unchanged in how it checks `Stripe-Signature`. After that check, the first **paid** invoice for a referred user (`invoice.paid` with `amount_paid` greater than zero) writes `commissions`. A zero trial invoice does not count, so the first invoice that actually collects money is the one that pays. A later invoice for the same person does not pay again.
 
-| Level | Who | Rate |
+**Single level only.** The direct referrer (`referred_by`) is paid. Their own referrer is not.
+
+| Who | Rate | Base |
 | --- | --- | --- |
-| 1 | The direct referrer (`referred_by`) | 20% of that invoice |
-| 2 | The referrer's referrer | 5% of that invoice |
+| The direct referrer | `REFERRAL_RATE_PERCENT`, default 20% | invoice `amount_paid` minus tax |
 
-`amount_cents` is the invoice amount in Stripe's minor unit, times the rate, integer division. A percent that rounds down to zero cents is not written, and that invoice still counts as the first one, so a later invoice does not pay either. The currency is the invoice currency. Totals are not converted, and a missing amount is not treated as zero.
+The base excludes tax (`tax`, else `total_taxes`, else `total_tax_amounts` on the invoice), so no reward is paid on VAT. `amount_cents` is that base in Stripe's minor unit, times the rate, integer division. Each row stores `base_cents` and `rate_percent`. A percent that rounds down to zero cents is not written, and that invoice still counts as the first one, so a later invoice does not pay either. The currency is the invoice currency. Totals are not converted, and a missing amount is not treated as zero.
 
 `kind` is `pro` for the app-wide Pro plan and `club` for a paid community membership.
 
@@ -23,11 +24,11 @@ The signed Stripe webhook is unchanged in how it checks `Stripe-Signature`. Afte
 
 An athlete, and anyone who is not a connected partner, receives **Pro credit days**, not cash. Days are the same percent of the invoice's billed period (`lines.data[0].period`). The days extend `users.pro_credit_until`, which `require_pro` honors while it is still in the future. The ledger row is `status: paid`, `reward: pro_credit_days`.
 
-A connected partner is an approved coach whose `users.payout_status` is `connected`. Their row is `status: pending`, `reward: cash`, for the same percent of the invoice. Nothing here sends that cash. `payout_status` is not set by this program.
+A connected partner is an approved coach whose `users.payout_status` is `connected`. Their row is `status: pending`, `reward: cash`, for the same percent of the invoice. Nothing here sends that cash, and who funds it is still an open decision. `payout_status` is written by `GET /api/partner/connect/status` once Stripe reports `charges_enabled` and `payouts_enabled` on the coach's Express account.
 
 ## Clawback
 
-`charge.refunded` sets matching rows to `status: clawed_back`. A partial refund claws back the whole commission. Credit days granted for that row are removed. Clawed-back rows are not pending and not paid.
+`charge.refunded` claws back in proportion to the refund. Stripe sends the cumulative `amount_refunded`, so the row keeps `clawed_back_cents` and `clawed_back_days` and each event only claws the difference. A partial refund leaves the row open with the remainder; a full refund (or a charge without amounts) sets `status: clawed_back`. Credit days are removed in the same proportion. Clawed-back rows are not pending and not paid.
 
 ## What you see
 
