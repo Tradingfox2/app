@@ -33,6 +33,7 @@
     "src/missed-session.test.ts",
     "src/nutrition.test.ts",
     "src/money.test.ts",
+    "src/progress-locales.test.ts",
     "src/components/exercises/exercise-thumb-map.test.ts"
   ]
 }

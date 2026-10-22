@@ -44,6 +44,7 @@ import {
 } from "@/src/training-week";
 import { readWeeklyReview, weeklyReviewDue, type WeeklyReview } from "@/src/weekly-review";
 import { MissedSessionNote } from "@/src/missed-session-note";
+import { ProgressEntry } from "@/src/components/progress/ProgressEntry";
 
 function unreadLabel(count: number): string | null {
   if (count <= 0) return null;
@@ -794,6 +795,8 @@ export default function Home() {
             ))}
           </View>
         ) : null}
+
+        <ProgressEntry />
 
         <View style={styles.statsCard} testID="training-week-card">
           <View style={styles.cardHead}>
