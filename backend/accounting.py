@@ -135,6 +135,14 @@ def _owed(row: dict) -> tuple:
     if row.get("status") not in {"available", "pending"}:
         return ("skip", 0, None)
     return _positive(row, "net_cents")
+def _commission(row: dict) -> tuple:
+    """A commission amount net of any partial clawback already recorded on the row."""
+    parsed = _positive(row, "amount_cents", "cents")
+    done = row.get("clawed_back_cents")
+    if parsed[0] != "ok" or row.get("status") == "clawed_back" or type(done) is not int:
+        return parsed
+    left = parsed[1] - done
+    return ("ok", left, parsed[2]) if left > 0 else ("skip", 0, None)
 def _reward(row: dict) -> tuple:
     parsed = _positive(row, "reward_amount_cents")
     return parsed if parsed[0] != "ok" else ("ok", parsed[1], _currency(row.get("reward_currency")))
@@ -265,7 +273,7 @@ async def summary(start: datetime, end: datetime, start_day: date, end_day: date
     completed = [row for row in checkouts if row.get("status") == "completed"] if checkouts is not None else None
     amount = lambda row: _positive(row, "amount_cents", "amount")
     commission_amount = lambda row: _positive(row, "amount_cents", "cents")
-    commission_sections = _split(commissions, _PENDING, _PAID, commission_amount, truncated=commissions_capped)
+    commission_sections = _split(commissions, _PENDING, _PAID, _commission, truncated=commissions_capped)
     commission_sections["clawed_back"] = _clawed(commissions, commission_amount, truncated=commissions_capped)
     subscription_amounts = _subscription_amounts(subscriptions, truncated=subscriptions_capped)
     if subscriptions_capped:
