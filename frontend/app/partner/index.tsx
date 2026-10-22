@@ -10,6 +10,7 @@ import { MetricGlossary } from "@/src/components/metric-glossary";
 import { colors, spacing, type } from "@/src/theme";
 import { useI18n } from "@/src/i18n";
 import { joinPolicyPhrase } from "@/src/community-copy";
+import { Money } from "@/src/money";
 
 export default function PartnerDashboardScreen() {
   const { t, formatNumber, localeTag } = useI18n(); const router = useRouter();
@@ -41,7 +42,7 @@ export default function PartnerDashboardScreen() {
         <MetricGlossary testID="partner-metric-communities" value={formatNumber(data.community_count)} label={t("COMMUNITIES")} glossary={t(METRIC_GLOSSARY.community_count)} style={styles.metric} valueStyle={styles.metricValue} labelStyle={styles.metricLabel} />
       </View>
       {needsPayouts ? <View style={styles.banner} testID="connect-payouts-banner"><Text style={styles.bannerText}>{t("You must connect payouts to receive money.")}</Text><TextInput value={country} onChangeText={setCountry} autoCapitalize="characters" maxLength={2} placeholder={t("ISO country code")} placeholderTextColor={colors.textDim} style={styles.country} testID="connect-country" /><Affordance accessibilityRole="button" testID="connect-payouts" onPress={connect} style={styles.connectBtn}><Text style={styles.connectBtnText}>{t("CONNECT PAYOUTS")}</Text></Affordance>{connectError ? <Text style={styles.error}>{connectError}</Text> : null}</View> : null}
-      <View style={styles.moneyBand}><View><Text style={styles.moneyLabel}>{t("AVAILABLE BALANCE")}</Text><Text style={styles.money}>{data.balances.length ? data.balances.map(row => new Intl.NumberFormat(localeTag, { style: "currency", currency: row._id }).format(row.net_cents / 100)).join(" · ") : "—"}</Text></View><View style={styles.payout}><Ionicons name="wallet-outline" size={17} color={colors.warning} /><Text style={styles.payoutText}>{t(data.payout_status.toUpperCase())}</Text></View></View>
+      <View style={styles.moneyBand}><View><Text style={styles.moneyLabel}>{t("NET REVENUE RECORDED")}</Text><Text style={styles.money}>{data.balances.length ? data.balances.map(row => Money.format(row.net_cents, row._id, localeTag)).join(" · ") : "—"}</Text></View><View style={styles.payout}><Ionicons name="wallet-outline" size={17} color={colors.warning} /><Text style={styles.payoutText}>{t(data.payout_status.toUpperCase())}</Text></View></View>
       <Text style={styles.section}>{t("YOUR COMMUNITIES")}</Text>{data.communities.map(item => <Affordance key={item.id} onPress={() => router.push({ pathname: "/community/[id]", params: { id: item.id } })} style={styles.row}><View style={{ flex: 1 }}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{formatNumber(item.member_count)} {t("members")} · {t(joinPolicyPhrase(item.join_policy))}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textDim} /></Affordance>)}
     </ScrollView> : null}
   </SafeAreaView>;
