@@ -1009,6 +1009,8 @@ async def add_wearable(body: WearableMetricIn, user: dict = Depends(current_user
         "id": new_id(),
         "user_id": user["id"],
         **body.model_dump(),
+        # Typed by the client, not synced from a health source: never earns XP.
+        source: client,
         "recorded_at": now(),
         "created_at": now(),
     }
@@ -1465,6 +1467,7 @@ from tips import router as tips_router  # noqa: E402
 from revenuecat import router as revenuecat_router  # noqa: E402
 from auth_account import router as auth_account_router  # noqa: E402
 from routers.nutrition import router as nutrition_router  # noqa: E402
+from routers.progress import router as progress_router  # noqa: E402
 
 
 async def home_today_for(uid: str) -> dict:
@@ -1500,6 +1503,7 @@ api.include_router(tips_router)
 api.include_router(revenuecat_router)
 api.include_router(auth_account_router)
 api.include_router(nutrition_router)
+api.include_router(progress_router)
 
 app.include_router(api)
 # Bundled local files (exercise posters) stay served even when uploads go to S3/R2.
