@@ -129,6 +129,7 @@ function open(data: Record<string, unknown>) {
   if (plan) return router.push(plan);
   const target = typeof data.target_id === "string" ? data.target_id : null;
   if (typeof data.channel_id === "string") return router.push({ pathname: "/channel/[id]", params: { id: data.channel_id } });
+  if (data.target_type === "progress") return router.push("/progress");
   if (!target) return router.push("/notifications");
   switch (data.target_type) {
     case "post": return router.push({ pathname: "/post/[id]", params: { id: target } });

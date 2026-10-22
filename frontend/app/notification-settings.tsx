@@ -27,6 +27,8 @@ const TYPES: [string, string][] = [
   ["program_adopted", "Members starting your programs"],
   ["join_request", "Join requests for your clubs"],
   ["weekly_review", "Weekly review"],
+  ["progress_nudge", "Streak and milestone reminders"],
+  ["league_result", "Weekly league results"],
 ];
 
 /**
