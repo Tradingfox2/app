@@ -48,6 +48,7 @@ def test_unknown_event_and_spoofed_actor_are_rejected():
 def test_three_events_aggregate_and_ignore_domain_rows(monkeypatch):
     async def scenario(db):
         monkeypatch.setattr(server, "db", db)
+        monkeypatch.setattr(staff, "db", db)  # staff binds server.db at import; the audit row must use this loop's client
         await analytics.ensure_indexes()
         athlete = account("athlete-1")
         moment = datetime.now(timezone.utc)
