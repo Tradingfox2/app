@@ -9,6 +9,12 @@ import type { ProgressSummary } from "@/src/progress-types";
 import { ProgressRing, StreakFlame, XpBar } from "./Rings";
 import { STAGE_LABELS } from "./labels";
 
+/** A real progress payload (a mocked or older API can answer something else). */
+export function isProgressSummary(value: unknown): value is ProgressSummary {
+  const v = value as ProgressSummary | null;
+  return Boolean(v && typeof v.level === "number" && typeof v.progress === "number" && v.streak && typeof v.streak.current === "number");
+}
+
 /** Compact Home card: level ring, XP bar, streak flame. Opens the Progress hub. */
 export function ProgressEntry() {
   const { t, formatNumber } = useI18n();
@@ -17,7 +23,7 @@ export function ProgressEntry() {
   useFocusEffect(
     useCallback(() => {
       let live = true;
-      api.progress().then((value) => live && setData(value)).catch(() => undefined);
+      api.progress().then((value) => live && setData(isProgressSummary(value) ? value : null)).catch(() => undefined);
       return () => {
         live = false;
       };

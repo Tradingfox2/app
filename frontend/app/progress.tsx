@@ -11,6 +11,7 @@ import { leaveOrHome } from "@/src/leave-home";
 import type {
   CupView, LeagueView, LedgerEntry, ProgressBadge, ProgressChallenge, ProgressSummary, RewardsView,
 } from "@/src/progress-types";
+import { isProgressSummary } from "@/src/components/progress/ProgressEntry";
 import { Celebration, type CelebrationEvent } from "@/src/components/progress/Celebration";
 import { GoalRings, ProgressRing, StreakFlame, XpBar } from "@/src/components/progress/Rings";
 import {
@@ -64,6 +65,7 @@ export default function ProgressScreen() {
       const [summary, list, leagueView, cupView, rewardView] = await Promise.all([
         api.progress(), api.progressChallenges(), api.progressLeague(), api.progressCups(), api.progressRewards(),
       ]);
+      if (!isProgressSummary(summary)) throw new Error(t("Could not load your progress"));
       setData(summary);
       setChallenges(list.items);
       setLeague(leagueView);
