@@ -212,10 +212,15 @@ test("rapid switches settle on the last muscle without a second callout", async 
 test("the leader draws before the name, then the name stays while selected", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "frame sequence is captured once at 1440×900");
   const created: { title?: string; slugs?: string[] }[] = [];
+  // The draw-in is checked on a controlled clock: on a busy CI runner real time between
+  // the click and the read is unbounded, so the sample must not depend on it.
+  await page.clock.install();
   await signIn(page);
   await mockApi(page, created);
   await openExplorer(page);
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
   await selectMuscle(page, "front", "chest-left");
+  await page.clock.runFor(40);
   const early = await leaderOffset(page);
   expect(early).not.toBeNull();
   expect(early ?? 0).toBeGreaterThan(8);
@@ -226,9 +231,10 @@ test("the leader draws before the name, then the name stays while selected", asy
   for (const mark of marks) {
     const wait = mark - previous;
     previous = mark;
-    await page.waitForTimeout(wait);
+    await page.clock.runFor(wait);
     await page.screenshot({ path: path.join(shots, `desktop-frame-${String(mark).padStart(3, "0")}.png`) });
   }
+  await page.clock.resume();
   await expect(page.getByTestId("muscle-callout-name")).toBeVisible();
   await expect.poll(async () => leaderOffset(page)).toBeLessThan(1);
   const nameOpacity = await page.getByTestId("muscle-callout-role").evaluate((el) => Number(getComputedStyle(el).opacity));
