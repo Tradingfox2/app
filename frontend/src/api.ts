@@ -1,3 +1,4 @@
+import type { CupView, LeagueView, ProgressChallenge, ProgressSummary, RewardsView } from "./progress-types";
 import { Platform } from "react-native";
 import type { ProgramDay } from "./program-schema";
 import type { NutritionProduct } from "./nutrition";
@@ -1638,4 +1639,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  progress: () => request<ProgressSummary>("/progress"),
+  progressChallenges: () => request<{ items: ProgressChallenge[] }>("/progress/challenges"),
+  joinProgressChallenge: (id: string) =>
+    request<ProgressChallenge>(`/progress/challenges/${encodeURIComponent(id)}/join`, { method: "POST" }),
+  progressLeague: () => request<LeagueView>("/progress/league"),
+  progressCups: () => request<CupView>("/progress/cups"),
+  progressRewards: () => request<RewardsView>("/progress/rewards"),
+  progressFrame: (frame: string) =>
+    request<{ frame: string }>("/progress/frame", { method: "POST", body: JSON.stringify({ frame }) }),
+  progressCelebrationsSeen: () =>
+    request<{ ok: boolean }>("/progress/celebrations/seen", { method: "POST", body: JSON.stringify({}) }),
+  progressGoal: (body: { weekly_goal_workouts?: number; weekly_goal_steps?: number; leagues_opt_out?: boolean }) =>
+    request<Record<string, unknown>>("/progress/goal", { method: "PUT", body: JSON.stringify(body) }),
 };

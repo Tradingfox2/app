@@ -102,6 +102,9 @@ jobs:
         working-directory: frontend
         run: node --experimental-strip-types src/missed-session.test.ts
 
+      - name: Progress locales test
+        working-directory: frontend
+        run: node --experimental-strip-types src/progress-locales.test.ts
       - name: Money formatting test
         working-directory: frontend
         run: node --experimental-strip-types src/money.test.ts
