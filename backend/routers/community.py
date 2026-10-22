@@ -972,14 +972,19 @@ async def _record_partner_invoice(invoice: dict) -> None:
         return
     if not isinstance(stripe_id, str) or not stripe_id:
         return
+    # Tax is never coach revenue: net = amount paid - tax - platform fee.
+    tax = billing.CommunityTax.invoice_tax(invoice)
+    if tax > gross:
+        return
     fee = invoice.get("application_fee_amount")
     if type(fee) is not int:
-        fee = (gross * billing.CONNECT_FEE_PERCENT) // 100
-    if fee < 0 or fee > gross:
+        fee = ((gross - tax) * billing.CommunityTax.fee_percent()) // 100
+    if fee < 0 or fee > gross - tax:
         return
+    net = gross - tax - fee
     doc = {
         "owner_id": owner_id, "partner_id": owner_id, "status": "available", "kind": "invoice.paid",
-        "gross_cents": gross, "fee_cents": fee, "net_cents": gross - fee, "currency": currency,
+        "gross_cents": gross, "tax_cents": tax, "fee_cents": fee, "net_cents": net, "currency": currency,
         "stripe_id": stripe_id, "created_at": now(),
     }
     result = await db.partner_ledger.update_one({"stripe_id": stripe_id}, {"$setOnInsert": doc}, upsert=True)
@@ -989,7 +994,7 @@ async def _record_partner_invoice(invoice: dict) -> None:
         owner, "partner_ledger.written", target_type="partner_ledger", target_id=stripe_id,
         metadata={
             "owner_id": owner_id, "kind": "invoice.paid", "gross_cents": gross,
-            "fee_cents": fee, "net_cents": gross - fee, "currency": currency,
+            "tax_cents": tax, "fee_cents": fee, "net_cents": net, "currency": currency,
         },
     )
 
