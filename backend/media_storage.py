@@ -78,3 +78,33 @@ def store(key: str, data: bytes, content_type: str) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
     return f"{PUBLIC_BASE}/api/media/files/{key}" if PUBLIC_BASE else f"/api/media/files/{key}"
+
+
+class MediaFiles:
+    """Serve /api/media/files from local disk, falling back to object storage.
+
+    Records written before object storage was enabled (or seeded locally) keep
+    relative /api/media/files/<key> URLs. When the file is not on this machine's
+    disk but object storage has a public base URL, redirect there instead of 404.
+    """
+
+    def __new__(cls, directory):
+        from starlette.exceptions import HTTPException as StarletteHTTPException
+        from starlette.responses import RedirectResponse
+        from starlette.staticfiles import StaticFiles
+
+        class _Files(StaticFiles):
+            async def get_response(self, path, scope):
+                try:
+                    return await super().get_response(path, scope)
+                except StarletteHTTPException as exc:
+                    key = path.replace("\\", "/").lstrip("/")
+                    # Read env at request time: server.py loads .env after importing this module.
+                    bucket = S3_BUCKET or os.environ.get("MEDIA_S3_BUCKET", "")
+                    base = PUBLIC_BASE or os.environ.get("MEDIA_PUBLIC_BASE_URL", "").rstrip("/")
+                    if (exc.status_code == 404 and bucket and base
+                            and _SAFE_KEY.match(key) and ".." not in key):
+                        return RedirectResponse(f"{base}/{key}", status_code=302)
+                    raise
+
+        return _Files(directory=directory)
