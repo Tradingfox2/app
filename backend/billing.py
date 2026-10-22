@@ -14,6 +14,8 @@ answers 503, so a paid community never pretends to take money it cannot.
 Environment:
 - `STRIPE_SECRET_KEY`         sk_test_… or sk_live_… (server only, never shipped)
 - `STRIPE_WEBHOOK_SECRET`     whsec_… from the webhook endpoint in the dashboard
+- `STRIPE_CONNECT_WEBHOOK_SECRET` optional whsec_… of a Connect endpoint (connected
+  accounts' payout events) pointed at the same URL
 - `STRIPE_PRICE_PRO_MONTHLY`  Price id for the Pro monthly plan
 - `STRIPE_PRICE_PRO_YEARLY`   Price id for the Pro yearly plan
 - `STRIPE_PRICE_GYM_PARTNER`  Price id for the gym partner plan
@@ -60,6 +62,11 @@ def secret_key() -> str:
 
 def webhook_secret() -> str:
     return os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+
+def webhook_secrets() -> list[str]:
+    """Platform secret, then the optional Connect endpoint secret. Empty ones are dropped."""
+    return [secret for secret in (webhook_secret(), os.environ.get("STRIPE_CONNECT_WEBHOOK_SECRET", "")) if secret]
 
 
 def is_configured() -> bool:
@@ -231,8 +238,8 @@ def verify_signature(payload: bytes, header: str, *, now: float | None = None) -
     rolled; any one matching is enough. The timestamp is signed too, so an
     old event cannot be replayed with a fresh `t`.
     """
-    secret = webhook_secret()
-    if not secret or not header:
+    secrets = webhook_secrets()
+    if not secrets or not header:
         return False
     timestamp, signatures = None, []
     for part in header.split(","):
@@ -245,5 +252,8 @@ def verify_signature(payload: bytes, header: str, *, now: float | None = None) -
         return False
     if abs((now if now is not None else time.time()) - int(timestamp)) > SIGNATURE_TOLERANCE_SECONDS:
         return False
-    expected = hmac.new(secret.encode(), f"{timestamp}.".encode() + payload, hashlib.sha256).hexdigest()
-    return any(hmac.compare_digest(expected, signature) for signature in signatures)
+    for secret in secrets:
+        expected = hmac.new(secret.encode(), f"{timestamp}.".encode() + payload, hashlib.sha256).hexdigest()
+        if any(hmac.compare_digest(expected, signature) for signature in signatures):
+            return True
+    return False

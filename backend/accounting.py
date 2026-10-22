@@ -132,6 +132,7 @@ def _fee(row: dict) -> tuple:
         return ("skip", 0, None)
     return ("ok", gross - net, _currency(row.get("currency")))
 def _owed(row: dict) -> tuple:
+    """Still with the coach's Stripe balance. `paid_out` rows (Connect payout.paid) are not owed."""
     if row.get("status") not in {"available", "pending"}:
         return ("skip", 0, None)
     return _positive(row, "net_cents")
