@@ -7,6 +7,7 @@
 
 Gym QR check-ins live in routers/gyms.py.
 """
+import progress_nudges
 import csv
 import io
 import json
@@ -859,6 +860,10 @@ class WearableStore:
                  "$setOnInsert": {"id": new_id(), "created_at": now()}},
                 upsert=True,
             )
+        if "steps" in event["metrics"]:
+            day = recorded_at.date().isoformat() if hasattr(recorded_at, "date") else str(recorded_at)[:10]
+            await progress_nudges.Hooks.steps(src["user_id"], day, event["metrics"]["steps"],
+                                              {"device": src["provider"], "simulated": False})
         await db.wearable_sources.update_one(
             {"user_id": src["user_id"], "provider": src["provider"]}, {"$set": {"last_sync_at": now()}})
         return {"processed": written, "metrics": len(event["metrics"])}

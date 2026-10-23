@@ -6,6 +6,8 @@ type Messages = Record<string, string>;
 export const progressMessages: Record<SupportedLocale, Messages> = {
   en: {},
   fr: {
+    "Streak and milestone reminders": "Rappels de série et d'objectifs",
+    "Weekly league results": "Résultats de ligue hebdomadaires",
     "Overview": "Vue d'ensemble",
     "Challenges": "Défis",
     "League & cups": "Ligue et coupes",
@@ -123,6 +125,8 @@ export const progressMessages: Record<SupportedLocale, Messages> = {
     "{xp} / {next} XP": "{xp} / {next} XP",
   },
   de: {
+    "Streak and milestone reminders": "Serien- und Meilenstein-Erinnerungen",
+    "Weekly league results": "Wöchentliche Liga-Ergebnisse",
     "Overview": "Übersicht",
     "Challenges": "Challenges",
     "League & cups": "Liga & Pokale",
@@ -240,6 +244,8 @@ export const progressMessages: Record<SupportedLocale, Messages> = {
     "{xp} / {next} XP": "{xp} / {next} XP",
   },
   es: {
+    "Streak and milestone reminders": "Recordatorios de racha y logros",
+    "Weekly league results": "Resultados semanales de liga",
     "Overview": "Resumen",
     "Challenges": "Retos",
     "League & cups": "Liga y copas",
@@ -357,6 +363,8 @@ export const progressMessages: Record<SupportedLocale, Messages> = {
     "{xp} / {next} XP": "{xp} / {next} XP",
   },
   it: {
+    "Streak and milestone reminders": "Promemoria di serie e traguardi",
+    "Weekly league results": "Risultati settimanali della lega",
     "Overview": "Panoramica",
     "Challenges": "Sfide",
     "League & cups": "Lega e coppe",

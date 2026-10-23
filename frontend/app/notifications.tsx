@@ -34,6 +34,8 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   join_request: "person-add-outline",
   gym_reward: "gift-outline",
   weekly_review: "calendar-outline",
+  progress_nudge: "flame-outline",
+  league_result: "trophy-outline",
 };
 
 const PAGE = 30;
@@ -94,6 +96,10 @@ export default function NotificationsScreen() {
     }
     if (row.type === "program_adopted") {
       router.push("/program");
+      return;
+    }
+    if (row.type === "progress_nudge" || row.type === "league_result") {
+      router.push("/progress");
       return;
     }
     if (row.type === "gym_reward") {

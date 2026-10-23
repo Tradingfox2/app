@@ -874,6 +874,9 @@ async def finish_workout(workout_id: str, user: dict = Depends(current_user)):
         )
     except Exception as exc:  # noqa: BLE001 - analytics must not fail the finish
         logger.warning("workout_completed for %s was not stored: %s", workout_id, exc)
+    import progress_nudges  # lazy: progress hooks never fail the finish
+
+    await progress_nudges.Hooks.workout_finished(w["user_id"], updated)
     return clean(updated)
 
 
@@ -1468,6 +1471,7 @@ from revenuecat import router as revenuecat_router  # noqa: E402
 from auth_account import router as auth_account_router  # noqa: E402
 from routers.nutrition import router as nutrition_router  # noqa: E402
 from routers.progress import router as progress_router  # noqa: E402
+from progress_nudges import router as progress_nudges_router  # noqa: E402
 
 
 async def home_today_for(uid: str) -> dict:
@@ -1504,6 +1508,7 @@ api.include_router(revenuecat_router)
 api.include_router(auth_account_router)
 api.include_router(nutrition_router)
 api.include_router(progress_router)
+api.include_router(progress_nudges_router)
 
 app.include_router(api)
 # Bundled local files (exercise posters) stay served even when uploads go to S3/R2.

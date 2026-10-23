@@ -14,6 +14,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 import billing
 import notifications
+import progress_nudges
 import pro_billing
 import ratelimit
 import server
@@ -117,6 +118,7 @@ async def gym_checkin(body: CheckinIn, user: dict = Depends(current_user)):
         "workout_id": body.workout_id, "checked_in_at": now(),
     }
     await db.gym_visits.insert_one(dict(visit))
+    await progress_nudges.Hooks.gym_checkin(user["id"], visit)
     total = await db.gym_visits.count_documents({"user_id": user["id"], "gym_id": gym_id})
     reward_every = gym.get("reward_every", 10)
     unlocked = total % reward_every == 0

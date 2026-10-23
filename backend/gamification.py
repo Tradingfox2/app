@@ -167,11 +167,11 @@ class Streaks:
 # Ledger
 # --------------------------------------------------------------------------- #
 class Ledger:
-    _indexed: set[int] = set()
+    _indexed: set[str] = set()  # by database name: id() is reused after GC
 
     @staticmethod
     async def ensure_indexes(db) -> None:
-        if id(db) in Ledger._indexed:
+        if db.name in Ledger._indexed:
             return
         await db.xp_ledger.create_index([("user_id", 1), ("key", 1)], unique=True)
         await db.xp_ledger.create_index([("user_id", 1), ("at", -1)])
@@ -185,7 +185,7 @@ class Ledger:
         await db.league_groups.create_index([("week", 1), ("division", 1), ("size", 1)])
         await db.progress_cups.create_index("month", unique=True)
         await db.progress_profiles.create_index("user_id", unique=True)
-        Ledger._indexed.add(id(db))
+        Ledger._indexed.add(db.name)
 
     @staticmethod
     async def award(db, user_id: str, key: str, kind: str, xp: int, *, at: datetime | None = None,

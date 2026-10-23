@@ -1,6 +1,7 @@
 """Social graph: feed, likes, reposts, comments, follows, direct messages, media."""
 from __future__ import annotations
 
+import progress_nudges
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
@@ -523,6 +524,7 @@ async def create_post(body: PostIn, user: dict = Depends(current_user)):
         "like_count": 0, "kudos_count": 0, "comment_count": 0, "repost_count": 0, "created_at": timestamp,
     }
     await db.posts.insert_one(post)
+    await progress_nudges.Hooks.social(user["id"], "post", post["id"])
     await _notify_mentions(post, user, notifications.parse_mentions(content))
     await moderation.screen(content, author=user, target_type="post", target_id=post["id"],
                             metadata={"community_id": body.community_id})
@@ -649,6 +651,7 @@ async def give_kudos(post_id: str, user: dict = Depends(current_user)):
         await db.post_kudos.insert_one({"post_id": post_id, "user_id": user["id"], "created_at": now()})
     except DuplicateKeyError:
         return {"post_id": post_id, "kudos": True, "kudos_count": post.get("kudos_count", 0)}
+    await progress_nudges.Hooks.social(user["id"], "kudos", post_id)
     updated = await db.posts.find_one_and_update(
         {"id": post_id}, {"$inc": {"kudos_count": 1}},
         projection={"_id": 0, "kudos_count": 1}, return_document=True)
